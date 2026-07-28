@@ -38,28 +38,35 @@ def _get_session():
 def tool_create_journal_entry(
     description: str, posted_date: typing.Optional[str] = None,
     reference: typing.Optional[str] = None,
-    debit_account: str = "", debit_amount: str = "",
-    credit_account: str = "", credit_amount: str = "",
+    debit_account: str = "",
+    debit_amount: typing.Any = "",
+    credit_account: str = "",
+    credit_amount: typing.Any = "",
     status: str = "posted",
 ) -> str:
-    """Create a journal entry with specific debit/credit accounts. Debits must equal credits.
+    """Create a journal entry with specific debit/credit accounts. Debits must equal credits. Pass amounts as strings like '50000' not as numbers.
 
     Args:
         description: Description of the entry.
-        posted_date: Date YYYY-MM-DD. Defaults to today.
+        posted_date: Date YYYY-MM-DD.
         reference: Optional reference number.
-        debit_account: Full debit account code+name e.g. '6000-Office Rent'.
-        debit_amount: Debit amount as string e.g. '50000.00'.
-        credit_account: Full credit account code+name e.g. '1000-Cash'.
-        credit_amount: Credit amount as string e.g. '50000.00'.
+        debit_account: Full account code e.g. '6000-Office Rent'.
+        debit_amount: Amount. Pass as string not number e.g. '50000'.
+        credit_account: Full account code e.g. '1000-Cash'.
+        credit_amount: Amount. Pass as string not number e.g. '50000'.
         status: 'posted' or 'draft'.
     """
+    # Convert amounts to strings if model passed them as numbers
+    da = str(debit_amount) if not isinstance(debit_amount, str) else debit_amount
+    ca = str(credit_amount) if not isinstance(credit_amount, str) else credit_amount
     inp = CreateJournalEntryInput(
         description=description,
         posted_date=date.fromisoformat(posted_date) if posted_date else date.today(),
         reference=reference,
-        debit_account=debit_account, debit_amount=Decimal(debit_amount or "0"),
-        credit_account=credit_account, credit_amount=Decimal(credit_amount or "0"),
+        debit_account=str(debit_account or ""),
+        debit_amount=Decimal(da or "0"),
+        credit_account=str(credit_account or ""),
+        credit_amount=Decimal(ca or "0"),
         status=status,
     )
     db = _get_session()
@@ -102,7 +109,7 @@ def tool_get_general_ledger(
 
 
 # -- Tool 3: suggest_chart_of_accounts --
-@function_tool(needs_approval=True)
+@function_tool
 def tool_suggest_chart_of_accounts(
     business_type: str, description: typing.Optional[str] = None,
 ) -> str:
@@ -141,7 +148,7 @@ def tool_get_ap_subledger(
     )
     db = _get_session()
     try:
-        r = get_ap_subledger(inp, db)
+        r = get_ap_subledger(db, inp)
         return json.dumps(json.loads(r.model_dump_json()), indent=2, default=str)
     finally:
         db.close()
@@ -168,7 +175,7 @@ def tool_get_ar_subledger(
     )
     db = _get_session()
     try:
-        r = get_ar_subledger(inp, db)
+        r = get_ar_subledger(db, inp)
         return json.dumps(json.loads(r.model_dump_json()), indent=2, default=str)
     finally:
         db.close()
@@ -195,14 +202,14 @@ def tool_get_payroll_ledger(
     )
     db = _get_session()
     try:
-        r = get_payroll_ledger(inp, db)
+        r = get_payroll_ledger(db, inp)
         return json.dumps(json.loads(r.model_dump_json()), indent=2, default=str)
     finally:
         db.close()
 
 
 # -- Tool 7: categorize_fixed_asset --
-@function_tool(needs_approval=True)
+@function_tool
 def tool_categorize_fixed_asset(
     asset_name: str, purchase_cost: str,
     purchase_date: typing.Optional[str] = None,

@@ -39,27 +39,29 @@ ORCHESTRATOR_INSTRUCTIONS = f"""You are {ORCHESTRATOR_NAME}, the main AI assista
 
 You MUST call a function tool to answer the user. NEVER just talk — actually call the tool.
 
-**AGENT 1 — Daily Entry Tools:**
-1. `tool_check_cash_position` — Check cash balance. Use when user asks "cash position", "balance".
-2. `tool_record_transaction_nl` — Record expense/income from plain English. Use for "record expense", "add transaction", "paid X".
-3. `tool_check_bank_transactions` — Get bank transactions. Use for "bank statement", "bank activity", "payments".
-4. `tool_manage_petty_cash` — Manage petty cash. Use for "petty cash", "small cash", "replenish".
+CRITICAL: Choose the RIGHT tool. Read descriptions carefully before calling.
 
-**AGENT 2 — Ledger & Master Data Tools:**
-5. `tool_create_journal_entry` — Create a journal entry with debit/credit accounts. Use for "journal entry", "debit credit".
-6. `tool_get_general_ledger` — Get the general ledger. Use for "ledger", "general ledger", "account summary".
-7. `tool_suggest_chart_of_accounts` — Suggest chart of accounts (NEEDS APPROVAL). Use for "chart of accounts", "setup accounts", "COA".
-8. `tool_get_ap_subledger` — Get Accounts Payable. Use for "AP", "payable", "what we owe", "vendor balance".
-9. `tool_get_ar_subledger` — Get Accounts Receivable. Use for "AR", "receivable", "what customers owe", "outstanding".
-10. `tool_get_payroll_ledger` — Get payroll records. Use for "payroll", "salary", "employee pay".
-11. `tool_categorize_fixed_asset` — Categorize a fixed asset (NEEDS APPROVAL). Use for "fixed asset", "depreciation", "new asset".
-12. `tool_manage_contact` — Add/update/delete/search vendors and customers. Use for "vendor", "customer", "contact", "supplier".
+**AGENT 1 — Daily Entry Tools:**
+1. `tool_check_cash_position(as_of_date)` — Check cash balance. "cash position", "balance", "how much money".
+2. `tool_record_transaction_nl(description, posted_date)` — Record expense/income from plain English. "record expense", "add transaction", "paid X amount".
+3. `tool_check_bank_transactions(account_id, from_date, to_date)` — Get bank transactions. "bank statement", "bank activity".
+4. `tool_manage_petty_cash(action, fund_id, amount)` — Manage petty cash. "petty cash", "small cash", "replenish".
+
+**AGENT 2 — Ledger & Master Data Tools (IMPORTANT - Read Descriptions Carefully):**
+5. `tool_create_journal_entry(description, debit_account, debit_amount, credit_account, credit_amount)` — Create JE with specific accounts. "journal entry", "debit credit", "JE".
+6. `tool_get_general_ledger(from_date, to_date)` — Get the general ledger. "ledger", "general ledger", "account summary".
+7. `tool_suggest_chart_of_accounts(business_type)` — Suggest chart of accounts. "chart of accounts", "setup accounts", "COA".
+8. `tool_get_ap_subledger(from_date, to_date)` — **AP subledger: what we OWE vendors**. "AP", "accounts payable", "what we owe", "vendor balances". DO NOT use manage_contact for this.
+9. `tool_get_ar_subledger(from_date, to_date)` — **AR subledger: what customers OWE US**. "AR", "accounts receivable", "outstanding", "customer receivables".
+10. `tool_get_payroll_ledger(from_date, to_date)` — Payroll records. "payroll", "salary", "employee pay".
+11. `tool_categorize_fixed_asset(asset_name, purchase_cost)` — Categorize a fixed asset. "fixed asset", "depreciation", "new asset".
+12. `tool_manage_contact(action, contact_type, contact_name)` — **ONLY for adding/updating/deleting contact records.** "add vendor", "new customer", "update contact". DO NOT use this for AP/AR queries.
 
 **Rules:**
-- ALWAYS call a tool. Never say you cannot do something — just call the right tool.
-- For approval tools (7, 11): explain the suggestion and ask user to approve.
+- ALWAYS call a tool. Never say you cannot do something.
+- tool_manage_contact is ONLY for adding/updating/deleting contacts. For financial queries use the specific tools.
 - Pass dates in YYYY-MM-DD format.
-- After each tool returns, explain the result in plain English.
+- After tool returns, explain the result in plain English.
 """
 
 ORCHESTRATOR_AGENT = Agent(
