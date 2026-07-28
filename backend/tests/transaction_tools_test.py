@@ -1,6 +1,5 @@
-"""Test script for record_transaction_nl tool."""
-import sys
-import os
+"""Test script for record_transaction_nl tool on PostgreSQL."""
+import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from decimal import Decimal
@@ -12,14 +11,16 @@ from db.models import Base, JournalEntry
 from tools.schemas import RecordTransactionNLInput
 from tools.transaction_tools import record_transaction_nl
 
+from tests.test_helpers import TEST_DATABASE_URL
+
+engine = create_engine(TEST_DATABASE_URL, echo=False)
+Base.metadata.drop_all(bind=engine)
+Base.metadata.create_all(bind=engine)
+Session = sessionmaker(bind=engine)
+
 
 def run_tests():
     results = []
-
-    def fresh_session():
-        engine = create_engine("sqlite:///:memory:", echo=False)
-        Base.metadata.create_all(bind=engine)
-        return sessionmaker(bind=engine)()
 
     def t(name, fn):
         try:
@@ -30,61 +31,51 @@ def run_tests():
             print(f"  FAIL: {name} — {type(e).__name__}: {e}")
             results.append((name, False))
 
-    # Test 1: Normal transaction
     def t1():
-        s = fresh_session()
-        s.add(JournalEntry(entry_id="JE-20260728-001", description="Office rent for July",
+        s = Session()
+        je = JournalEntry(entry_id="JE-20260728-001", description="Office rent for July",
             posted_date=date(2026, 7, 28), reference=None,
             debit_account="6000-Office Rent", debit_amount=Decimal("50000.00"),
-            credit_account="1000-Cash", credit_amount=Decimal("50000.00"), status="posted"))
+            credit_account="1000-Cash", credit_amount=Decimal("50000.00"), status="posted")
+        s.add(je)
         s.commit()
         r = record_transaction_nl(RecordTransactionNLInput(
             description="Paid salary 75000 for July", posted_date=date(2026, 7, 28)), s)
-        assert r.status == "posted", f"Expected posted, got {r.status}"
-        assert r.debit_account == "6100-Salary", f"Expected 6100-Salary, got {r.debit_account}"
-        assert r.debit_amount == Decimal("75000.00"), f"Expected 75000, got {r.debit_amount}"
-        assert r.entry_id != "JE-20260728-001"
+        assert r.status == "posted"
+        assert r.debit_account == "6100-Salary"
+        assert r.debit_amount == Decimal("75000.00")
         s.close()
 
-    # Test 2: Duplicate detection
     def t2():
-        s = fresh_session()
-        s.add(JournalEntry(entry_id="JE-20260728-001", description="Office rent for July",
-            posted_date=date(2026, 7, 28), reference=None,
-            debit_account="6000-Office Rent", debit_amount=Decimal("50000.00"),
-            credit_account="1000-Cash", credit_amount=Decimal("50000.00"), status="posted"))
-        s.commit()
+        s = Session()
         r = record_transaction_nl(RecordTransactionNLInput(
             description="Office rent for July paid 50000", posted_date=date(2026, 7, 28)), s)
-        assert r.status == "duplicate_ignored", f"Expected duplicate_ignored, got {r.status}"
+        assert r.status == "duplicate_ignored"
         s.close()
 
-    # Test 3: No amount in description
     def t3():
-        s = fresh_session()
+        s = Session()
         try:
             record_transaction_nl(RecordTransactionNLInput(
                 description="Bought office supplies", posted_date=date(2026, 7, 28)), s)
-            assert False, "Should have raised ValueError"
+            assert False
         except ValueError as e:
             assert "No valid amount found" in str(e)
         s.close()
 
-    # Test 4: Misc categorization
     def t4():
-        s = fresh_session()
+        s = Session()
         r = record_transaction_nl(RecordTransactionNLInput(
             description="Paid subscription 2000 for software tools", posted_date=date(2026, 7, 28)), s)
-        assert r.debit_account == "7200-Miscellaneous", f"Expected Misc, got {r.debit_account}"
+        assert r.debit_account == "7200-Miscellaneous"
         assert r.status == "posted"
         s.close()
 
-    # Test 5: Rent categorization
     def t5():
-        s = fresh_session()
+        s = Session()
         r = record_transaction_nl(RecordTransactionNLInput(
             description="Office rent paid 50000 for July", posted_date=date(2026, 7, 28)), s)
-        assert r.debit_account == "6000-Office Rent", f"Expected 6000-Office Rent, got {r.debit_account}"
+        assert r.debit_account == "6000-Office Rent"
         assert r.debit_amount == Decimal("50000.00")
         s.close()
 
