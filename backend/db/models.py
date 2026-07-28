@@ -104,3 +104,58 @@ class PettyCashTransaction(Base):
     paid_by = Column(String, nullable=False)
     date = Column(Date, nullable=False)
     remaining_balance = Column(Numeric, nullable=False)
+
+
+class ChartOfAccount(Base):
+    __tablename__ = "chart_of_accounts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    account_code = Column(String, nullable=False, unique=True, index=True)
+    account_name = Column(String, nullable=False)
+    account_type = Column(String, nullable=False)
+    is_active = Column(Integer, default=1)
+    created_at = Column(Date)
+
+
+class Contact(Base):
+    __tablename__ = "contacts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    contact_id = Column(String, nullable=False, unique=True, index=True)
+    contact_name = Column(String, nullable=False)
+    contact_type = Column(String, nullable=False)
+    phone = Column(String, nullable=True)
+    email = Column(String, nullable=True)
+    address = Column(Text, nullable=True)
+    tax_id = Column(String, nullable=True)
+    created_at = Column(Date)
+
+
+class FixedAsset(Base):
+    __tablename__ = "fixed_assets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    asset_id = Column(String, nullable=False, unique=True, index=True)
+    asset_name = Column(String, nullable=False)
+    asset_category = Column(String, nullable=True)
+    purchase_cost = Column(Numeric, nullable=False)
+    purchase_date = Column(Date, nullable=False)
+    useful_life_years = Column(Integer, nullable=False)
+    depreciation_method = Column(String, nullable=False)
+    residual_value = Column(Numeric, nullable=False)
+    current_book_value = Column(Numeric, nullable=False)
+    status = Column(String, default="pending_approval")
+
+
+class PayrollEntry(Base):
+    __tablename__ = "payroll_entries"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    entry_id = Column(String, nullable=False, unique=True, index=True)
+    employee_name = Column(String, nullable=False)
+    salary_amount = Column(Numeric, nullable=False)
+    deductions = Column(Numeric, nullable=False)
+    net_pay = Column(Numeric, nullable=False)
+    period_start = Column(Date, nullable=False)
+    period_end = Column(Date, nullable=False)
+    posted_date = Column(Date, nullable=False)
