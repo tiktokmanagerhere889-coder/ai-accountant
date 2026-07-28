@@ -18,6 +18,8 @@ class CheckCashPositionInput(BaseModel):
 
 - **Output schema:**
 
+
+
 ```python
 class CheckCashPositionOutput(BaseModel):
     account_id: str
