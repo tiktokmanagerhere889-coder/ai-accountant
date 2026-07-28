@@ -178,7 +178,7 @@ def tool_reconcile_customer_statement(
 
 
 # -- Tool 5: track_cheque_clearing --
-@function_tool
+@function_tool(strict_mode=False)
 def tool_track_cheque_clearing(
     action: str,
     cheque_id: typing.Optional[str] = None,
@@ -214,7 +214,7 @@ def tool_track_cheque_clearing(
 
 
 # -- Tool 6: track_lc_bank_guarantee --
-@function_tool
+@function_tool(strict_mode=False)
 def tool_track_lc_bank_guarantee(
     action: str,
     lc_id: typing.Optional[str] = None,
@@ -237,8 +237,10 @@ def tool_track_lc_bank_guarantee(
         expiry_date: Expiry date YYYY-MM-DD.
         currency: Currency code (default PKR).
     """
+    # lc_type param maps to 'type' in the Pydantic model
+    actual_type = lc_type
     inp = TrackLCBGInput(
-        action=action, lc_id=lc_id, type=lc_type, beneficiary=beneficiary,
+        action=action, lc_id=lc_id, type=actual_type, beneficiary=beneficiary,
         amount=Decimal(amount) if amount else None,
         issue_date=date.fromisoformat(issue_date) if issue_date else None,
         expiry_date=date.fromisoformat(expiry_date) if expiry_date else None,
