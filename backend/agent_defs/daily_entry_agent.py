@@ -27,8 +27,9 @@ from tools.petty_cash_tools import manage_petty_cash
 from agent_defs.model_providers import (
     create_cerebras_provider,
     create_groq_provider,
-    CEREBRAS_MODEL,
     GROQ_MODEL,
+    GROQ_FALLBACK_MODEL,
+    CEREBRAS_MODEL,
 )
 
 
@@ -201,29 +202,29 @@ Rules:
         tool_check_bank_transactions,
         tool_manage_petty_cash,
     ],
-    model=CEREBRAS_MODEL,
+    model=GROQ_MODEL,
 )
 
 
 async def run_daily_entry_agent(user_request: str) -> str:
     """Run the Daily Entry Agent with a user request.
 
-    Uses Cerebras as primary, falls back to Groq on failure.
+    Uses Groq (qwen) as primary, Groq (llama-3.1-8b) as fallback, Cerebras as last resort.
     """
     try:
         result = await Runner.run(
             DAILY_ENTRY_AGENT,
             input=user_request,
-            run_config=RunConfig(model_provider=create_cerebras_provider()),
+            run_config=RunConfig(model_provider=create_groq_provider()),
         )
         return result.final_output
-    except Exception as cerebras_error:
+    except Exception as groq_error:
         try:
             fallback_agent = Agent(
                 name="Daily Entry Agent",
                 instructions=DAILY_ENTRY_AGENT.instructions,
                 tools=DAILY_ENTRY_AGENT.tools,
-                model=GROQ_MODEL,
+                model=GROQ_FALLBACK_MODEL,
             )
             result = await Runner.run(
                 fallback_agent,
@@ -231,10 +232,25 @@ async def run_daily_entry_agent(user_request: str) -> str:
                 run_config=RunConfig(model_provider=create_groq_provider()),
             )
             return result.final_output
-        except Exception as groq_error:
-            return (
-                f"All providers unavailable.\n"
-                f"Cerebras error: {cerebras_error}\n"
-                f"Groq error: {groq_error}\n"
-                f"Please check API keys in .env and try again."
-            )
+        except Exception as groq_fallback_error:
+            try:
+                cereal_agent = Agent(
+                    name="Daily Entry Agent",
+                    instructions=DAILY_ENTRY_AGENT.instructions,
+                    tools=DAILY_ENTRY_AGENT.tools,
+                    model=CEREBRAS_MODEL,
+                )
+                result = await Runner.run(
+                    cereal_agent,
+                    input=user_request,
+                    run_config=RunConfig(model_provider=create_cerebras_provider()),
+                )
+                return result.final_output
+            except Exception as cerebras_error:
+                return (
+                    f"All providers unavailable.\n"
+                    f"Groq: {groq_error}\n"
+                    f"Groq fallback: {groq_fallback_error}\n"
+                    f"Cerebras: {cerebras_error}\n"
+                    f"Please check API keys in .env and try again."
+                )

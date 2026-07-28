@@ -15,9 +15,10 @@ dotenv_path = Path(__file__).resolve().parents[2] / ".env"
 if dotenv_path.exists():
     load_dotenv(dotenv_path)
 
-# Model configuration — Cerebras as primary, Groq as fallback
+# Model configuration — Groq as primary (best tool calling, free tier), Cerebras as fallback
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "qwen/qwen3.6-27b")
+GROQ_FALLBACK_MODEL = os.environ.get("GROQ_FALLBACK_MODEL", "llama-3.1-8b-instant")
 CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "gemma-4-31b")
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.1-8b-instant")
 
 # API keys from .env
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")

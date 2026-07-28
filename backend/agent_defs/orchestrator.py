@@ -19,6 +19,7 @@ from agent_defs.model_providers import (
     create_cerebras_provider,
     create_groq_provider,
     GROQ_MODEL,
+    GROQ_FALLBACK_MODEL,
     CEREBRAS_MODEL,
 )
 from agent_defs.daily_entry_agent import (
@@ -59,7 +60,7 @@ ORCHESTRATOR_AGENT = Agent(
         tool_check_bank_transactions,
         tool_manage_petty_cash,
     ],
-    model=CEREBRAS_MODEL,
+    model=GROQ_MODEL,
 )
 
 
@@ -76,17 +77,17 @@ async def run_orchestrator(user_request: str) -> str:
         result = await Runner.run(
             ORCHESTRATOR_AGENT,
             input=user_request,
-            run_config=RunConfig(model_provider=create_cerebras_provider()),
+            run_config=RunConfig(model_provider=create_groq_provider()),
         )
         return result.final_output
-    except Exception as cerebras_error:
+    except Exception as groq_error:
         # Fall back to Groq
         try:
             fallback = Agent(
                 name=ORCHESTRATOR_NAME,
                 instructions=ORCHESTRATOR_INSTRUCTIONS,
                 tools=ORCHESTRATOR_AGENT.tools,
-                model=GROQ_MODEL,
+                model=GROQ_FALLBACK_MODEL,
             )
             result = await Runner.run(
                 fallback,
@@ -94,10 +95,26 @@ async def run_orchestrator(user_request: str) -> str:
                 run_config=RunConfig(model_provider=create_groq_provider()),
             )
             return result.final_output
-        except Exception as groq_error:
-            return (
-                f"Error: All providers unavailable.\n"
-                f"Groq: {groq_error}\n"
-                f"Cerebras: {cerebras_error}\n"
-                f"Please check API keys in .env and try again."
-            )
+        except Exception as groq_fallback_error:
+            # Last resort: Cerebras
+            try:
+                cereal_agent = Agent(
+                    name=ORCHESTRATOR_NAME,
+                    instructions=ORCHESTRATOR_INSTRUCTIONS,
+                    tools=ORCHESTRATOR_AGENT.tools,
+                    model=CEREBRAS_MODEL,
+                )
+                result = await Runner.run(
+                    cereal_agent,
+                    input=user_request,
+                    run_config=RunConfig(model_provider=create_cerebras_provider()),
+                )
+                return result.final_output
+            except Exception as cerebras_error:
+                return (
+                    f"Error: All providers unavailable.\n"
+                    f"Groq: {groq_error}\n"
+                    f"Groq fallback: {groq_fallback_error}\n"
+                    f"Cerebras: {cerebras_error}\n"
+                    f"Please check API keys in .env and try again."
+                )

@@ -39,7 +39,17 @@ def check_cash_position(input: CheckCashPositionInput, db: Session) -> CheckCash
     entries = db.execute(query).scalars().all()
 
     if input.account_id is not None and not entries:
-        raise ValueError("Account not found")
+        return CheckCashPositionOutput(
+            account_id=input.account_id,
+            account_name=f"Account '{input.account_id}' not found",
+            opening_balance=Decimal("0.00"),
+            total_debits=Decimal("0.00"),
+            total_credits=Decimal("0.00"),
+            closing_balance=Decimal("0.00"),
+            currency="PKR",
+            as_of_date=input.as_of_date,
+            warning=False,
+        )
 
     if not entries:
         return CheckCashPositionOutput(
@@ -54,7 +64,7 @@ def check_cash_position(input: CheckCashPositionInput, db: Session) -> CheckCash
             warning=False,
         )
 
-    # Aggregate by account using cash-side entries
+    # Aggregate by account
     account_balances: dict[str, dict] = {}
     for entry in entries:
         for acc in (entry.debit_account, entry.credit_account):
@@ -64,13 +74,9 @@ def check_cash_position(input: CheckCashPositionInput, db: Session) -> CheckCash
         account_balances[entry.debit_account]["debits"] += entry.debit_amount
         account_balances[entry.credit_account]["credits"] += entry.credit_amount
 
-    # Cash account: debits increase, credits decrease
-    # Expense accounts: debits increase expense (no effect on cash directly)
-
     if input.account_id is not None:
         bal = account_balances.get(input.account_id, {"debits": Decimal("0.00"), "credits": Decimal("0.00")})
         closing = bal["debits"] - bal["credits"]
-        warning = closing < 0
         return CheckCashPositionOutput(
             account_id=input.account_id,
             account_name=input.account_id,
@@ -80,28 +86,30 @@ def check_cash_position(input: CheckCashPositionInput, db: Session) -> CheckCash
             closing_balance=closing,
             currency="PKR",
             as_of_date=input.as_of_date,
-            warning=warning,
+            warning=closing < 0,
         )
 
-    # Consolidated: all accounts
-    all_debits = sum(b["debits"] for b in account_balances.values())
-    all_credits = sum(b["credits"] for b in account_balances.values())
+    # Consolidated: only CASH accounts (start with 1000, 1001, 1002, 1100)
+    cash_accounts = {acc: b for acc, b in account_balances.items() if _is_cash_account(acc)}
+    total_debits = sum(b["debits"] for b in cash_accounts.values())
+    total_credits = sum(b["credits"] for b in cash_accounts.values())
+    closing_balance = total_debits - total_credits
 
     details = [
         {"account_id": acc, "total_debits": b["debits"], "total_credits": b["credits"],
          "net": b["debits"] - b["credits"]}
-        for acc, b in sorted(account_balances.items())
-    ]
+        for acc, b in sorted(cash_accounts.items())
+    ] if cash_accounts else None
 
     return CheckCashPositionOutput(
         account_id="ALL",
-        account_name="All Accounts",
+        account_name="All Cash Accounts",
         opening_balance=Decimal("0.00"),
-        total_debits=all_debits,
-        total_credits=all_credits,
-        closing_balance=all_debits - all_credits,
+        total_debits=total_debits,
+        total_credits=total_credits,
+        closing_balance=closing_balance,
         currency="PKR",
         as_of_date=input.as_of_date,
-        warning=(all_debits - all_credits) < 0,
+        warning=closing_balance < 0,
         details=details,
     )

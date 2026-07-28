@@ -6,14 +6,13 @@ from sqlalchemy.orm import sessionmaker, Session
 
 from db.models import Base
 
-# Default: file-based SQLite for dev (shared across connections).
-# Set DATABASE_URL to postgresql://... for production.
-DEFAULT_DB_PATH = Path(__file__).resolve().parents[1] / "dev.db"
-DEFAULT_DATABASE_URL = f"sqlite:///{DEFAULT_DB_PATH}"
+# PostgreSQL is the production and dev database.
+# Override with DATABASE_URL env var if needed (e.g. for CI).
+DEFAULT_DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/ai_accountant"
 
 DATABASE_URL = os.environ.get("DATABASE_URL", DEFAULT_DATABASE_URL)
 
-engine = create_engine(DATABASE_URL, echo=False)
+engine = create_engine(DATABASE_URL, echo=False, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine)
 
 
