@@ -159,3 +159,58 @@ class PayrollEntry(Base):
     period_start = Column(Date, nullable=False)
     period_end = Column(Date, nullable=False)
     posted_date = Column(Date, nullable=False)
+
+
+class ReconciliationRun(Base):
+    __tablename__ = "reconciliation_runs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(String, nullable=False, unique=True, index=True)
+    bank_account_id = Column(String, nullable=False, index=True)
+    statement_date = Column(Date, nullable=False)
+    run_date = Column(Date, nullable=False)
+    status = Column(String, nullable=False, default="pending_approval")
+    matched_count = Column(Integer, default=0)
+    unmatched_count = Column(Integer, default=0)
+
+
+class ReconciliationMatch(Base):
+    __tablename__ = "reconciliation_matches"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    match_id = Column(String, nullable=False, unique=True, index=True)
+    run_id = Column(String, nullable=False, index=True)
+    bank_txn_id = Column(String, nullable=False)
+    journal_entry_id = Column(String, nullable=True)
+    confidence = Column(Numeric, nullable=False)
+    match_type = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="suggested")
+
+
+class ChequeRegistry(Base):
+    __tablename__ = "cheque_registry"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    cheque_id = Column(String, nullable=False, unique=True, index=True)
+    vendor_name = Column(String, nullable=True)
+    amount = Column(Numeric, nullable=False)
+    issue_date = Column(Date, nullable=False)
+    clearing_date = Column(Date, nullable=True)
+    status = Column(String, nullable=False, default="issued")
+    bank_account_id = Column(String, nullable=False, index=True)
+    notes = Column(Text, nullable=True)
+
+
+class LCBGRegistry(Base):
+    __tablename__ = "lc_bg_registry"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    lc_id = Column(String, nullable=False, unique=True, index=True)
+    type = Column(String, nullable=False)
+    beneficiary = Column(String, nullable=False)
+    amount = Column(Numeric, nullable=False)
+    currency = Column(String, nullable=False, default="PKR")
+    issue_date = Column(Date, nullable=False)
+    expiry_date = Column(Date, nullable=False)
+    status = Column(String, nullable=False, default="active")
+    notes = Column(Text, nullable=True)

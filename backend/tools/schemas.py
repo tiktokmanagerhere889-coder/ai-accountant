@@ -535,3 +535,218 @@ class ManageContactOutput(BaseModel):
     contact_type: str
     action_performed: str
     message: str
+
+
+# --- Reconciliation & Banking (Agent 3) ---
+
+class RunBankReconciliationInput(BaseModel):
+    bank_account_id: str = Field(..., description="Bank account ID to reconcile")
+    statement_date: date = Field(..., description="Statement date")
+    from_date: date = Field(..., description="Start date for transactions to match (inclusive)")
+    to_date: date = Field(..., description="End date for transactions to match (inclusive)")
+
+
+class ReconciliationMatchItem(BaseModel):
+    bank_txn_id: str
+    bank_date: date
+    bank_description: str
+    bank_amount: Decimal
+    bank_type: str
+    journal_entry_id: Optional[str] = None
+    journal_date: Optional[date] = None
+    journal_amount: Optional[Decimal] = None
+    confidence: float
+    match_type: str
+    partial_match: bool = False
+    status: str
+
+
+class UnmatchedBankItem(BaseModel):
+    bank_txn_id: str
+    date: date
+    description: str
+    amount: Decimal
+    reason: str
+
+
+class RunBankReconciliationOutput(BaseModel):
+    run_id: str
+    bank_account_id: str
+    statement_date: date
+    period_from: date
+    period_to: date
+    matches: list[ReconciliationMatchItem]
+    unmatched_bank: list[UnmatchedBankItem]
+    total_matched: int
+    total_unmatched: int
+    total_amount_matched: Decimal = Decimal("0")
+    total_amount_unmatched: Decimal = Decimal("0")
+    status: str
+    existing_run_note: Optional[str] = None
+
+
+class PostAccrualEntryInput(BaseModel):
+    accrual_type: str = Field(..., description="Type of accrual: e.g., salary, rent, utility")
+    amount: Decimal = Field(..., gt=Decimal("0"), description="Accrual amount")
+    description: str = Field(..., min_length=1, max_length=500, description="Description of the accrual entry")
+    period_date: date = Field(..., description="Period end date for the accrual")
+    debit_account: Optional[str] = Field(default=None, description="Override auto-detected debit account code")
+    credit_account: Optional[str] = Field(default=None, description="Override auto-detected credit account code")
+    partial_period_days: Optional[int] = Field(default=None, ge=1, le=365, description="Number of days in partial period")
+
+
+class PostAccrualEntryOutput(BaseModel):
+    accrual_id: str
+    entry_id: Optional[str] = None
+    accrual_type: str
+    amount: Decimal
+    debit_account: str
+    debit_amount: Decimal
+    credit_account: str
+    credit_amount: Decimal
+    period_date: date
+    partial_period_days: Optional[int] = None
+    prorated_amount: Optional[Decimal] = None
+    needs_approval: bool = True
+    status: str
+    warnings: list[str] = []
+
+
+class VendorStatementLine(BaseModel):
+    reference: str
+    date: date
+    amount: Decimal
+    description: Optional[str] = None
+
+
+class ReconcileVendorStatementInput(BaseModel):
+    vendor_contact_id: str = Field(..., description="Vendor contact ID")
+    statement_date: date = Field(..., description="Date of the vendor statement")
+    from_date: date = Field(..., description="Start date for matching (inclusive)")
+    to_date: date = Field(..., description="End date for matching (inclusive)")
+    statement_lines: list[VendorStatementLine] = Field(..., description="Lines from the vendor statement")
+
+
+class StatementMatchItem(BaseModel):
+    statement_ref: str
+    journal_entry_id: str
+    amount_match: bool
+    date_match: bool
+    status: str
+
+
+class StatementDifferenceItem(BaseModel):
+    reference: str
+    statement_amount: Decimal
+    internal_amount: Decimal
+    difference: Decimal
+    reason: Optional[str] = None
+
+
+class ReconcileVendorStatementOutput(BaseModel):
+    reconciliation_id: str
+    vendor_contact_id: str
+    matches: list[StatementMatchItem]
+    differences: list[StatementDifferenceItem]
+    total_difference: Decimal
+    status: str
+
+
+class ReconcileCustomerStatementInput(BaseModel):
+    customer_contact_id: str = Field(..., description="Customer contact ID")
+    statement_date: date = Field(..., description="Date of the customer statement")
+    from_date: date = Field(..., description="Start date for matching (inclusive)")
+    to_date: date = Field(..., description="End date for matching (inclusive)")
+    statement_lines: list[VendorStatementLine] = Field(..., description="Lines from the customer statement")
+
+
+class ReconcileCustomerStatementOutput(BaseModel):
+    reconciliation_id: str
+    customer_contact_id: str
+    matches: list[StatementMatchItem]
+    differences: list[StatementDifferenceItem]
+    total_difference: Decimal
+    status: str
+
+
+class TrackChequeClearingInput(BaseModel):
+    action: str = Field(..., description="Action: 'issue', 'clear', 'bounce', 'reconcile', or 'status'")
+    cheque_id: Optional[str] = Field(default=None, description="Cheque ID (required for 'clear', 'bounce', 'status')")
+    vendor_name: Optional[str] = Field(default=None, description="Vendor name (for 'issue')")
+    amount: Optional[Decimal] = Field(default=None, description="Cheque amount (for 'issue')")
+    issue_date: Optional[date] = Field(default=None, description="Issue date (for 'issue')")
+    bank_account_id: Optional[str] = Field(default=None, description="Bank account ID (for 'issue')")
+
+
+class ChequeStatusItem(BaseModel):
+    cheque_id: str
+    vendor_name: Optional[str] = None
+    amount: Optional[Decimal] = None
+    status: str
+    issue_date: Optional[date] = None
+    clearing_date: Optional[date] = None
+    days_outstanding: Optional[int] = None
+    warning: Optional[str] = None
+
+
+class TrackChequeClearingOutput(BaseModel):
+    cheque_id: str
+    action_performed: str
+    current_state: ChequeStatusItem
+
+
+class TrackLCBGInput(BaseModel):
+    action: str = Field(..., description="Action: 'issue', 'amend', 'expire', 'close', or 'status'")
+    lc_id: Optional[str] = Field(default=None, description="LC/BG ID (required for 'amend', 'expire', 'claim', 'status')")
+    type: Optional[str] = Field(default=None, description="Type: 'LC' or 'BG' (for 'issue')")
+    beneficiary: Optional[str] = Field(default=None, description="Beneficiary name (for 'issue')")
+    amount: Optional[Decimal] = Field(default=None, description="LC/BG amount (for 'issue')")
+    issue_date: Optional[date] = Field(default=None, description="Issue date (for 'issue')")
+    expiry_date: Optional[date] = Field(default=None, description="Expiry date (for 'issue')")
+    currency: str = Field(default="PKR", description="Currency code (for 'issue')")
+
+
+class LCBGDetails(BaseModel):
+    lc_id: str
+    type: str
+    beneficiary: str
+    amount: Decimal
+    currency: str
+    issue_date: date
+    expiry_date: date
+    status: str
+    days_to_expiry: Optional[int] = None
+
+
+class TrackLCBGOutput(BaseModel):
+    lc_id: str
+    action_performed: str
+    details: LCBGDetails
+    needs_approval: bool = True
+    warning: Optional[str] = None
+
+
+class ReconcileBankChargesInput(BaseModel):
+    bank_account_id: str = Field(..., description="Bank account ID")
+    from_date: date = Field(..., description="Start date for charges (inclusive)")
+    to_date: date = Field(..., description="End date for charges (inclusive)")
+    charge_type: Optional[str] = Field(default=None, description="Filter by charge type (e.g., 'service', 'fee')")
+
+
+class BankChargeItem(BaseModel):
+    bank_txn_id: str
+    date: date
+    description: str
+    amount: Decimal
+    journal_match_id: Optional[str] = None
+    match_status: str
+
+
+class ReconcileBankChargesOutput(BaseModel):
+    period_from: date
+    period_to: date
+    total_charges_found: int
+    total_matched: int
+    total_unmatched: int
+    charges: list[BankChargeItem]
+    warning: Optional[str] = None

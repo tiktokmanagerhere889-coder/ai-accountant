@@ -7,6 +7,7 @@ them as tools based on user intent.
 Currently registered:
   - Agent 1: Daily Entry (5 tools)
   - Agent 2: Ledger & Master Data (8 tools)
+  - Agent 3: Reconciliation & Banking (7 tools)
 """
 import sys, os, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -33,33 +34,47 @@ from agent_defs.ledger_agent import (
     tool_categorize_fixed_asset, tool_manage_contact,
 )
 
+# Agent 3: Reconciliation & Banking tools
+from agent_defs.reconciliation_agent import (
+    tool_run_bank_reconciliation, tool_post_accrual_entry,
+    tool_reconcile_vendor_statement, tool_reconcile_customer_statement,
+    tool_track_cheque_clearing, tool_track_lc_bank_guarantee,
+    tool_reconcile_bank_charges,
+)
+
 ORCHESTRATOR_NAME = "AI Accountant Orchestrator"
 
 ORCHESTRATOR_INSTRUCTIONS = f"""You are {ORCHESTRATOR_NAME}, the main AI assistant for the accounting system.
 
 You MUST call a function tool to answer the user. NEVER just talk — actually call the tool.
 
-CRITICAL: Choose the RIGHT tool. Read descriptions carefully before calling.
+**AGENT 1 — Daily Entry:**
+1. tool_check_cash_position — Check cash balance. "cash position", "balance".
+2. tool_record_transaction_nl — Record expense/income. "record expense".
+3. tool_check_bank_transactions — Get bank transactions. "bank statement".
+4. tool_manage_petty_cash — Manage petty cash. "petty cash", "replenish".
 
-**AGENT 1 — Daily Entry Tools:**
-1. `tool_check_cash_position(as_of_date)` — Check cash balance. "cash position", "balance", "how much money".
-2. `tool_record_transaction_nl(description, posted_date)` — Record expense/income from plain English. "record expense", "add transaction", "paid X amount".
-3. `tool_check_bank_transactions(account_id, from_date, to_date)` — Get bank transactions. "bank statement", "bank activity".
-4. `tool_manage_petty_cash(action, fund_id, amount)` — Manage petty cash. "petty cash", "small cash", "replenish".
+**AGENT 2 — Ledger & Master Data:**
+5. tool_create_journal_entry — Create JE. "journal entry".
+6. tool_get_general_ledger — General ledger. "ledger", "account summary".
+7. tool_suggest_chart_of_accounts — Chart of accounts. "chart of accounts".
+8. tool_get_ap_subledger — AP: what we OWE. "AP", "accounts payable".
+9. tool_get_ar_subledger — AR: what customers OWE. "AR", "receivable".
+10. tool_get_payroll_ledger — Payroll. "payroll", "salary".
+11. tool_categorize_fixed_asset — Fixed asset. "depreciation".
+12. tool_manage_contact — ONLY for contacts. NOT for financial queries.
 
-**AGENT 2 — Ledger & Master Data Tools (IMPORTANT - Read Descriptions Carefully):**
-5. `tool_create_journal_entry(description, debit_account, debit_amount, credit_account, credit_amount)` — Create JE with specific accounts. "journal entry", "debit credit", "JE".
-6. `tool_get_general_ledger(from_date, to_date)` — Get the general ledger. "ledger", "general ledger", "account summary".
-7. `tool_suggest_chart_of_accounts(business_type)` — Suggest chart of accounts. "chart of accounts", "setup accounts", "COA".
-8. `tool_get_ap_subledger(from_date, to_date)` — **AP subledger: what we OWE vendors**. "AP", "accounts payable", "what we owe", "vendor balances". DO NOT use manage_contact for this.
-9. `tool_get_ar_subledger(from_date, to_date)` — **AR subledger: what customers OWE US**. "AR", "accounts receivable", "outstanding", "customer receivables".
-10. `tool_get_payroll_ledger(from_date, to_date)` — Payroll records. "payroll", "salary", "employee pay".
-11. `tool_categorize_fixed_asset(asset_name, purchase_cost)` — Categorize a fixed asset. "fixed asset", "depreciation", "new asset".
-12. `tool_manage_contact(action, contact_type, contact_name)` — **ONLY for adding/updating/deleting contact records.** "add vendor", "new customer", "update contact". DO NOT use this for AP/AR queries.
+**AGENT 3 — Reconciliation & Banking (NEW):**
+13. tool_run_bank_reconciliation — Bank reconciliation. "reconcile", "bank match".
+14. tool_post_accrual_entry — Accrual entry. "accrual".
+15. tool_reconcile_vendor_statement — Vendor statement. "vendor statement".
+16. tool_reconcile_customer_statement — Customer statement. "customer statement".
+17. tool_track_cheque_clearing — Cheque tracking. "cheque".
+18. tool_track_lc_bank_guarantee — LC/BG tracking. "LC", "letter of credit".
+19. tool_reconcile_bank_charges — Bank charges. "bank charges", "bank fees".
 
 **Rules:**
 - ALWAYS call a tool. Never say you cannot do something.
-- tool_manage_contact is ONLY for adding/updating/deleting contacts. For financial queries use the specific tools.
 - Pass dates in YYYY-MM-DD format.
 - After tool returns, explain the result in plain English.
 """
@@ -76,6 +91,11 @@ ORCHESTRATOR_AGENT = Agent(
         tool_suggest_chart_of_accounts, tool_get_ap_subledger,
         tool_get_ar_subledger, tool_get_payroll_ledger,
         tool_categorize_fixed_asset, tool_manage_contact,
+        # Agent 3
+        tool_run_bank_reconciliation, tool_post_accrual_entry,
+        tool_reconcile_vendor_statement, tool_reconcile_customer_statement,
+        tool_track_cheque_clearing, tool_track_lc_bank_guarantee,
+        tool_reconcile_bank_charges,
     ],
     model=GROQ_MODEL,
 )
