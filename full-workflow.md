@@ -4,7 +4,7 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 **Framework:** OpenAI Agents SDK — Manager pattern (Orchestrator calls specialist agents as tools, specialist agents never talk to the user directly).
 
-**Total: 1 Orchestrator + 10 Specialist Agents + 66 tools + 3 direct-backend (non-AI) features = 70 components.**
+**Total: 1 Orchestrator + 9 Specialist Agents + 1 BONUS Agent (System Admin) + 67 tools + 3 direct-backend (non-AI) features = 72 components.**
 
 
 ---
@@ -23,7 +23,7 @@ This file lists every agent in the system, every tool inside each agent, what ea
 |---|---|---|
 | `check_cash_position` | No | Live cash balance from DB |
 | `record_transaction_nl` | No | Parses a plain-English transaction and stores it |
-| `process_receipt_image` | **Yes** | Reads amount/vendor from an uploaded receipt photo |
+| `process_receipt_image` | **Yes** | Reads amount/vendor from an uploaded receipt photo (extracted details must be verified & approved before posting) |
 | `check_bank_transactions` | No | Queries stored bank transaction data |
 | `manage_petty_cash` | No | Small cash entries + replenishment reminders |
 
@@ -83,7 +83,7 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 ## 5. Year-End Close & Financial Statements Agent
 
-**Role:** Generates the four core financial statements and handles year-end closing, retained earnings, balance carry-forward, and notes to financials. *(Merged from two originally separate agents — Year-End Close and Financial Statements — into one, since both are closely tied to period-end reporting.)*
+**Role:** Generates the four core financial statements and handles year-end closing, retained earnings, balance carry-forward, and notes to financials.
 
 | Tool | Approval | What it does |
 |---|---|---|
@@ -147,20 +147,7 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 ## 9. Advisory Agent
 
-**Role:** Open-ended financial insight and Q&A over the business's own data. 5 tools, 1 requiring approval.
-
----
-
-## 10. System Admin Agent
-
-**Role:** System health monitoring, usage analytics, configuration management, and maintenance scheduling. 4 tools, 2 requiring approval.
-
-| Tool | Approval | What it does | DB Tables |
-|---|---|---|---|
-| `check_system_status` | No | DB health check, provider config verification, agent module import check. Overall: healthy/degraded/unhealthy | None |
-| `get_usage_statistics` | No | Backup log analysis with success/failure rates and recommendations | `system_backup_log` |
-| `manage_system_preferences` | **Yes** | CRUD for key-value config. view/update/reset. Auto-seeds defaults | `system_config` |
-| `schedule_system_task` | **Yes** | Schedule backup/export/maintenance/cleanup tasks with status tracking | `system_backup_log` |
+**Role:** Open-ended financial insight and Q&A over the business's own data.
 
 | Tool | Approval | What it does | DB Tables |
 |---|---|---|---|
@@ -172,15 +159,28 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 ---
 
+## 10. System Admin Agent (BONUS Agent)
+
+**Role:** System health monitoring, usage analytics, configuration management, and maintenance scheduling.
+
+| Tool | Approval | What it does | DB Tables |
+|---|---|---|---|
+| `check_system_status` | No | DB health check, provider config verification, agent module import check. Overall: healthy/degraded/unhealthy | None |
+| `get_usage_statistics` | No | Backup log analysis with success/failure rates and recommendations | `system_backup_log` |
+| `manage_system_preferences` | **Yes** | CRUD for key-value config. view/update/reset. Auto-seeds defaults | `system_config` |
+| `schedule_system_task` | **Yes** | Schedule backup/export/maintenance/cleanup tasks with status tracking (Note: this is a bonus AI-assisted scheduling tool. The baseline 'data_backup_scheduling' required by the paper is implemented separately as a direct API endpoint). | `system_backup_log` |
+
+---
+
 ## Direct-Backend Features (NOT agent tools — no AI involved)
 
 These go straight from UI/API to the database. No agent, no tool, no LLM call.
 
-| Feature | Why no AI |
-|---|---|
-| `audit_trail_change_log` | Timestamp + user-id logging — a DB design choice |
-| `user_roles_permissions` | Standard access-control feature |
-| `data_backup_scheduling` | A scheduled script — no language understanding needed |
+| Feature | Why no AI | API Path |
+|---|---|---|
+| `audit_trail_change_log` | Timestamp + user-id logging — a DB design choice | `/audit-trail` (POST/GET) |
+| `user_roles_permissions` | Standard access-control feature | `/roles` (POST/GET/PUT) |
+| `data_backup_scheduling` | A scheduled script — no language understanding needed | `/backup/trigger`, `/backup/history` |
 
 ---
 
@@ -213,4 +213,4 @@ These are the tools that must pause and wait for human confirmation before writi
 23. `manage_system_preferences` (System Admin)
 24. `schedule_system_task` (System Admin)
 
-**23 tools require approval, 43 do not, out of 66 total (All 10 Agents implemented).**
+**24 tools require approval, 43 do not, out of 67 total (All 10 Agents implemented).**

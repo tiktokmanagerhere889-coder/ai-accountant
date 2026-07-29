@@ -7,11 +7,13 @@ from sqlalchemy import (
     Boolean,
     Column,
     Date,
+    DateTime,
     ForeignKey,
     Integer,
     Numeric,
     String,
     Text,
+    func,
 )
 from sqlalchemy.orm import declarative_base
 
@@ -449,3 +451,25 @@ class SystemBackupLog(Base):
     size_bytes = Column(Integer, nullable=True)
     notes = Column(Text, nullable=True)
     parameters = Column(Text, nullable=True)
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    audit_id = Column(String, nullable=False, unique=True, index=True)
+    user_id = Column(String, nullable=False, index=True)
+    action = Column(String, nullable=False)
+    table_name = Column(String, nullable=False)
+    record_id = Column(String, nullable=False)
+    timestamp = Column(DateTime, nullable=False, default=func.now())
+
+
+class UserRole(Base):
+    __tablename__ = "user_roles"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    role_id = Column(String, nullable=False, unique=True, index=True)
+    role_name = Column(String, nullable=False, unique=True, index=True)
+    permissions = Column(Text, nullable=False)  # JSON-serialized list of permissions
+

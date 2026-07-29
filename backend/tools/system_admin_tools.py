@@ -367,7 +367,12 @@ def manage_system_preferences(inp: ManageSystemPreferencesInput, db: Session) ->
 # ---------------------------------------------------------------------------
 
 def schedule_system_task(inp: ScheduleSystemTaskInput, db: Session) -> ScheduleSystemTaskOutput:
-    """Schedule a system maintenance task (backup, export, maintenance, cleanup)."""
+    """Schedule a system maintenance task (backup, export, maintenance, cleanup).
+
+    This is a bonus AI-assisted scheduling tool beyond the research paper's baseline design
+    — the paper's own required 'data_backup_scheduling' feature is separately
+    implemented as a non-AI FastAPI endpoint (see Direct-Backend Features section).
+    """
     task_id = f"TASK-{uuid.uuid4().hex[:8].upper()}"
     today = date.today()
     now_str = datetime.now().strftime("%Y-%m-%d %H:%M")

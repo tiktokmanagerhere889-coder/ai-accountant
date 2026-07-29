@@ -19,11 +19,13 @@ from tools.schemas import (
     RecordTransactionNLInput,
     CheckBankTransactionsInput,
     ManagePettyCashInput,
+    ProcessReceiptImageInput,
 )
 from tools.cash_tools import check_cash_position
 from tools.transaction_tools import record_transaction_nl
 from tools.bank_tools import check_bank_transactions
 from tools.petty_cash_tools import manage_petty_cash
+from tools.receipt_tools import process_receipt_image
 from agent_defs.model_providers import (
     create_cerebras_provider,
     create_groq_provider,
@@ -176,6 +178,30 @@ def tool_manage_petty_cash(
         db.close()
 
 
+@function_tool
+def tool_process_receipt_image(image_data: str, image_filename: str, suggested_account: typing.Optional[str] = None) -> str:
+    """Process a receipt image. Extracts details from the image using Vision. REQUIRES APPROVAL.
+
+    Args:
+        image_data: Base64-encoded receipt image data.
+        image_filename: Filename (e.g., 'receipt.png').
+        suggested_account: Optional suggested account destination.
+    """
+    input_data = ProcessReceiptImageInput(
+        image_data=image_data,
+        image_filename=image_filename,
+        suggested_account=suggested_account,
+    )
+    db = _get_session()
+    try:
+        result = process_receipt_image(input_data, db)
+        return json.dumps(json.loads(result.model_dump_json()), indent=2, default=str)
+    except ValueError as e:
+        return f"Error: {e}"
+    finally:
+        db.close()
+
+
 # Create the Daily Entry Agent with all tools
 DAILY_ENTRY_AGENT = Agent(
     name="Daily Entry Agent",
@@ -189,6 +215,7 @@ Available tools:
 2. tool_record_transaction_nl(description, posted_date, reference) — Record transaction
 3. tool_check_bank_transactions(account_id, from_date, to_date, status, limit) — Bank query
 4. tool_manage_petty_cash(action, fund_id, amount, description, paid_by) — Petty cash
+5. tool_process_receipt_image(image_data, image_filename, suggested_account) — Process receipt image (NEEDS APPROVAL)
 
 Rules:
 - ALWAYS call the correct tool.
@@ -201,6 +228,7 @@ Rules:
         tool_record_transaction_nl,
         tool_check_bank_transactions,
         tool_manage_petty_cash,
+        tool_process_receipt_image,
     ],
     model=GROQ_MODEL,
 )
