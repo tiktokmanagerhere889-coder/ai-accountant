@@ -1,11 +1,11 @@
 """Orchestrator Agent — routes user requests to the right specialist agent.
 
 Uses the "Agents as Tools" pattern from OpenAI Agents SDK (not handoffs).
-The Orchestrator holds one agent for each specialist function and calls
-them as tools based on user intent.
+The Orchestrator holds one agent-tool per specialist agent and calls them
+based on user intent. Each agent-tool delegates to its own Agent + Runner.
 
 Currently registered:
-  - Agent 1: Daily Entry (5 tools)
+  - Agent 1: Daily Entry (4 tools)
   - Agent 2: Ledger & Master Data (8 tools)
   - Agent 3: Reconciliation & Banking (7 tools)
   - Agent 4: Month-End Reporting (10 tools)
@@ -14,7 +14,7 @@ Currently registered:
 import sys, os, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agents import Agent, Runner
+from agents import Agent, function_tool, Runner
 from agents.run_config import RunConfig
 
 from agent_defs.model_providers import (
@@ -22,139 +22,72 @@ from agent_defs.model_providers import (
     GROQ_MODEL, GROQ_FALLBACK_MODEL, CEREBRAS_MODEL,
 )
 
-# Agent 1: Daily Entry tools
-from agent_defs.daily_entry_agent import (
-    tool_check_cash_position, tool_record_transaction_nl,
-    tool_check_bank_transactions, tool_manage_petty_cash,
-)
+# Specialist agent runners
+from agent_defs.daily_entry_agent import run_daily_entry_agent
+from agent_defs.ledger_agent import run_ledger_agent
+from agent_defs.reconciliation_agent import run_reconciliation_agent
+from agent_defs.month_end_reporting_agent import run_month_end_agent
+from agent_defs.year_end_agent import run_year_end_agent
 
-# Agent 2: Ledger & Master Data tools
-from agent_defs.ledger_agent import (
-    tool_create_journal_entry, tool_get_general_ledger,
-    tool_suggest_chart_of_accounts, tool_get_ap_subledger,
-    tool_get_ar_subledger, tool_get_payroll_ledger,
-    tool_categorize_fixed_asset, tool_manage_contact,
-)
 
-# Agent 3: Reconciliation & Banking tools
-from agent_defs.reconciliation_agent import (
-    tool_run_bank_reconciliation, tool_post_accrual_entry,
-    tool_reconcile_vendor_statement, tool_reconcile_customer_statement,
-    tool_track_cheque_clearing, tool_track_lc_bank_guarantee,
-    tool_reconcile_bank_charges,
-)
+@function_tool
+async def agent_daily_entry(user_request: str) -> str:
+    """Route to Daily Entry Agent: cash position, record transactions, bank transactions, petty cash. Use for everyday cash/expense queries."""
+    return await run_daily_entry_agent(user_request)
 
-# Agent 4: Month-End Reporting tools
-from agent_defs.month_end_reporting_agent import (
-    tool_review_unpaid_bills, tool_calculate_prepaid_adjustment,
-    tool_calculate_depreciation, tool_calculate_amortization,
-    tool_reconcile_payroll, tool_get_ar_aging_report,
-    tool_get_ap_aging_report, tool_analyze_budget_variance,
-    tool_get_loan_debt_schedule, tool_forecast_cash_flow,
-)
 
-# Agent 5: Year-End Close & Financial Statements tools
-from agent_defs.year_end_agent import (
-    tool_generate_trial_balance, tool_generate_profit_loss,
-    tool_generate_balance_sheet, tool_generate_cash_flow_statement,
-    tool_transfer_retained_earnings, tool_carry_forward_balances,
-    tool_draft_notes_to_financials, tool_close_fiscal_year,
-)
+@function_tool
+async def agent_ledger(user_request: str) -> str:
+    """Route to Ledger & Master Data Agent: journal entries, general ledger, chart of accounts, AP/AR subledgers, payroll, fixed assets, vendor/customer contacts. Use for bookkeeping and master data."""
+    return await run_ledger_agent(user_request)
+
+
+@function_tool
+async def agent_reconciliation(user_request: str) -> str:
+    """Route to Reconciliation & Banking Agent: bank reconciliation, accrual entries, vendor/customer statement reconciliation, cheque clearing, LC/BG tracking, bank charges reconciliation."""
+    return await run_reconciliation_agent(user_request)
+
+
+@function_tool
+async def agent_month_end(user_request: str) -> str:
+    """Route to Month-End Reporting Agent: unpaid bills, prepaid adjustments, depreciation, amortization, payroll reconciliation, AR/AP aging reports, budget variance, loan schedule, cash flow forecast."""
+    return await run_month_end_agent(user_request)
+
+
+@function_tool
+async def agent_year_end(user_request: str) -> str:
+    """Route to Year-End Close & Financial Statements Agent: trial balance, P&L, balance sheet, cash flow statement, retained earnings, carry forward balances, notes to financials, close fiscal year (IRREVERSIBLE — requires approval)."""
+    return await run_year_end_agent(user_request)
+
 
 ORCHESTRATOR_NAME = "AI Accountant Orchestrator"
 
-ORCHESTRATOR_INSTRUCTIONS = f"""You are {ORCHESTRATOR_NAME}, the main AI assistant for the accounting system.
+ORCHESTRATOR_INSTRUCTIONS = f"""You are {ORCHESTRATOR_NAME}. Route each user request to the correct specialist agent-tool.
 
-You MUST call a function tool to answer the user. NEVER just talk — actually call the tool.
+- agent_daily_entry: cash/balance, record expense, bank statement, petty cash
+- agent_ledger: journal entries, ledger, chart of accounts, AP/AR, payroll, fixed assets, contacts
+- agent_reconciliation: bank reconciliation, accrual, vendor/customer statement, cheque, LC/BG, bank charges
+- agent_month_end: unpaid bills, prepaid, depreciation, amortization, payroll recon, aging reports, budget variance, loan schedule, cash flow forecast
+- agent_year_end: trial balance, P&L, balance sheet, cash flow statement, retained earnings, carry forward, notes, close fiscal year
 
-**AGENT 1 — Daily Entry:**
-1. tool_check_cash_position — Check cash balance. "cash position", "balance".
-2. tool_record_transaction_nl — Record expense/income. "record expense".
-3. tool_check_bank_transactions — Get bank transactions. "bank statement".
-4. tool_manage_petty_cash — Manage petty cash. "petty cash", "replenish".
-
-**AGENT 2 — Ledger & Master Data:**
-5. tool_create_journal_entry — Create JE. "journal entry".
-6. tool_get_general_ledger — General ledger. "ledger", "account summary".
-7. tool_suggest_chart_of_accounts — Chart of accounts. "chart of accounts".
-8. tool_get_ap_subledger — AP: what we OWE. "AP", "accounts payable".
-9. tool_get_ar_subledger — AR: what customers OWE. "AR", "receivable".
-10. tool_get_payroll_ledger — Payroll. "payroll", "salary".
-11. tool_categorize_fixed_asset — Fixed asset. "depreciation".
-12. tool_manage_contact — ONLY for contacts. NOT for financial queries.
-
-**AGENT 3 — Reconciliation & Banking (NEW):**
-13. tool_run_bank_reconciliation — Bank reconciliation. "reconcile", "bank match".
-14. tool_post_accrual_entry — Accrual entry. "accrual".
-15. tool_reconcile_vendor_statement — Vendor statement. "vendor statement".
-16. tool_reconcile_customer_statement — Customer statement. "customer statement".
-17. tool_track_cheque_clearing — Cheque tracking. "cheque".
-18. tool_track_lc_bank_guarantee — LC/BG tracking. "LC", "letter of credit".
-19. tool_reconcile_bank_charges — Bank charges. "bank charges", "bank fees".
-
-**AGENT 4 — Month-End Reporting (NEW):**
-20. tool_review_unpaid_bills — Unpaid bills. "unpaid bills", "overdue".
-21. tool_calculate_prepaid_adjustment — Prepaid adjustment. "prepaid".
-22. tool_calculate_depreciation — Depreciation. "depreciation", "fixed asset".
-23. tool_calculate_amortization — Amortization. "amortization", "intangible".
-24. tool_reconcile_payroll — Payroll reconciliation. "payroll recon".
-25. tool_get_ar_aging_report — AR aging. "AR aging", "receivable aging".
-26. tool_get_ap_aging_report — AP aging. "AP aging", "payable aging".
-27. tool_analyze_budget_variance — Budget variance. "budget variance".
-28. tool_get_loan_debt_schedule — Loan schedule. "loan", "debt schedule".
-29. tool_forecast_cash_flow — Cash flow forecast. "cash flow forecast" (NEEDS APPROVAL).
-
-**AGENT 5 — Year-End Close & Financial Statements (NEW):**
-30. tool_generate_trial_balance — Trial balance. "trial balance", "TB".
-31. tool_generate_profit_loss — Profit & Loss. "P&L", "profit and loss", "income statement".
-32. tool_generate_balance_sheet — Balance sheet. "balance sheet", "financial position".
-33. tool_generate_cash_flow_statement — Cash flow statement. "cash flow statement".
-34. tool_transfer_retained_earnings — Retained earnings. "retained earnings".
-35. tool_carry_forward_balances — Carry forward. "carry forward", "opening balance".
-36. tool_draft_notes_to_financials — Notes to financials. "notes to financials".
-37. tool_close_fiscal_year — Close fiscal year. "close fiscal year", "year-end close" (IRREVERSIBLE — requires approval).
-
-**Rules:**
-- ALWAYS call a tool. Never say you cannot do something.
-- Pass dates in YYYY-MM-DD format.
-- After tool returns, explain the result in plain English.
-"""
+Pass the user's full request to the tool. After the tool returns, explain the result in plain English."""
 
 ORCHESTRATOR_AGENT = Agent(
     name=ORCHESTRATOR_NAME,
     instructions=ORCHESTRATOR_INSTRUCTIONS,
     tools=[
-        # Agent 1
-        tool_check_cash_position, tool_record_transaction_nl,
-        tool_check_bank_transactions, tool_manage_petty_cash,
-        # Agent 2
-        tool_create_journal_entry, tool_get_general_ledger,
-        tool_suggest_chart_of_accounts, tool_get_ap_subledger,
-        tool_get_ar_subledger, tool_get_payroll_ledger,
-        tool_categorize_fixed_asset, tool_manage_contact,
-        # Agent 3
-        tool_run_bank_reconciliation, tool_post_accrual_entry,
-        tool_reconcile_vendor_statement, tool_reconcile_customer_statement,
-        tool_track_cheque_clearing, tool_track_lc_bank_guarantee,
-        tool_reconcile_bank_charges,
-        # Agent 4
-        tool_review_unpaid_bills, tool_calculate_prepaid_adjustment,
-        tool_calculate_depreciation, tool_calculate_amortization,
-        tool_reconcile_payroll, tool_get_ar_aging_report,
-        tool_get_ap_aging_report, tool_analyze_budget_variance,
-        tool_get_loan_debt_schedule, tool_forecast_cash_flow,
-        # Agent 5
-        tool_generate_trial_balance, tool_generate_profit_loss,
-        tool_generate_balance_sheet, tool_generate_cash_flow_statement,
-        tool_transfer_retained_earnings, tool_carry_forward_balances,
-        tool_draft_notes_to_financials, tool_close_fiscal_year,
+        agent_daily_entry,
+        agent_ledger,
+        agent_reconciliation,
+        agent_month_end,
+        agent_year_end,
     ],
     model=GROQ_MODEL,
 )
 
 
 async def run_orchestrator(user_request: str) -> str:
-    """Route a user request through the Orchestrator to the right agent."""
+    """Route a user request through the Orchestrator to the right specialist agent."""
     for attempt_model, provider_fn, label in [
         (GROQ_MODEL, create_groq_provider, "Groq"),
         (GROQ_FALLBACK_MODEL, create_groq_provider, "Groq fallback"),
