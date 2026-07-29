@@ -47,7 +47,7 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
       const data = response.data;
 
       // Basic fallback extraction parser if the response indicates approval needed
-      let approvalData = null;
+      let approvalData: { toolName: string; description: string; params: Record<string, any>; approvalId: string } | null = null;
       if (
         data.response.includes('"needs_approval": true') ||
         data.response.includes("needs_approval: true") ||
