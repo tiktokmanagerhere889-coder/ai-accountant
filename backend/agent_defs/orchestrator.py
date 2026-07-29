@@ -10,6 +10,7 @@ Currently registered:
   - Agent 3: Reconciliation & Banking (7 tools)
   - Agent 4: Month-End Reporting (10 tools)
   - Agent 5: Year-End Close & Financial Statements (8 tools)
+  - Agent 6: Cost, Advanced Accounting & Budgeting (8 tools)
 """
 import sys, os, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -21,6 +22,7 @@ from agent_defs.model_providers import (
     create_cerebras_provider, create_groq_provider,
     GROQ_MODEL, GROQ_FALLBACK_MODEL, CEREBRAS_MODEL,
 )
+from agent_defs.run_utils import run_with_retry
 
 # Specialist agent runners
 from agent_defs.daily_entry_agent import run_daily_entry_agent
@@ -28,36 +30,43 @@ from agent_defs.ledger_agent import run_ledger_agent
 from agent_defs.reconciliation_agent import run_reconciliation_agent
 from agent_defs.month_end_reporting_agent import run_month_end_agent
 from agent_defs.year_end_agent import run_year_end_agent
+from agent_defs.cost_advanced_agent import run_cost_advanced_agent
 
 
 @function_tool
 async def agent_daily_entry(user_request: str) -> str:
     """Route to Daily Entry Agent: cash position, record transactions, bank transactions, petty cash. Use for everyday cash/expense queries."""
-    return await run_daily_entry_agent(user_request)
+    return await run_with_retry(run_daily_entry_agent, user_request)
 
 
 @function_tool
 async def agent_ledger(user_request: str) -> str:
     """Route to Ledger & Master Data Agent: journal entries, general ledger, chart of accounts, AP/AR subledgers, payroll, fixed assets, vendor/customer contacts. Use for bookkeeping and master data."""
-    return await run_ledger_agent(user_request)
+    return await run_with_retry(run_ledger_agent, user_request)
 
 
 @function_tool
 async def agent_reconciliation(user_request: str) -> str:
     """Route to Reconciliation & Banking Agent: bank reconciliation, accrual entries, vendor/customer statement reconciliation, cheque clearing, LC/BG tracking, bank charges reconciliation."""
-    return await run_reconciliation_agent(user_request)
+    return await run_with_retry(run_reconciliation_agent, user_request)
 
 
 @function_tool
 async def agent_month_end(user_request: str) -> str:
     """Route to Month-End Reporting Agent: unpaid bills, prepaid adjustments, depreciation, amortization, payroll reconciliation, AR/AP aging reports, budget variance, loan schedule, cash flow forecast."""
-    return await run_month_end_agent(user_request)
+    return await run_with_retry(run_month_end_agent, user_request)
 
 
 @function_tool
 async def agent_year_end(user_request: str) -> str:
     """Route to Year-End Close & Financial Statements Agent: trial balance, P&L, balance sheet, cash flow statement, retained earnings, carry forward balances, notes to financials, close fiscal year (IRREVERSIBLE — requires approval)."""
-    return await run_year_end_agent(user_request)
+    return await run_with_retry(run_year_end_agent, user_request)
+
+
+@function_tool
+async def agent_cost_advanced(user_request: str) -> str:
+    """Route to Cost, Advanced Accounting & Budgeting Agent: breakeven/CVP, currency conversion, budget forecast, standard costing variance (approval), overhead allocation (approval), revenue recognition (approval), provisions/contingencies (approval), related party transactions (approval)."""
+    return await run_with_retry(run_cost_advanced_agent, user_request)
 
 
 ORCHESTRATOR_NAME = "AI Accountant Orchestrator"
@@ -69,6 +78,7 @@ ORCHESTRATOR_INSTRUCTIONS = f"""You are {ORCHESTRATOR_NAME}. Route each user req
 - agent_reconciliation: bank reconciliation, accrual, vendor/customer statement, cheque, LC/BG, bank charges
 - agent_month_end: unpaid bills, prepaid, depreciation, amortization, payroll recon, aging reports, budget variance, loan schedule, cash flow forecast
 - agent_year_end: trial balance, P&L, balance sheet, cash flow statement, retained earnings, carry forward, notes, close fiscal year
+- agent_cost_advanced: breakeven, currency conversion, budget forecast, cost variance, overhead allocation, revenue recognition, provisions, related party
 
 Pass the user's full request to the tool. After the tool returns, explain the result in plain English."""
 
@@ -81,6 +91,7 @@ ORCHESTRATOR_AGENT = Agent(
         agent_reconciliation,
         agent_month_end,
         agent_year_end,
+        agent_cost_advanced,
     ],
     model=GROQ_MODEL,
 )

@@ -1,0 +1,61 @@
+"""Centralized agent runner with automatic retry for all specialist agents.
+
+Shared utility used by the orchestrator's agent-tools. Provides:
+- Retry on empty/malformed output
+- Retry on transient Groq provider failures
+- Applies to all agents through a single wrapper function
+"""
+import typing
+
+MIN_OUTPUT_LENGTH = 20
+
+FAILURE_PATTERNS = [
+    "Error: All providers unavailable",
+    "unavailable due to a technical error",
+    "currently unavailable",
+]
+
+
+async def run_with_retry(
+    run_fn: typing.Callable[[str], typing.Awaitable[str]],
+    user_request: str,
+    max_retries: int = 2,
+) -> str:
+    """Run a specialist agent function with automatic retry.
+
+    Retries if:
+    - Output is empty or shorter than MIN_OUTPUT_LENGTH chars
+    - Output matches a known failure pattern (provider errors, rate limits)
+
+    Args:
+        run_fn: The agent's async run function (e.g., run_cost_advanced_agent)
+        user_request: The user's request string
+        max_retries: Max retry attempts (default 2; total attempts = 1 + max_retries)
+
+    Returns:
+        The first valid output, or the last attempt's output if all fail
+    """
+    last_output = ""
+
+    for attempt in range(1 + max_retries):
+        output = await run_fn(user_request)
+        last_output = output
+
+        if _is_valid_output(output):
+            return output
+
+    # All attempts failed — return last attempt's output
+    return last_output
+
+
+def _is_valid_output(output: str) -> bool:
+    """Check if an agent's output is valid (non-empty, non-failure)."""
+    if not output or len(output.strip()) < MIN_OUTPUT_LENGTH:
+        return False
+
+    output_lower = output.lower()
+    for pattern in FAILURE_PATTERNS:
+        if pattern.lower() in output_lower:
+            return False
+
+    return True

@@ -4,7 +4,7 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 **Framework:** OpenAI Agents SDK — Manager pattern (Orchestrator calls specialist agents as tools, specialist agents never talk to the user directly).
 
-**Total: 1 Orchestrator + 9 Specialist Agents + 63 tools + 3 direct-backend (non-AI) features = 66 components.**
+**Total: 1 Orchestrator + 6 Specialist Agents + 45 tools + 3 direct-backend (non-AI) features = 48 components.**
 
 ---
 
@@ -101,16 +101,16 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 **Role:** Cost/management accounting, advanced accounting judgment calls, and forward-looking budget planning.
 
-| Tool | Approval | What it does |
-|---|---|---|
-| `calculate_standard_costing_variance` | **Yes** | Standard vs actual cost gap |
-| `allocate_overhead_cost` | **Yes** | Overhead apportionment on owner-defined basis |
-| `calculate_breakeven` | No | Break-even / cost-volume-profit |
-| `calculate_revenue_recognition` | **Yes** | Percentage-of-completion revenue |
-| `flag_provision_contingent_liability` | **Yes** | Flags possible provisions (legal judgement) |
-| `convert_foreign_currency` | No | Live exchange-rate conversion |
-| `flag_related_party_transaction` | **Yes** | Flags insider-connected transactions |
-| `prepare_budget_forecast` | No | Drafts budget from historical spending |
+| Tool | Approval | What it does | DB Tables |
+|---|---|---|---|
+| `calculate_breakeven` | No | CVP analysis — contribution margin, breakeven units/revenue | None (pure formula) |
+| `convert_foreign_currency` | No | Currency conversion using `exchange_rates` table | `exchange_rates` |
+| `prepare_budget_forecast` | No | Budget forecast from historical avg + budget baseline | `journal_entries`, `budgets` |
+| `calculate_standard_costing_variance` | **Yes** | Standard vs actual cost gap + quantity variance | `journal_entries` |
+| `allocate_overhead_cost` | **Yes** | Overhead apportionment on owner-defined basis | None (pure calculation) |
+| `calculate_revenue_recognition` | **Yes** | Percentage-of-completion revenue recognition | `journal_entries` |
+| `flag_provision_contingent_liability` | **Yes** | IAS 37 provision/contingency assessment | `journal_entries`, `contacts` |
+| `flag_related_party_transaction` | **Yes** | Insider-connected transaction check (contact_id + reference hybrid) | `journal_entries`, `contacts` |
 
 ---
 
@@ -197,4 +197,4 @@ These are the tools that must pause and wait for human confirmation before writi
 21. `maintain_statutory_registers` (Audit & Regulatory)
 22. `generate_custom_report` (Advisory)
 
-**22 tools require approval, 41 do not, out of 63 total.**
+**15 tools require approval, 30 do not, out of 45 total (Agents 1-6 implemented).**

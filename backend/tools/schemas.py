@@ -1177,3 +1177,179 @@ class CloseFiscalYearOutput(BaseModel):
     net_income_transferred: Decimal = Decimal("0")
     status: str = "closed"
     message: str = ""
+
+
+# --- Cost, Advanced Accounting & Budgeting (Agent 6) ---
+
+# Tool 1: Calculate Breakeven
+class CalculateBreakevenInput(BaseModel):
+    fixed_cost: Decimal = Field(..., ge=Decimal("0"), description="Total fixed costs")
+    variable_cost_per_unit: Decimal = Field(..., gt=Decimal("0"), description="Variable cost per unit")
+    selling_price_per_unit: Decimal = Field(..., gt=Decimal("0"), description="Selling price per unit")
+
+
+class CalculateBreakevenOutput(BaseModel):
+    breakeven_units: Decimal = Decimal("0")
+    breakeven_revenue: Decimal = Decimal("0")
+    contribution_margin_per_unit: Decimal = Decimal("0")
+    contribution_margin_ratio: float = 0.0
+    formula_used: str = ""
+
+
+# Tool 2: Convert Foreign Currency
+class ConvertForeignCurrencyInput(BaseModel):
+    amount: Decimal = Field(..., gt=Decimal("0"), description="Amount to convert")
+    from_currency: str = Field(..., min_length=1, description="Source currency code (e.g., 'USD')")
+    to_currency: str = Field(..., min_length=1, description="Target currency code (e.g., 'PKR')")
+    rate_date: Optional[date] = Field(default=None, description="Date for conversion rate; defaults to latest available")
+
+
+class ConvertForeignCurrencyOutput(BaseModel):
+    original_amount: Decimal
+    from_currency: str
+    to_currency: str
+    conversion_rate: Decimal
+    converted_amount: Decimal
+    rate_source: str = ""
+    rate_date: date
+    warning: Optional[str] = None
+
+
+# Tool 3: Prepare Budget Forecast
+class BudgetForecastItem(BaseModel):
+    account_code: str
+    account_name: str
+    historical_avg: Decimal = Decimal("0")
+    forecast_amount: Decimal = Decimal("0")
+    basis: str = ""
+
+
+class PrepareBudgetForecastInput(BaseModel):
+    fiscal_year: int = Field(..., description="Fiscal year to forecast for")
+    periods: int = Field(default=12, ge=1, le=12, description="Number of periods to forecast (1-12)")
+    account_code_prefix: Optional[str] = Field(default=None, description="Optional account code prefix filter")
+
+
+class PrepareBudgetForecastOutput(BaseModel):
+    fiscal_year: int
+    periods: int
+    forecast_items: list[BudgetForecastItem]
+    total_forecast: Decimal = Decimal("0")
+    data_months: int = 0
+    confidence: str = "low"
+
+
+# Tool 4: Calculate Standard Costing Variance
+class CalculateStandardCostingVarianceInput(BaseModel):
+    account_code: str = Field(..., min_length=1, description="Expense account code")
+    period: int = Field(..., ge=1, le=12, description="Period number (1-12)")
+    fiscal_year: int = Field(..., description="Fiscal year")
+    standard_cost: Decimal = Field(..., gt=Decimal("0"), description="Standard/budgeted cost")
+    standard_quantity: Optional[Decimal] = Field(default=None, description="Standard quantity for comparison")
+
+
+class CalculateStandardCostingVarianceOutput(BaseModel):
+    account_code: str
+    period: int
+    fiscal_year: int
+    standard_cost: Decimal
+    actual_cost: Decimal = Decimal("0")
+    cost_variance: Decimal = Decimal("0")
+    variance_pct: Decimal = Decimal("0")
+    actual_quantity: Optional[Decimal] = None
+    quantity_variance: Optional[Decimal] = None
+    needs_approval: bool = True
+    explanation: str = ""
+
+
+# Tool 5: Allocate Overhead Cost
+class AllocationPoolItem(BaseModel):
+    name: str = Field(..., min_length=1, description="Department or cost center name")
+    value: Decimal = Field(..., ge=Decimal("0"), description="Allocation basis value")
+
+
+class AllocateOverheadCostInput(BaseModel):
+    total_overhead: Decimal = Field(..., gt=Decimal("0"), description="Total overhead cost to allocate")
+    allocation_basis: str = Field(..., description="Basis: 'sq_ft', 'headcount', 'revenue_pct', or 'custom'")
+    allocation_pool: list[AllocationPoolItem] = Field(..., min_length=1, description="List of departments with their basis values")
+    period: int = Field(..., ge=1, le=12, description="Period number (1-12)")
+    fiscal_year: int = Field(..., description="Fiscal year")
+
+
+class AllocationResult(BaseModel):
+    department_name: str
+    basis_value: Decimal
+    percentage: float
+    allocated_amount: Decimal
+
+
+class AllocateOverheadCostOutput(BaseModel):
+    allocations: list[AllocationResult]
+    total_allocated: Decimal = Decimal("0")
+    basis_used: str
+    period: int
+    fiscal_year: int
+    needs_approval: bool = True
+
+
+# Tool 6: Calculate Revenue Recognition
+class CalculateRevenueRecognitionInput(BaseModel):
+    contract_id: str = Field(..., min_length=1, description="Contract identifier")
+    contract_value: Decimal = Field(..., gt=Decimal("0"), description="Total contract value")
+    completion_percentage: Decimal = Field(..., ge=Decimal("0"), le=Decimal("100"), description="Percentage of completion (0-100)")
+    previous_recognized: Optional[Decimal] = Field(default=None, description="Revenue already recognized so far")
+    period: int = Field(..., ge=1, le=12, description="Period number (1-12)")
+    fiscal_year: int = Field(..., description="Fiscal year")
+
+
+class CalculateRevenueRecognitionOutput(BaseModel):
+    contract_id: str
+    contract_value: Decimal
+    completion_percentage: Decimal
+    total_recognizable: Decimal = Decimal("0")
+    previously_recognized: Decimal = Decimal("0")
+    current_period_revenue: Decimal = Decimal("0")
+    remaining_revenue: Decimal = Decimal("0")
+    needs_approval: bool = True
+    explanation: str = ""
+
+
+# Tool 7: Flag Provision / Contingent Liability
+class FlagProvisionContingentLiabilityInput(BaseModel):
+    description: str = Field(..., min_length=1, max_length=500, description="Description of the contingent event")
+    estimated_amount: Decimal = Field(..., gt=Decimal("0"), description="Estimated financial impact")
+    probability: str = Field(..., description="Probability: 'probable', 'possible', or 'remote'")
+    fiscal_year: int = Field(..., description="Fiscal year")
+    related_party: Optional[str] = Field(default=None, description="Related party name if applicable")
+
+
+class FlagProvisionContingentLiabilityOutput(BaseModel):
+    provision_id: str
+    description: str
+    estimated_amount: Decimal
+    probability: str
+    accounting_treatment: str  # "recognize", "disclose", "ignore"
+    needs_approval: bool = True
+    reasoning: str = ""
+    status: str = "draft"
+
+
+# Tool 8: Flag Related Party Transaction
+class FlagRelatedPartyTransactionInput(BaseModel):
+    entry_id: str = Field(..., min_length=1, description="Journal entry ID to flag")
+    transaction_description: str = Field(..., min_length=1, max_length=500, description="Transaction details")
+    amount: Decimal = Field(..., gt=Decimal("0"), description="Transaction amount")
+    counterparty_name: str = Field(..., min_length=1, description="Counterparty name from the transaction")
+    fiscal_year: int = Field(..., description="Fiscal year")
+
+
+class FlagRelatedPartyTransactionOutput(BaseModel):
+    flag_id: str
+    entry_id: str
+    counterparty_name: str
+    related_party_status: str  # "confirmed_related", "potential_related", "not_related"
+    confidence: str  # "high", "medium", "low"
+    disclosure_required: bool = False
+    matched_via: str = ""  # "contact_id", "reference_fallback", "no_match"
+    reasoning: str = ""
+    needs_approval: bool = True

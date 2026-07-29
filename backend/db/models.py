@@ -4,8 +4,10 @@ from datetime import date
 from decimal import Decimal
 
 from sqlalchemy import (
+    Boolean,
     Column,
     Date,
+    ForeignKey,
     Integer,
     Numeric,
     String,
@@ -38,6 +40,7 @@ class JournalEntry(Base):
     description = Column(Text, nullable=False)
     posted_date = Column(Date, nullable=False)
     reference = Column(String)
+    contact_id = Column(String, ForeignKey("contacts.contact_id"), nullable=True, index=True)
     debit_account = Column(String, nullable=False)
     debit_amount = Column(Numeric, nullable=False)
     credit_account = Column(String, nullable=False)
@@ -128,6 +131,7 @@ class Contact(Base):
     email = Column(String, nullable=True)
     address = Column(Text, nullable=True)
     tax_id = Column(String, nullable=True)
+    related_party = Column(Boolean, nullable=False, default=False)
     created_at = Column(Date)
 
 
@@ -341,3 +345,14 @@ class FiscalYearClose(Base):
     closed_at = Column(Date, nullable=False)
     closed_by = Column(String, nullable=False, default="system")
     status = Column(String, nullable=False, default="closed")
+
+
+class ExchangeRate(Base):
+    __tablename__ = "exchange_rates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    from_currency = Column(String, nullable=False)
+    to_currency = Column(String, nullable=False)
+    rate = Column(Numeric, nullable=False)
+    rate_date = Column(Date, nullable=False)
+    source = Column(String, nullable=True)
