@@ -1,5 +1,7 @@
 # AI Accountant — Agents & Tools Reference
 
+**Workflow Diagram URL:** [Lucidchart Diagram](https://lucid.app/lucidchart/4fb7df8e-7bbd-4659-994b-14ab77174db9/edit?viewport_loc=-580%2C-136%2C2647%2C1309%2C0_0&invitationId=inv_4f89d381-8178-43e6-bf25-cc70b22a0aeb)
+
 This file lists every agent in the system, every tool inside each agent, what each tool does, and whether it requires human approval before executing. Use this as the single source of truth when building, testing, or modifying any agent/tool.
 
 **Framework:** OpenAI Agents SDK — Manager pattern (Orchestrator calls specialist agents as tools, specialist agents never talk to the user directly).
