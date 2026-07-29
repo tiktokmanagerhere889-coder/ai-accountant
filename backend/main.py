@@ -25,6 +25,16 @@ init_db()
 
 app = FastAPI(title="AI Accountant Backend", version="1.0.0")
 
+# Setup CORS middleware
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Allows all origins, adjust if needed for production domain locking
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # Pydantic Schemas for direct backend endpoints
 

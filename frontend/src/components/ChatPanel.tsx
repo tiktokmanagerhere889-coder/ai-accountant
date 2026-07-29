@@ -28,7 +28,7 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
 
-  const apiBase = "http://127.0.0.1:8000";
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

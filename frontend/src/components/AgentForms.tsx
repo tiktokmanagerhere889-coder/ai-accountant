@@ -26,7 +26,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
     setLoading(true);
     setError(null);
 
-    const apiBase = "http://127.0.0.1:8000";
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
     try {
       // Build natural language instruction for Orchestrator to execute the tool

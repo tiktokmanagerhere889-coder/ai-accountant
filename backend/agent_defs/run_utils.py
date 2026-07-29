@@ -3,9 +3,13 @@
 Shared utility used by the orchestrator's agent-tools. Provides:
 - Retry on empty/malformed output
 - Retry on transient Groq provider failures
+- Skip Cerebras on 402 Payment Required (billing issue)
 - Applies to all agents through a single wrapper function
 """
 import typing
+import logging
+
+logger = logging.getLogger(__name__)
 
 MIN_OUTPUT_LENGTH = 20
 
@@ -13,6 +17,14 @@ FAILURE_PATTERNS = [
     "Error: All providers unavailable",
     "unavailable due to a technical error",
     "currently unavailable",
+]
+
+# Errors that indicate a permanent provider issue — skip retries for this provider
+SKIP_PROVIDER_PATTERNS = [
+    "402",
+    "payment required",
+    "insufficient credits",
+    "quota exceeded",
 ]
 
 
@@ -38,13 +50,27 @@ async def run_with_retry(
     last_output = ""
 
     for attempt in range(1 + max_retries):
-        output = await run_fn(user_request)
+        try:
+            output = await run_fn(user_request)
+        except Exception as e:
+            err_str = str(e).lower()
+            # 402 or billing errors — don't retry, return immediately with a clear message
+            if any(p in err_str for p in SKIP_PROVIDER_PATTERNS):
+                logger.warning(f"Provider billing error (attempt {attempt}): {e}")
+                last_output = (
+                    "I was unable to process your request right now due to API rate limits. "
+                    "Please wait a moment and try again, or rephrase your request."
+                )
+                break
+            last_output = f"Error: {e}"
+            continue
+
         last_output = output
 
         if _is_valid_output(output):
             return output
 
-    # All attempts failed — return last attempt's output
+    # All attempts exhausted — return last attempt's output
     return last_output
 
 

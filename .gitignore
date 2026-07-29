@@ -1,9 +1,58 @@
-__pycache__/
-*.pyc
+# Environment variables — NEVER commit
 .env
+.env.local
+.env.production
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
 backend/__pycache__/
 backend/db/__pycache__/
 backend/tools/__pycache__/
 backend/agents/__pycache__/
+backend/agent_defs/__pycache__/
+
+# Pytest
+.pytest_cache/
+backend/.pytest_cache/
+
+# Node / Next.js
 node_modules/
+frontend/node_modules/
 .next/
+frontend/.next/
+out/
+frontend/out/
+npm-debug.log*
+frontend/package-lock.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / tools
+.vscode/
+.idea/
+.opencode/
+.specify/
+.claude/
+
+# Session logs
+2026-*.txt
+*.log
+
+# Assignment brief (internal only)
+AI_Accounting_Assistant_Intern_Assignment_29July.md
+full-workflow.md
+
+# Compiled Python cache
+*.pyc
+*.pyd

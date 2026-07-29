@@ -13,12 +13,15 @@ from agents.models.openai_provider import OpenAIProvider
 # Load .env from project root
 dotenv_path = Path(__file__).resolve().parents[2] / ".env"
 if dotenv_path.exists():
-    load_dotenv(dotenv_path)
+    load_dotenv(dotenv_path, override=True)
 
-# Model configuration — Groq as primary (best tool calling, free tier), Cerebras as fallback
-GROQ_MODEL = os.environ.get("GROQ_MODEL", "qwen/qwen3.6-27b")
-GROQ_FALLBACK_MODEL = os.environ.get("GROQ_FALLBACK_MODEL", "llama-3.1-8b-instant")
-CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "gemma-4-31b")
+# Model configuration — Groq primary (best free-tier tool calling)
+# llama-4-scout is Groq's newest free model with strong tool use
+# llama-3.3-70b-versatile as fallback — reliable tool calling
+# Cerebras llama3.1-8b as last resort (requires active plan)
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "meta-llama/llama-4-scout-17b-16e-instruct")
+GROQ_FALLBACK_MODEL = os.environ.get("GROQ_FALLBACK_MODEL", "llama-3.3-70b-versatile")
+CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "llama3.1-8b")
 
 # API keys from .env
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")

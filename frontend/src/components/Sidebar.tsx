@@ -1,6 +1,6 @@
 import React from "react";
 import { AGENTS_DATA, AgentDef } from "./agentsData";
-import { LayoutDashboard, Settings, User } from "lucide-react";
+import { LayoutDashboard, Settings, User, BookOpen } from "lucide-react";
 
 interface SidebarProps {
   currentView: string;
