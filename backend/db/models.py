@@ -424,3 +424,28 @@ class ComplianceDeadline(Base):
     status = Column(String, nullable=False, default="upcoming")
     reminder_days = Column(Integer, nullable=True)
     fiscal_year = Column(Integer, nullable=True)
+
+
+class SystemConfig(Base):
+    __tablename__ = "system_config"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    config_key = Column(String, nullable=False, unique=True, index=True)
+    config_value = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    updated_at = Column(Date, nullable=False)
+
+
+class SystemBackupLog(Base):
+    __tablename__ = "system_backup_log"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    backup_id = Column(String, nullable=False, unique=True, index=True)
+    backup_type = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="scheduled")
+    triggered_by = Column(String, nullable=True)
+    triggered_at = Column(Date, nullable=False)
+    completed_at = Column(Date, nullable=True)
+    size_bytes = Column(Integer, nullable=True)
+    notes = Column(Text, nullable=True)
+    parameters = Column(Text, nullable=True)

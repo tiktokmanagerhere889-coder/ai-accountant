@@ -132,3 +132,4 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 | 7. Tax | 8 | 4 | 2 tables | 25 | ✓ |
 | 8. Audit & Regulatory | 4 | 2 | 3 tables | 29 | ✓ |
 | 9. Advisory | 5 | 1 | — | 25 | ✓ |
+| 10. System Admin | 4 | 2 | 2 tables | 23 | ✓ |

@@ -1743,3 +1743,89 @@ class GenerateCustomReportOutput(BaseModel):
     sections: list[ReportSection] = []
     summary: str = ""
     needs_approval: bool = True
+
+
+# --- Agent 10: System Admin ---
+
+# Helper models
+
+class SystemCheck(BaseModel):
+    name: str = ""
+    status: str = ""
+    detail: str = ""
+    latency_ms: Decimal = Decimal("0")
+
+
+class UsageBreakdown(BaseModel):
+    dimension: str = ""
+    requests: int = 0
+    successes: int = 0
+    failures: int = 0
+    avg_latency: Decimal = Decimal("0")
+
+
+# Tool 1: Check System Status (No approval)
+
+class CheckSystemStatusInput(BaseModel):
+    check_type: Optional[list[str]] = Field(default=None, description="database, providers, agents, all")
+
+
+class CheckSystemStatusOutput(BaseModel):
+    overall_status: str = ""
+    checks: list[SystemCheck] = []
+    summary: str = ""
+
+
+# Tool 2: Get Usage Statistics (No approval)
+
+class GetUsageStatisticsInput(BaseModel):
+    from_date: date = Field(..., description="Start date (YYYY-MM-DD)")
+    to_date: date = Field(..., description="End date (YYYY-MM-DD)")
+    group_by: Optional[str] = Field(default=None, description="provider, agent, day")
+    include_detail: bool = Field(default=False, description="Include detailed breakdown")
+
+
+class GetUsageStatisticsOutput(BaseModel):
+    period: str = ""
+    total_requests: int = 0
+    success_count: int = 0
+    failure_count: int = 0
+    avg_latency_ms: Decimal = Decimal("0")
+    breakdown: list[UsageBreakdown] = []
+    recommendations: list[str] = []
+    summary: str = ""
+
+
+# Tool 3: Manage System Preferences (Approval: Yes)
+
+class ManageSystemPreferencesInput(BaseModel):
+    action: str = Field(..., description="view, update, reset")
+    settings: Optional[dict] = Field(default=None, description="Key-value pairs to update")
+    setting_key: Optional[str] = Field(default=None, description="Specific key to view or reset")
+
+
+class ManageSystemPreferencesOutput(BaseModel):
+    action_performed: str = ""
+    settings: dict = {}
+    changed_keys: list[str] = []
+    message: str = ""
+    needs_approval: bool = True
+
+
+# Tool 4: Schedule System Task (Approval: Yes)
+
+class ScheduleSystemTaskInput(BaseModel):
+    task_type: str = Field(..., description="backup, export_data, maintenance, cleanup")
+    schedule_time: Optional[str] = Field(default=None, description="now, off_peak, or datetime")
+    parameters: Optional[dict] = Field(default=None, description="Task-specific parameters")
+    notes: Optional[str] = Field(default=None, description="Additional notes")
+
+
+class ScheduleSystemTaskOutput(BaseModel):
+    task_id: str
+    task_type: str
+    status: str = ""
+    scheduled_for: str = ""
+    estimated_completion: str = ""
+    message: str = ""
+    needs_approval: bool = True

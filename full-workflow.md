@@ -4,7 +4,8 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 **Framework:** OpenAI Agents SDK — Manager pattern (Orchestrator calls specialist agents as tools, specialist agents never talk to the user directly).
 
-**Total: 1 Orchestrator + 9 Specialist Agents + 62 tools + 3 direct-backend (non-AI) features = 65 components.**
+**Total: 1 Orchestrator + 10 Specialist Agents + 66 tools + 3 direct-backend (non-AI) features = 70 components.**
+
 
 ---
 
@@ -148,6 +149,19 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 **Role:** Open-ended financial insight and Q&A over the business's own data. 5 tools, 1 requiring approval.
 
+---
+
+## 10. System Admin Agent
+
+**Role:** System health monitoring, usage analytics, configuration management, and maintenance scheduling. 4 tools, 2 requiring approval.
+
+| Tool | Approval | What it does | DB Tables |
+|---|---|---|---|
+| `check_system_status` | No | DB health check, provider config verification, agent module import check. Overall: healthy/degraded/unhealthy | None |
+| `get_usage_statistics` | No | Backup log analysis with success/failure rates and recommendations | `system_backup_log` |
+| `manage_system_preferences` | **Yes** | CRUD for key-value config. view/update/reset. Auto-seeds defaults | `system_config` |
+| `schedule_system_task` | **Yes** | Schedule backup/export/maintenance/cleanup tasks with status tracking | `system_backup_log` |
+
 | Tool | Approval | What it does | DB Tables |
 |---|---|---|---|
 | `analyze_spending_patterns` | No | Expense patterns grouped by category/month; keyword filter; concentration insights | `journal_entries` |
@@ -196,5 +210,7 @@ These are the tools that must pause and wait for human confirmation before writi
 20. `support_internal_audit` (Audit & Regulatory)
 21. `maintain_statutory_registers` (Audit & Regulatory)
 22. `generate_custom_report` (Advisory)
+23. `manage_system_preferences` (System Admin)
+24. `schedule_system_task` (System Admin)
 
-**21 tools require approval, 41 do not, out of 62 total (Agents 1-9 implemented).**
+**23 tools require approval, 43 do not, out of 66 total (All 10 Agents implemented).**
