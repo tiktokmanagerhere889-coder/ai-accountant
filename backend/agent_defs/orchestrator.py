@@ -8,6 +8,7 @@ Currently registered:
   - Agent 1: Daily Entry (5 tools)
   - Agent 2: Ledger & Master Data (8 tools)
   - Agent 3: Reconciliation & Banking (7 tools)
+  - Agent 4: Month-End Reporting (10 tools)
 """
 import sys, os, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -42,6 +43,15 @@ from agent_defs.reconciliation_agent import (
     tool_reconcile_bank_charges,
 )
 
+# Agent 4: Month-End Reporting tools
+from agent_defs.month_end_reporting_agent import (
+    tool_review_unpaid_bills, tool_calculate_prepaid_adjustment,
+    tool_calculate_depreciation, tool_calculate_amortization,
+    tool_reconcile_payroll, tool_get_ar_aging_report,
+    tool_get_ap_aging_report, tool_analyze_budget_variance,
+    tool_get_loan_debt_schedule, tool_forecast_cash_flow,
+)
+
 ORCHESTRATOR_NAME = "AI Accountant Orchestrator"
 
 ORCHESTRATOR_INSTRUCTIONS = f"""You are {ORCHESTRATOR_NAME}, the main AI assistant for the accounting system.
@@ -73,6 +83,18 @@ You MUST call a function tool to answer the user. NEVER just talk — actually c
 18. tool_track_lc_bank_guarantee — LC/BG tracking. "LC", "letter of credit".
 19. tool_reconcile_bank_charges — Bank charges. "bank charges", "bank fees".
 
+**AGENT 4 — Month-End Reporting (NEW):**
+20. tool_review_unpaid_bills — Unpaid bills. "unpaid bills", "overdue".
+21. tool_calculate_prepaid_adjustment — Prepaid adjustment. "prepaid".
+22. tool_calculate_depreciation — Depreciation. "depreciation", "fixed asset".
+23. tool_calculate_amortization — Amortization. "amortization", "intangible".
+24. tool_reconcile_payroll — Payroll reconciliation. "payroll recon".
+25. tool_get_ar_aging_report — AR aging. "AR aging", "receivable aging".
+26. tool_get_ap_aging_report — AP aging. "AP aging", "payable aging".
+27. tool_analyze_budget_variance — Budget variance. "budget variance".
+28. tool_get_loan_debt_schedule — Loan schedule. "loan", "debt schedule".
+29. tool_forecast_cash_flow — Cash flow forecast. "cash flow forecast" (NEEDS APPROVAL).
+
 **Rules:**
 - ALWAYS call a tool. Never say you cannot do something.
 - Pass dates in YYYY-MM-DD format.
@@ -96,6 +118,12 @@ ORCHESTRATOR_AGENT = Agent(
         tool_reconcile_vendor_statement, tool_reconcile_customer_statement,
         tool_track_cheque_clearing, tool_track_lc_bank_guarantee,
         tool_reconcile_bank_charges,
+        # Agent 4
+        tool_review_unpaid_bills, tool_calculate_prepaid_adjustment,
+        tool_calculate_depreciation, tool_calculate_amortization,
+        tool_reconcile_payroll, tool_get_ar_aging_report,
+        tool_get_ap_aging_report, tool_analyze_budget_variance,
+        tool_get_loan_debt_schedule, tool_forecast_cash_flow,
     ],
     model=GROQ_MODEL,
 )

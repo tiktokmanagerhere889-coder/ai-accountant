@@ -214,3 +214,109 @@ class LCBGRegistry(Base):
     expiry_date = Column(Date, nullable=False)
     status = Column(String, nullable=False, default="active")
     notes = Column(Text, nullable=True)
+
+
+class Budget(Base):
+    __tablename__ = "budgets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    budget_id = Column(String, nullable=False, unique=True, index=True)
+    fiscal_year = Column(Integer, nullable=False)
+    period = Column(Integer, nullable=False)
+    account_code = Column(String, nullable=False)
+    budget_amount = Column(Numeric, nullable=False)
+    created_at = Column(Date)
+
+
+class Loan(Base):
+    __tablename__ = "loans"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    loan_id = Column(String, nullable=False, unique=True, index=True)
+    loan_name = Column(String, nullable=False)
+    principal_amount = Column(Numeric, nullable=False)
+    interest_rate = Column(Numeric, nullable=False)
+    term_months = Column(Integer, nullable=False)
+    start_date = Column(Date, nullable=False)
+    status = Column(String, nullable=False, default="active")
+
+
+class LoanPaymentSchedule(Base):
+    __tablename__ = "loan_payment_schedule"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    loan_id = Column(String, nullable=False, index=True)
+    period_number = Column(Integer, nullable=False)
+    payment_date = Column(Date, nullable=False)
+    payment_amount = Column(Numeric, nullable=False)
+    principal_amount = Column(Numeric, nullable=False)
+    interest_amount = Column(Numeric, nullable=False)
+    remaining_balance = Column(Numeric, nullable=False)
+
+
+class PrepaidExpense(Base):
+    __tablename__ = "prepaid_expenses"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    prepaid_id = Column(String, nullable=False, unique=True, index=True)
+    description = Column(String, nullable=False)
+    total_amount = Column(Numeric, nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    monthly_amount = Column(Numeric, nullable=False)
+    remaining_balance = Column(Numeric, nullable=False)
+    status = Column(String, default="active")
+
+
+class DepreciationSchedule(Base):
+    __tablename__ = "depreciation_schedule"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    entry_id = Column(String, nullable=False, unique=True, index=True)
+    asset_id = Column(String, nullable=False, index=True)
+    period_date = Column(Date, nullable=False)
+    monthly_depreciation = Column(Numeric, nullable=False)
+    accumulated_depreciation = Column(Numeric, nullable=False)
+    book_value = Column(Numeric, nullable=False)
+    status = Column(String, default="posted")
+
+
+class IntangibleAsset(Base):
+    __tablename__ = "intangible_assets"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    asset_id = Column(String, nullable=False, unique=True, index=True)
+    asset_name = Column(String, nullable=False)
+    cost = Column(Numeric, nullable=False)
+    acquisition_date = Column(Date, nullable=False)
+    useful_life_years = Column(Integer, nullable=False)
+    residual_value = Column(Numeric, nullable=False)
+    current_book_value = Column(Numeric, nullable=False)
+    status = Column(String, default="active")
+
+
+class AmortizationSchedule(Base):
+    __tablename__ = "amortization_schedule"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    entry_id = Column(String, nullable=False, unique=True, index=True)
+    asset_id = Column(String, nullable=False, index=True)
+    period_date = Column(Date, nullable=False)
+    monthly_amortization = Column(Numeric, nullable=False)
+    accumulated_amortization = Column(Numeric, nullable=False)
+    book_value = Column(Numeric, nullable=False)
+    status = Column(String, default="posted")
+
+
+class CashFlowProjection(Base):
+    __tablename__ = "cash_flow_projections"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    projection_id = Column(String, nullable=False, unique=True, index=True)
+    projected_date = Column(Date, nullable=False)
+    projected_inflow = Column(Numeric, nullable=False)
+    projected_outflow = Column(Numeric, nullable=False)
+    net_cash_flow = Column(Numeric, nullable=False)
+    confidence_level = Column(Numeric, nullable=False)
+    generated_date = Column(Date, nullable=False)
+    status = Column(String, default="pending_approval")

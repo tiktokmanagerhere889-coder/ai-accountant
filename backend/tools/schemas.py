@@ -750,3 +750,269 @@ class ReconcileBankChargesOutput(BaseModel):
     total_unmatched: int
     charges: list[BankChargeItem]
     warning: Optional[str] = None
+
+
+# --- Month-End Reporting (Agent 4) ---
+
+# Tool 7: AP Aging Report
+
+class APAgingBucket(BaseModel):
+    vendor_contact_id: str
+    vendor_name: str
+    current: Decimal = Decimal("0")
+    aged_31_60: Decimal = Decimal("0")
+    aged_61_90: Decimal = Decimal("0")
+    aged_90_plus: Decimal = Decimal("0")
+    total_outstanding: Decimal = Decimal("0")
+
+
+class GetAPAgingReportInput(BaseModel):
+    as_of_date: date = Field(default_factory=date.today, description="Date to calculate aging from")
+    vendor_contact_id: Optional[str] = Field(default=None, description="Optional filter to a single vendor")
+
+
+class GetAPAgingReportOutput(BaseModel):
+    as_of_date: date
+    buckets: list[APAgingBucket]
+    total_current: Decimal = Decimal("0")
+    total_31_60: Decimal = Decimal("0")
+    total_61_90: Decimal = Decimal("0")
+    total_90_plus: Decimal = Decimal("0")
+    grand_total: Decimal = Decimal("0")
+
+
+# Tool 8: Budget Variance Analysis
+
+class BudgetVarianceItem(BaseModel):
+    account_code: str
+    budget_amount: Decimal
+    actual_amount: Decimal
+    variance: Decimal
+    variance_pct: Decimal
+    flagged: bool = False
+    explanation: str = ""
+
+
+class AnalyzeBudgetVarianceInput(BaseModel):
+    fiscal_year: int = Field(..., description="Fiscal year (e.g., 2026)")
+    period: int = Field(..., ge=1, le=12, description="Period/month number (1-12)")
+    account_code_prefix: Optional[str] = Field(default=None, description="Optional account filter prefix")
+
+
+class AnalyzeBudgetVarianceOutput(BaseModel):
+    fiscal_year: int
+    period: int
+    items: list[BudgetVarianceItem]
+    total_budget: Decimal = Decimal("0")
+    total_actual: Decimal = Decimal("0")
+    total_variance: Decimal = Decimal("0")
+    flagged_count: int = 0
+    summary: str = ""
+
+
+# Tool 9: Loan / Debt Schedule
+
+class LoanPaymentScheduleItem(BaseModel):
+    period_number: int
+    payment_date: date
+    payment_amount: Decimal
+    principal_amount: Decimal
+    interest_amount: Decimal
+    remaining_balance: Decimal
+
+
+class GetLoanDebtScheduleInput(BaseModel):
+    loan_id: str = Field(..., description="Loan ID to generate or retrieve schedule for")
+    as_of_date: Optional[date] = Field(default=None, description="Date to filter schedule from (shows only future payments)")
+
+
+class GetLoanDebtScheduleOutput(BaseModel):
+    loan_id: str
+    loan_name: str
+    principal_amount: Decimal
+    interest_rate: Decimal
+    term_months: int
+    start_date: date
+    monthly_payment: Decimal
+    schedule: list[LoanPaymentScheduleItem]
+    total_interest: Decimal = Decimal("0")
+    source: str = "computed"
+
+
+# Tool 10: Cash Flow Forecast
+
+class CashFlowProjection(BaseModel):
+    date: date
+    projected_inflow: Decimal
+    projected_outflow: Decimal
+    net_flow: Decimal
+    cumulative_balance: Decimal
+
+
+class ForecastCashFlowInput(BaseModel):
+    forecast_days: int = Field(default=30, ge=30, le=90, description="Forecast horizon: 30, 60, or 90 days")
+    starting_balance: Decimal = Field(default=Decimal("0"), description="Opening cash balance")
+    as_of_date: Optional[date] = Field(default=None, description="Base date for forecast; defaults to today")
+
+
+class ForecastCashFlowOutput(BaseModel):
+    forecast_days: int
+    projections: list[CashFlowProjection]
+    avg_monthly_inflow: Decimal = Decimal("0")
+    avg_monthly_outflow: Decimal = Decimal("0")
+    net_monthly_average: Decimal = Decimal("0")
+    confidence: str = "low"
+    needs_approval: bool = True
+
+
+# --- Month-End Reporting (Agent 4) Tool 1-6 schemas ---
+
+class UnpaidBillItem(BaseModel):
+    entry_id: str
+    vendor_name: str
+    invoice_amount: Decimal
+    outstanding_balance: Decimal
+    due_date: date
+    days_overdue: Optional[int] = None
+    status: str
+
+
+class ReviewUnpaidBillsInput(BaseModel):
+    as_of_date: date = Field(default_factory=date.today, description="Date to check unpaid bills against")
+    vendor_contact_id: Optional[str] = Field(default=None, description="Filter by specific vendor")
+    min_days_overdue: Optional[int] = Field(default=None, ge=1, description="Minimum days overdue")
+
+
+class ReviewUnpaidBillsOutput(BaseModel):
+    items: list[UnpaidBillItem]
+    total_unpaid: Decimal
+    total_overdue: Decimal
+    as_of_date: date
+
+
+class PrepaidAdjustmentItem(BaseModel):
+    prepaid_id: str
+    description: str
+    total_amount: Decimal
+    start_date: date
+    end_date: date
+    monthly_amount: Decimal
+    months_elapsed: int
+    amount_amortized: Decimal
+    remaining_balance: Decimal
+    suggested_adjustment: Decimal
+
+
+class CalculatePrepaidAdjustmentInput(BaseModel):
+    prepaid_id: Optional[str] = Field(default=None, description="Specific prepaid ID; if None, processes all active")
+    as_of_date: date = Field(default_factory=date.today, description="Date to calculate adjustments for")
+
+
+class CalculatePrepaidAdjustmentOutput(BaseModel):
+    items: list[PrepaidAdjustmentItem]
+    total_adjustment: Decimal
+    as_of_date: date
+
+
+class DepreciationEntryItem(BaseModel):
+    entry_id: str
+    asset_id: str
+    asset_name: str
+    period_date: date
+    monthly_depreciation: Decimal
+    accumulated_depreciation: Decimal
+    book_value: Decimal
+    status: str
+
+
+class CalculateDepreciationInput(BaseModel):
+    asset_id: Optional[str] = Field(default=None, description="Specific asset ID; if None, processes all active")
+    period_date: date = Field(default_factory=date.today, description="Period date")
+
+
+class CalculateDepreciationOutput(BaseModel):
+    items: list[DepreciationEntryItem]
+    total_depreciation: Decimal
+    period_date: date
+
+
+class AmortizationEntryItem(BaseModel):
+    entry_id: str
+    asset_id: str
+    asset_name: str
+    period_date: date
+    monthly_amortization: Decimal
+    accumulated_amortization: Decimal
+    book_value: Decimal
+    status: str
+
+
+class CalculateAmortizationInput(BaseModel):
+    asset_id: Optional[str] = Field(default=None, description="Specific intangible asset ID; if None, processes all active")
+    period_date: date = Field(default_factory=date.today, description="Period date")
+
+
+class CalculateAmortizationOutput(BaseModel):
+    items: list[AmortizationEntryItem]
+    total_amortization: Decimal
+    period_date: date
+
+
+class PayrollReconItem(BaseModel):
+    entry_id: str
+    employee_name: str
+    salary_amount: Decimal
+    deductions: Decimal
+    net_pay: Decimal
+    period_start: date
+    period_end: date
+    posted_date: date
+    discrepancy: Optional[str] = None
+
+
+class ReconcilePayrollInput(BaseModel):
+    from_date: date = Field(..., description="Start date")
+    to_date: date = Field(..., description="End date")
+    employee_name: Optional[str] = Field(default=None, description="Filter by employee")
+
+
+class ReconcilePayrollOutput(BaseModel):
+    items: list[PayrollReconItem]
+    total_salary: Decimal
+    total_deductions: Decimal
+    total_net_pay: Decimal
+    period_from: date
+    period_to: date
+    discrepancies: int = 0
+
+
+class AgingBucketItem(BaseModel):
+    bucket_name: str
+    from_days: int
+    to_days: Optional[int] = None
+    total_amount: Decimal
+    percentage: float
+
+
+class CustomerAgingDetail(BaseModel):
+    customer_name: str
+    total_outstanding: Decimal
+    current: Decimal
+    past_30: Decimal
+    past_60: Decimal
+    past_90: Decimal
+
+
+class GetARAgingReportInput(BaseModel):
+    as_of_date: date = Field(default_factory=date.today, description="Date to calculate aging for")
+    customer_contact_id: Optional[str] = Field(default=None, description="Filter by specific customer")
+
+
+class GetARAgingReportOutput(BaseModel):
+    buckets: list[AgingBucketItem]
+    customer_details: list[CustomerAgingDetail]
+    total_outstanding: Decimal
+    as_of_date: date
+
+
+# --- Month-End Reporting (Agent 4) supplementary schemas ---
