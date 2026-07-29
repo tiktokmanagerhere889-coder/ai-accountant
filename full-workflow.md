@@ -4,7 +4,7 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 **Framework:** OpenAI Agents SDK — Manager pattern (Orchestrator calls specialist agents as tools, specialist agents never talk to the user directly).
 
-**Total: 1 Orchestrator + 8 Specialist Agents + 57 tools + 3 direct-backend (non-AI) features = 60 components.**
+**Total: 1 Orchestrator + 9 Specialist Agents + 62 tools + 3 direct-backend (non-AI) features = 65 components.**
 
 ---
 
@@ -146,15 +146,15 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 ## 9. Advisory Agent
 
-**Role:** Open-ended financial insight and Q&A over the business's own data.
+**Role:** Open-ended financial insight and Q&A over the business's own data. 5 tools, 1 requiring approval.
 
-| Tool | Approval | What it does |
-|---|---|---|
-| `analyze_spending_patterns` | No | Answers spending questions (e.g. utilities in March) |
-| `assess_financial_health` | No | Combines ratios/trends into a plain-language summary |
-| `generate_cost_cutting_recommendations` | No | Suggestions from spending patterns already in the system |
-| `generate_custom_report` | **Yes** | Builds a custom query from a plain-language ask |
-| `calculate_financial_ratios` | No | Standard ratios, explained |
+| Tool | Approval | What it does | DB Tables |
+|---|---|---|---|
+| `analyze_spending_patterns` | No | Expense patterns grouped by category/month; keyword filter; concentration insights | `journal_entries` |
+| `calculate_financial_ratios` | No | 4 categories: liquidity (current/quick), profitability (NPM/GP/ROA/ROE), leverage (D/E, debt ratio), efficiency (asset turnover, expense ratio). Plain-language interpretation | `journal_entries`, `retained_earnings` |
+| `assess_financial_health` | No | Weighted scoring (profitability 30%, liquidity 25%, leverage 20%, efficiency 15%, budget 10%) → score 0-100 + strengths/weaknesses/recommendations | `journal_entries`, `retained_earnings`, `budgets` |
+| `generate_cost_cutting_recommendations` | No | Top expense categories, trend direction, savings estimates (10-20% discretionary, 0% essential), ranked by impact | `journal_entries`, `chart_of_accounts` |
+| `generate_custom_report` | **Yes** | 4 types: summary/detailed/comparative/trend. Section-based structured output | `journal_entries`, `budgets`, `chart_of_accounts`, `retained_earnings` |
 
 ---
 
@@ -197,4 +197,4 @@ These are the tools that must pause and wait for human confirmation before writi
 21. `maintain_statutory_registers` (Audit & Regulatory)
 22. `generate_custom_report` (Advisory)
 
-**20 tools require approval, 37 do not, out of 57 total (Agents 1-8 implemented).**
+**21 tools require approval, 41 do not, out of 62 total (Agents 1-9 implemented).**

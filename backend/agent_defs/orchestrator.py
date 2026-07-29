@@ -13,6 +13,7 @@ Currently registered:
   - Agent 6: Cost, Advanced Accounting & Budgeting (8 tools)
   - Agent 7: Tax (8 tools)
   - Agent 8: Audit & Regulatory (4 tools)
+  - Agent 9: Advisory (5 tools)
 """
 import sys, os, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -35,6 +36,7 @@ from agent_defs.year_end_agent import run_year_end_agent
 from agent_defs.cost_advanced_agent import run_cost_advanced_agent
 from agent_defs.tax_agent import run_tax_agent
 from agent_defs.audit_agent import run_audit_agent
+from agent_defs.advisory_agent import run_advisory_agent
 
 
 @function_tool
@@ -85,6 +87,12 @@ async def agent_audit(user_request: str) -> str:
     return await run_with_retry(run_audit_agent, user_request)
 
 
+@function_tool
+async def agent_advisory(user_request: str) -> str:
+    """Route to Advisory Agent: spending analysis, financial ratios, financial health assessment, cost cutting recommendations, custom reports (approval)."""
+    return await run_with_retry(run_advisory_agent, user_request)
+
+
 ORCHESTRATOR_NAME = "AI Accountant Orchestrator"
 
 ORCHESTRATOR_INSTRUCTIONS = f"""You are {ORCHESTRATOR_NAME}. Route each user request to the correct specialist agent-tool.
@@ -97,6 +105,7 @@ ORCHESTRATOR_INSTRUCTIONS = f"""You are {ORCHESTRATOR_NAME}. Route each user req
 - agent_cost_advanced: breakeven, currency conversion, budget forecast, cost variance, overhead allocation, revenue recognition, provisions, related party
 - agent_tax: withholding tax, WHT, tax planning, minimum tax, EOBI, sales tax adjustment, exemption flagging, sales tax filing, income tax filing
 - agent_audit: anomaly detection, fraud detection, suspicious transaction, internal audit, audit support, compliance deadline, filing deadline, due date, statutory register, register of directors
+- agent_advisory: spending analysis, spending pattern, financial advice, financial health, cost cutting, reduce expenses, financial ratios, ratio analysis, custom report, report generation
 
 Pass the user's full request to the tool. After the tool returns, explain the result in plain English."""
 
@@ -112,6 +121,7 @@ ORCHESTRATOR_AGENT = Agent(
         agent_cost_advanced,
         agent_tax,
         agent_audit,
+        agent_advisory,
     ],
     model=GROQ_MODEL,
 )

@@ -1609,3 +1609,137 @@ class MaintainStatutoryRegistersOutput(BaseModel):
     status: str = ""
     message: str = ""
     needs_approval: bool = True
+
+
+# --- Agent 9: Advisory ---
+
+# Helper models for Agent 9
+
+class CategorySpend(BaseModel):
+    name: str = ""
+    amount: Decimal = Decimal("0")
+    percentage: Decimal = Decimal("0")
+    count: int = 0
+
+
+class MonthlySpend(BaseModel):
+    month: str = ""
+    amount: Decimal = Decimal("0")
+
+
+class RatioResult(BaseModel):
+    name: str = ""
+    value: str = ""
+    benchmark: str = ""
+    interpretation: str = ""
+    category: str = ""
+
+
+class Recommendation(BaseModel):
+    area: str = ""
+    current_spend: Decimal = Decimal("0")
+    potential_savings: Decimal = Decimal("0")
+    suggestion: str = ""
+    priority: str = ""
+
+
+class ReportSection(BaseModel):
+    title: str = ""
+    content: str = ""
+    data: dict = {}
+
+
+class MetricRating(BaseModel):
+    name: str = ""
+    value: str = ""
+    rating: str = ""
+
+
+# Tool 1: Analyze Spending Patterns (No approval)
+
+class AnalyzeSpendingPatternsInput(BaseModel):
+    from_date: date = Field(..., description="Start date (YYYY-MM-DD)")
+    to_date: date = Field(..., description="End date (YYYY-MM-DD)")
+    group_by: Optional[str] = Field(default=None, description="month, category, vendor")
+    account_prefixes: Optional[list[str]] = Field(default=None, description="Filter to specific prefixes e.g. ['5','6']")
+    description_keyword: Optional[str] = Field(default=None, description="Filter entries by keyword in description")
+
+
+class AnalyzeSpendingPatternsOutput(BaseModel):
+    period: str = ""
+    total_spending: Decimal = Decimal("0")
+    categories: list[CategorySpend] = []
+    top_categories: list[CategorySpend] = []
+    monthly_breakdown: Optional[list[MonthlySpend]] = None
+    insights: list[str] = []
+    entry_count: int = 0
+
+
+# Tool 2: Calculate Financial Ratios (No approval)
+
+class CalculateFinancialRatiosInput(BaseModel):
+    fiscal_year: int = Field(..., description="Fiscal year")
+    period: Optional[int] = Field(default=None, ge=1, le=12, description="Optional month filter")
+    ratio_types: Optional[list[str]] = Field(default=None, description="liquidity, profitability, leverage, efficiency")
+
+
+class CalculateFinancialRatiosOutput(BaseModel):
+    fiscal_year: int
+    ratios: list[RatioResult] = []
+    summary: str = ""
+
+
+# Tool 3: Assess Financial Health (No approval)
+
+class AssessFinancialHealthInput(BaseModel):
+    fiscal_year: int = Field(..., description="Fiscal year")
+    period: Optional[int] = Field(default=None, ge=1, le=12, description="Optional month filter")
+
+
+class AssessFinancialHealthOutput(BaseModel):
+    health_assessment: str = ""
+    score: int = 0
+    key_metrics: list[MetricRating] = []
+    strengths: list[str] = []
+    weaknesses: list[str] = []
+    recommendations: list[str] = []
+    summary: str = ""
+
+
+# Tool 4: Generate Cost Cutting Recommendations (No approval)
+
+class GenerateCostCuttingInput(BaseModel):
+    fiscal_year: int = Field(..., description="Fiscal year")
+    period: Optional[int] = Field(default=None, ge=1, le=12, description="Optional month filter")
+    target_account_prefixes: Optional[list[str]] = Field(default=None, description="Limit to specific expense prefixes")
+    min_savings_threshold: Optional[Decimal] = Field(default=None, description="Minimum savings to recommend")
+
+
+class GenerateCostCuttingOutput(BaseModel):
+    total_expenses: Decimal = Decimal("0")
+    top_expense_categories: list[CategorySpend] = []
+    recommendations: list[Recommendation] = []
+    estimated_total_savings: Decimal = Decimal("0")
+    summary: str = ""
+
+
+# Tool 5: Generate Custom Report (Approval: Yes)
+
+class GenerateCustomReportInput(BaseModel):
+    report_title: str = Field(..., min_length=1, description="Report title")
+    fiscal_year: int = Field(..., description="Fiscal year")
+    period_from: Optional[int] = Field(default=None, ge=1, le=12, description="Start month")
+    period_to: Optional[int] = Field(default=None, ge=1, le=12, description="End month")
+    report_type: str = Field(..., description="summary, detailed, comparative, trend")
+    include_sections: Optional[list[str]] = Field(default=None, description="revenue, expenses, ratios, budget_variance, trends")
+    notes: Optional[str] = Field(default=None, description="Additional notes")
+
+
+class GenerateCustomReportOutput(BaseModel):
+    report_id: str
+    report_title: str
+    report_type: str
+    generated_at: date
+    sections: list[ReportSection] = []
+    summary: str = ""
+    needs_approval: bool = True

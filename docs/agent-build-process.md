@@ -131,3 +131,4 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 | 6. Cost, Advanced Accounting | 8 | 5 | 1 table, 2 fields | 32 | ✓ |
 | 7. Tax | 8 | 4 | 2 tables | 25 | ✓ |
 | 8. Audit & Regulatory | 4 | 2 | 3 tables | 29 | ✓ |
+| 9. Advisory | 5 | 1 | — | 25 | ✓ |
