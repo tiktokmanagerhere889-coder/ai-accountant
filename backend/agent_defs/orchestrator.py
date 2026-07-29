@@ -12,6 +12,7 @@ Currently registered:
   - Agent 5: Year-End Close & Financial Statements (8 tools)
   - Agent 6: Cost, Advanced Accounting & Budgeting (8 tools)
   - Agent 7: Tax (8 tools)
+  - Agent 8: Audit & Regulatory (4 tools)
 """
 import sys, os, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -33,6 +34,7 @@ from agent_defs.month_end_reporting_agent import run_month_end_agent
 from agent_defs.year_end_agent import run_year_end_agent
 from agent_defs.cost_advanced_agent import run_cost_advanced_agent
 from agent_defs.tax_agent import run_tax_agent
+from agent_defs.audit_agent import run_audit_agent
 
 
 @function_tool
@@ -77,6 +79,12 @@ async def agent_tax(user_request: str) -> str:
     return await run_with_retry(run_tax_agent, user_request)
 
 
+@function_tool
+async def agent_audit(user_request: str) -> str:
+    """Route to Audit & Regulatory Agent: anomaly detection, compliance deadlines, internal audit (approval), statutory registers (approval)."""
+    return await run_with_retry(run_audit_agent, user_request)
+
+
 ORCHESTRATOR_NAME = "AI Accountant Orchestrator"
 
 ORCHESTRATOR_INSTRUCTIONS = f"""You are {ORCHESTRATOR_NAME}. Route each user request to the correct specialist agent-tool.
@@ -88,6 +96,7 @@ ORCHESTRATOR_INSTRUCTIONS = f"""You are {ORCHESTRATOR_NAME}. Route each user req
 - agent_year_end: trial balance, P&L, balance sheet, cash flow statement, retained earnings, carry forward, notes, close fiscal year
 - agent_cost_advanced: breakeven, currency conversion, budget forecast, cost variance, overhead allocation, revenue recognition, provisions, related party
 - agent_tax: withholding tax, WHT, tax planning, minimum tax, EOBI, sales tax adjustment, exemption flagging, sales tax filing, income tax filing
+- agent_audit: anomaly detection, fraud detection, suspicious transaction, internal audit, audit support, compliance deadline, filing deadline, due date, statutory register, register of directors
 
 Pass the user's full request to the tool. After the tool returns, explain the result in plain English."""
 
@@ -102,6 +111,7 @@ ORCHESTRATOR_AGENT = Agent(
         agent_year_end,
         agent_cost_advanced,
         agent_tax,
+        agent_audit,
     ],
     model=GROQ_MODEL,
 )

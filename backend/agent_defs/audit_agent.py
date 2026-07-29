@@ -1,0 +1,202 @@
+"""Audit & Regulatory Agent — wraps 4 tools as an OpenAI Agent."""
+import sys, os, json, typing
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from datetime import date
+from decimal import Decimal
+
+from agents import Agent, function_tool, Runner
+from agents.run_config import RunConfig
+
+from db.database import init_db, get_session
+from tools.schemas import (
+    DetectAnomalyTransactionsInput, DetectAnomalyTransactionsOutput,
+    GetComplianceDeadlinesInput, GetComplianceDeadlinesOutput,
+    SupportInternalAuditInput, SupportInternalAuditOutput,
+    MaintainStatutoryRegistersInput, MaintainStatutoryRegistersOutput,
+)
+from tools.audit_tools import (
+    detect_anomaly_transactions, get_compliance_deadlines,
+    support_internal_audit, maintain_statutory_registers,
+)
+from agent_defs.model_providers import (
+    create_cerebras_provider, create_groq_provider,
+    GROQ_MODEL, GROQ_FALLBACK_MODEL, CEREBRAS_MODEL,
+)
+
+
+def _get_session():
+    init_db()
+    return get_session()
+
+
+def _to_json(obj):
+    return json.dumps(json.loads(obj.model_dump_json()), indent=2, default=str)
+
+
+# -- Tool 1: detect_anomaly_transactions --
+@function_tool
+def tool_detect_anomaly_transactions(from_date: str, to_date: str, anomaly_types: str = "", threshold: str = "") -> str:
+    """Run pattern-based anomaly detection on journal entries. No approval needed.
+
+    Args:
+        from_date: Start date YYYY-MM-DD.
+        to_date: End date YYYY-MM-DD.
+        anomaly_types: Optional comma-separated: round_amount, weekend_posting, duplicate_amount, unusual_account.
+        threshold: Optional minimum amount as string (e.g., '100000').
+    """
+    types = [t.strip() for t in anomaly_types.split(",") if t.strip()] if anomaly_types else None
+    thresh = Decimal(threshold) if threshold else None
+    inp = DetectAnomalyTransactionsInput(
+        from_date=date.fromisoformat(from_date),
+        to_date=date.fromisoformat(to_date),
+        anomaly_types=types,
+        threshold=thresh,
+    )
+    db = _get_session()
+    try:
+        r = detect_anomaly_transactions(inp, db)
+        return _to_json(r)
+    except ValueError as e:
+        return f"Error: {e}"
+    finally:
+        db.close()
+
+
+# -- Tool 2: get_compliance_deadlines --
+@function_tool
+def tool_get_compliance_deadlines(fiscal_year: int = 0, deadline_type: str = "", status: str = "", reminder_days: int = 0) -> str:
+    """Query compliance deadlines with optional filters. Read-only, no approval.
+
+    Args:
+        fiscal_year: Optional fiscal year (e.g., 2026). 0 = no filter.
+        deadline_type: Optional filter: tax_filing, statutory_filing, audit, annual_return, other.
+        status: Optional filter: upcoming, overdue, completed.
+        reminder_days: Show deadlines due within N days. 0 = no filter.
+    """
+    inp = GetComplianceDeadlinesInput(
+        fiscal_year=fiscal_year if fiscal_year > 0 else None,
+        deadline_type=deadline_type if deadline_type else None,
+        status=status if status else None,
+        reminder_days=reminder_days if reminder_days > 0 else None,
+    )
+    db = _get_session()
+    try:
+        r = get_compliance_deadlines(inp, db)
+        return _to_json(r)
+    except ValueError as e:
+        return f"Error: {e}"
+    finally:
+        db.close()
+
+
+# -- Tool 3: support_internal_audit --
+@function_tool
+def tool_support_internal_audit(fiscal_year: int, period: int = 0, min_severity: str = "", include_resolved: bool = False) -> str:
+    """Run internal audit scan on journal entries. Flags 5 patterns. REQUIRES APPROVAL.
+
+    Args:
+        fiscal_year: Fiscal year (e.g., 2026).
+        period: Optional period 1-12. 0 = full year.
+        min_severity: Optional minimum severity: low, medium, high, critical.
+        include_resolved: Include already-resolved flags. Default False.
+    """
+    inp = SupportInternalAuditInput(
+        fiscal_year=fiscal_year,
+        period=period if period > 0 else None,
+        min_severity=min_severity if min_severity else None,
+        include_resolved=include_resolved,
+    )
+    db = _get_session()
+    try:
+        r = support_internal_audit(inp, db)
+        return _to_json(r)
+    except ValueError as e:
+        return f"Error: {e}"
+    finally:
+        db.close()
+
+
+# -- Tool 4: maintain_statutory_registers --
+@function_tool
+def tool_maintain_statutory_registers(action: str, register_type: str, entry_date: str, description: str, reference_number: str = "", amount: str = "", register_id: str = "") -> str:
+    """CRUD operations on statutory registers. REQUIRES APPROVAL for write actions.
+
+    Args:
+        action: add, update, delete, view.
+        register_type: directors, members, charges, contracts, beneficial_owners.
+        entry_date: Date YYYY-MM-DD.
+        description: Register entry description.
+        reference_number: Optional reference number.
+        amount: Optional monetary amount as string.
+        register_id: Required for update/delete actions.
+    """
+    amt = Decimal(amount) if amount else None
+    reg_id = register_id if register_id else None
+    inp = MaintainStatutoryRegistersInput(
+        action=action.lower().strip(),
+        register_type=register_type.lower().strip(),
+        entry_date=date.fromisoformat(entry_date),
+        description=description,
+        reference_number=reference_number if reference_number else None,
+        amount=amt,
+        register_id=reg_id,
+    )
+    db = _get_session()
+    try:
+        r = maintain_statutory_registers(inp, db)
+        return _to_json(r)
+    except ValueError as e:
+        return f"Error: {e}"
+    finally:
+        db.close()
+
+
+AUDIT_AGENT = Agent(
+    name="Audit & Regulatory Agent",
+    instructions="""You are the Audit & Regulatory Agent for the AI Accountant.
+
+You handle anomaly detection, internal audit support, statutory records, and compliance deadline tracking. You have 4 tools.
+
+Available tools:
+1. tool_detect_anomaly_transactions — Pattern-based fraud/anomaly detection (no approval).
+2. tool_get_compliance_deadlines — Query compliance deadlines and due dates (no approval).
+3. tool_support_internal_audit — Full internal audit scan with 5 patterns (REQUIRES APPROVAL).
+4. tool_maintain_statutory_registers — CRUD for directors/members/charges/contracts/beneficial_owners registers (REQUIRES APPROVAL for writes).
+
+Rules:
+- ALWAYS call a tool to answer. Never just talk.
+- For tools 3-4: tell the user these require approval before writing.
+- Pass dates in YYYY-MM-DD format.
+- Pass amounts as string numbers (e.g., '500000' not 500000).
+- Explain results in plain English after tool calls.
+""",
+    tools=[
+        tool_detect_anomaly_transactions,
+        tool_get_compliance_deadlines,
+        tool_support_internal_audit,
+        tool_maintain_statutory_registers,
+    ],
+    model=GROQ_MODEL,
+)
+
+
+async def run_audit_agent(user_request: str) -> str:
+    """Run the Audit & Regulatory Agent. Groq -> Groq fallback -> Cerebras."""
+    for attempt_model, provider_fn, label in [
+        (GROQ_MODEL, create_groq_provider, "Groq"),
+        (GROQ_FALLBACK_MODEL, create_groq_provider, "Groq fallback"),
+        (CEREBRAS_MODEL, create_cerebras_provider, "Cerebras"),
+    ]:
+        try:
+            agent = AUDIT_AGENT if attempt_model == GROQ_MODEL else Agent(
+                name="Audit & Regulatory Agent",
+                instructions=AUDIT_AGENT.instructions,
+                tools=AUDIT_AGENT.tools,
+                model=attempt_model,
+            )
+            result = await Runner.run(agent, input=user_request, run_config=RunConfig(model_provider=provider_fn()))
+            return result.final_output
+        except Exception:
+            last_error = f"{label}: failure"
+    return f"Error: All providers unavailable.\n{last_error}"

@@ -4,7 +4,7 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 **Framework:** OpenAI Agents SDK — Manager pattern (Orchestrator calls specialist agents as tools, specialist agents never talk to the user directly).
 
-**Total: 1 Orchestrator + 7 Specialist Agents + 53 tools + 3 direct-backend (non-AI) features = 56 components.**
+**Total: 1 Orchestrator + 8 Specialist Agents + 57 tools + 3 direct-backend (non-AI) features = 60 components.**
 
 ---
 
@@ -118,8 +118,6 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 **Role:** All tax calculation and filing-preparation tasks. Filing submission itself always stays with a human (FBR portal requires personal credentials).
 
-| Tool | Approval | What it does |
-|---|---|---|
 | Tool | Approval | What it does | DB Tables |
 |---|---|---|---|
 | `calculate_withholding_tax` | No | WHT on payments — rate from `tax_rates` table or default | `tax_rates` |
@@ -139,10 +137,10 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 | Tool | Approval | What it does |
 |---|---|---|
-| `support_internal_audit` | **Yes** | Flags unusual entries for accountant review |
-| `detect_anomaly_transactions` | No | Pattern-based fraud/anomaly flagging |
-| `maintain_statutory_registers` | **Yes** | Keeps statutory register data current |
+| `detect_anomaly_transactions` | No | Pattern-based fraud/anomaly flagging (4 detectors) |
 | `get_compliance_deadlines` | No | Tracks and reminds of filing deadlines |
+| `support_internal_audit` | **Yes** | Flags unusual entries for accountant review (5 patterns) |
+| `maintain_statutory_registers` | **Yes** | Keeps statutory register data current |
 
 ---
 
@@ -199,4 +197,4 @@ These are the tools that must pause and wait for human confirmation before writi
 21. `maintain_statutory_registers` (Audit & Regulatory)
 22. `generate_custom_report` (Advisory)
 
-**18 tools require approval, 35 do not, out of 53 total (Agents 1-7 implemented).**
+**20 tools require approval, 37 do not, out of 57 total (Agents 1-8 implemented).**

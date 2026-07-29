@@ -1501,3 +1501,111 @@ class PrepareIncomeTaxFilingOutput(BaseModel):
     needs_approval: bool = True
     status: str = "draft"
     message: str = ""
+
+
+# --- Agent 8: Audit & Regulatory ---
+
+# Tool 1: Detect Anomaly Transactions (No approval)
+
+class AnomalyEntry(BaseModel):
+    entry_id: str = ""
+    description: str = ""
+    amount: Decimal = Decimal("0")
+    anomaly_type: str = ""
+    confidence: str = ""
+    reasoning: str = ""
+    suggested_review: str = ""
+
+
+class DetectAnomalyTransactionsInput(BaseModel):
+    from_date: date = Field(..., description="Start date (YYYY-MM-DD)")
+    to_date: date = Field(..., description="End date (YYYY-MM-DD)")
+    anomaly_types: Optional[list[str]] = Field(default=None, description="Filter: round_amount, weekend_posting, duplicate_amount, unusual_account, high_frequency")
+    threshold: Optional[Decimal] = Field(default=None, description="Minimum amount threshold to flag")
+
+
+class DetectAnomalyTransactionsOutput(BaseModel):
+    anomalies: list[AnomalyEntry] = []
+    total_anomalies: int = 0
+    total_amount_flagged: Decimal = Decimal("0")
+    period_from: date
+    period_to: date
+    status: str = "clean"
+
+
+# Tool 2: Get Compliance Deadlines (No approval)
+
+class DeadlineItem(BaseModel):
+    deadline_id: str = ""
+    deadline_type: str = ""
+    description: str = ""
+    due_date: date
+    days_remaining: int = 0
+    status: str = ""
+    responsible_person: str = ""
+
+
+class GetComplianceDeadlinesInput(BaseModel):
+    fiscal_year: Optional[int] = Field(default=None, description="Filter by fiscal year")
+    deadline_type: Optional[str] = Field(default=None, description="tax_filing, statutory_filing, audit, annual_return, other")
+    status: Optional[str] = Field(default=None, description="upcoming, overdue, completed")
+    reminder_days: Optional[int] = Field(default=None, description="Show deadlines due within N days")
+
+
+class GetComplianceDeadlinesOutput(BaseModel):
+    deadlines: list[DeadlineItem] = []
+    overdue_count: int = 0
+    upcoming_count: int = 0
+    summary: str = ""
+
+
+# Tool 3: Support Internal Audit (Approval: Yes)
+
+class FlaggedAuditEntry(BaseModel):
+    entry_id: str = ""
+    description: str = ""
+    amount: Decimal = Decimal("0")
+    flag_type: str = ""
+    reason: str = ""
+    severity: str = ""
+    status: str = ""
+
+
+class SupportInternalAuditInput(BaseModel):
+    fiscal_year: int = Field(..., description="Fiscal year")
+    period: Optional[int] = Field(default=None, ge=1, le=12, description="Optional period filter")
+    min_severity: Optional[str] = Field(default=None, description="Minimum severity: low, medium, high, critical")
+    include_resolved: bool = Field(default=False, description="Include already-resolved flags")
+
+
+class SupportInternalAuditOutput(BaseModel):
+    audit_id: str
+    flagged_entries: list[FlaggedAuditEntry] = []
+    total_flagged: int = 0
+    summary: str = ""
+    needs_approval: bool = True
+
+
+# Tool 4: Maintain Statutory Registers (Approval: Yes)
+
+class MaintainStatutoryRegistersInput(BaseModel):
+    action: str = Field(..., description="add, update, delete, view")
+    register_type: str = Field(..., description="directors, members, charges, contracts, beneficial_owners")
+    entry_date: date = Field(..., description="Entry date")
+    description: str = Field(..., min_length=1, description="Register entry description")
+    reference_number: Optional[str] = Field(default=None, description="Optional reference number")
+    amount: Optional[Decimal] = Field(default=None, description="Optional monetary amount")
+    register_id: Optional[str] = Field(default=None, description="Required for update/delete actions")
+
+
+class MaintainStatutoryRegistersOutput(BaseModel):
+    register_id: str
+    action_performed: str
+    register_type: str
+    entry_date: date
+    description: str = ""
+    reference_number: str = ""
+    amount: Decimal = Decimal("0")
+    status: str = ""
+    message: str = ""
+    needs_approval: bool = True

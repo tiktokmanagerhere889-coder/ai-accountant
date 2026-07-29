@@ -380,3 +380,47 @@ class EobiRate(Base):
     effective_to = Column(Date, nullable=True)
     description = Column(String, nullable=True)
     max_insurable_amount = Column(Numeric, nullable=True)
+
+
+class FlaggedEntry(Base):
+    __tablename__ = "flagged_entries"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    entry_id = Column(String, ForeignKey("journal_entries.entry_id"), nullable=False, index=True)
+    flag_type = Column(String, nullable=False)
+    reason = Column(Text, nullable=False)
+    severity = Column(String, nullable=False)
+    flagged_by = Column(String, nullable=False, default="system")
+    flagged_at = Column(Date, nullable=False)
+    resolved_at = Column(Date, nullable=True)
+    status = Column(String, nullable=False, default="open")
+
+
+class StatutoryRegister(Base):
+    __tablename__ = "statutory_registers"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    register_id = Column(String, nullable=False, unique=True, index=True)
+    register_type = Column(String, nullable=False)
+    entry_date = Column(Date, nullable=False)
+    description = Column(Text, nullable=False)
+    reference_number = Column(String, nullable=True)
+    amount = Column(Numeric, nullable=True)
+    status = Column(String, nullable=False, default="pending_approval")
+    filed_date = Column(Date, nullable=True)
+    created_at = Column(Date, nullable=False)
+    updated_at = Column(Date, nullable=False)
+
+
+class ComplianceDeadline(Base):
+    __tablename__ = "compliance_deadlines"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    deadline_id = Column(String, nullable=False, unique=True, index=True)
+    deadline_type = Column(String, nullable=False, index=True)
+    description = Column(Text, nullable=False)
+    due_date = Column(Date, nullable=False)
+    responsible_person = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="upcoming")
+    reminder_days = Column(Integer, nullable=True)
+    fiscal_year = Column(Integer, nullable=True)
