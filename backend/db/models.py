@@ -320,3 +320,24 @@ class CashFlowProjection(Base):
     confidence_level = Column(Numeric, nullable=False)
     generated_date = Column(Date, nullable=False)
     status = Column(String, default="pending_approval")
+
+
+class RetainedEarnings(Base):
+    __tablename__ = "retained_earnings"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    fiscal_year = Column(Integer, nullable=False, unique=True, index=True)
+    beginning_balance = Column(Numeric, nullable=False, default=0)
+    net_income = Column(Numeric, nullable=False, default=0)
+    dividends = Column(Numeric, nullable=False, default=0)
+    ending_balance = Column(Numeric, nullable=False, default=0)
+
+
+class FiscalYearClose(Base):
+    __tablename__ = "fiscal_year_close"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    fiscal_year = Column(Integer, nullable=False, unique=True, index=True)
+    closed_at = Column(Date, nullable=False)
+    closed_by = Column(String, nullable=False, default="system")
+    status = Column(String, nullable=False, default="closed")

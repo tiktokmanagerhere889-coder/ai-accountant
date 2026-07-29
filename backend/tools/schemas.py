@@ -1016,3 +1016,164 @@ class GetARAgingReportOutput(BaseModel):
 
 
 # --- Month-End Reporting (Agent 4) supplementary schemas ---
+
+# --- Year-End Close & Financial Statements (Agent 5) ---
+
+# Tool 1: Trial Balance
+class TrialBalanceAccount(BaseModel):
+    account_code: str
+    account_name: str
+    total_debits: Decimal = Decimal("0")
+    total_credits: Decimal = Decimal("0")
+    balance: Decimal = Decimal("0")
+
+
+class GenerateTrialBalanceInput(BaseModel):
+    as_of_date: date = Field(default_factory=date.today, description="Date to generate trial balance for")
+
+
+class GenerateTrialBalanceOutput(BaseModel):
+    as_of_date: date
+    accounts: list[TrialBalanceAccount]
+    total_debits: Decimal = Decimal("0")
+    total_credits: Decimal = Decimal("0")
+    in_balance: bool = True
+    difference: Decimal = Decimal("0")
+
+
+# Tool 2: Profit & Loss
+class PnLItem(BaseModel):
+    account: str
+    amount: Decimal
+
+
+class GenerateProfitLossInput(BaseModel):
+    from_date: date = Field(..., description="Start date (inclusive)")
+    to_date: date = Field(..., description="End date (inclusive)")
+
+
+class GenerateProfitLossOutput(BaseModel):
+    from_date: date
+    to_date: date
+    revenue_items: list[PnLItem]
+    expense_items: list[PnLItem]
+    total_revenue: Decimal = Decimal("0")
+    total_expenses: Decimal = Decimal("0")
+    net_income: Decimal = Decimal("0")
+    summary: str = ""
+
+
+# Tool 3: Balance Sheet
+class BalanceSheetItem(BaseModel):
+    account: str
+    amount: Decimal
+
+
+class GenerateBalanceSheetInput(BaseModel):
+    as_of_date: date = Field(default_factory=date.today, description="Date to generate balance sheet for")
+
+
+class GenerateBalanceSheetOutput(BaseModel):
+    as_of_date: date
+    assets: list[BalanceSheetItem]
+    liabilities: list[BalanceSheetItem]
+    equity: list[BalanceSheetItem]
+    total_assets: Decimal = Decimal("0")
+    total_liabilities: Decimal = Decimal("0")
+    total_equity: Decimal = Decimal("0")
+    balanced: bool = True
+    difference: Decimal = Decimal("0")
+
+
+# Tool 4: Cash Flow Statement
+class CashFlowItem(BaseModel):
+    description: str
+    amount: Decimal
+
+
+class GenerateCashFlowInput(BaseModel):
+    from_date: date = Field(..., description="Start date (inclusive)")
+    to_date: date = Field(..., description="End date (inclusive)")
+
+
+class GenerateCashFlowOutput(BaseModel):
+    from_date: date
+    to_date: date
+    operating_items: list[CashFlowItem]
+    investing_items: list[CashFlowItem]
+    financing_items: list[CashFlowItem]
+    net_operating: Decimal = Decimal("0")
+    net_investing: Decimal = Decimal("0")
+    net_financing: Decimal = Decimal("0")
+    net_change_in_cash: Decimal = Decimal("0")
+    opening_cash: Decimal = Decimal("0")
+    closing_cash: Decimal = Decimal("0")
+
+
+# Tool 5: Transfer Retained Earnings
+class TransferRetainedEarningsInput(BaseModel):
+    fiscal_year: int = Field(..., description="Fiscal year to transfer earnings for")
+
+
+class TransferRetainedEarningsOutput(BaseModel):
+    fiscal_year: int
+    beginning_retained_earnings: Decimal = Decimal("0")
+    net_income: Decimal = Decimal("0")
+    dividends: Decimal = Decimal("0")
+    ending_retained_earnings: Decimal = Decimal("0")
+    journal_entry_id: str = ""
+
+
+# Tool 6: Carry Forward Balances
+class CarryForwardBalanceItem(BaseModel):
+    account_code: str
+    account_name: str
+    closing_balance: Decimal
+    opening_balance_next_year: Decimal
+
+
+class CarryForwardBalancesInput(BaseModel):
+    from_fiscal_year: int = Field(..., description="Fiscal year to close")
+    to_fiscal_year: int = Field(..., description="Next fiscal year")
+    closing_date: date = Field(default_factory=date.today, description="Date of carry-forward")
+
+
+class CarryForwardBalancesOutput(BaseModel):
+    accounts_carried_forward: int = 0
+    new_balances: list[CarryForwardBalanceItem]
+    status: str = "completed"
+
+
+# Tool 7: Draft Notes to Financials
+class FinancialNote(BaseModel):
+    title: str
+    content: str
+    source_data: list[str] = []
+
+
+class DraftNotesToFinancialsInput(BaseModel):
+    fiscal_year: int = Field(..., description="Fiscal year for notes")
+    note_types: Optional[list[str]] = Field(default=None, description="Types: accounting_policies, revenue_recognition, depreciation_method, commitments, contingencies")
+
+
+class DraftNotesToFinancialsOutput(BaseModel):
+    fiscal_year: int
+    notes: list[FinancialNote]
+    disclaimer: str = ""
+
+
+# Tool 8: Close Fiscal Year
+class CloseFiscalYearInput(BaseModel):
+    fiscal_year: int = Field(..., description="Fiscal year to close")
+    closing_date: date = Field(default_factory=date.today, description="Closing date")
+    confirm: bool = Field(default=False, description="Must be true to execute close")
+
+
+class CloseFiscalYearOutput(BaseModel):
+    fiscal_year: int
+    closing_entries_created: int = 0
+    revenue_closed: int = 0
+    expenses_closed: int = 0
+    net_income_transferred: Decimal = Decimal("0")
+    status: str = "closed"
+    message: str = ""

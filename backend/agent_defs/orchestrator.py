@@ -9,6 +9,7 @@ Currently registered:
   - Agent 2: Ledger & Master Data (8 tools)
   - Agent 3: Reconciliation & Banking (7 tools)
   - Agent 4: Month-End Reporting (10 tools)
+  - Agent 5: Year-End Close & Financial Statements (8 tools)
 """
 import sys, os, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -50,6 +51,14 @@ from agent_defs.month_end_reporting_agent import (
     tool_reconcile_payroll, tool_get_ar_aging_report,
     tool_get_ap_aging_report, tool_analyze_budget_variance,
     tool_get_loan_debt_schedule, tool_forecast_cash_flow,
+)
+
+# Agent 5: Year-End Close & Financial Statements tools
+from agent_defs.year_end_agent import (
+    tool_generate_trial_balance, tool_generate_profit_loss,
+    tool_generate_balance_sheet, tool_generate_cash_flow_statement,
+    tool_transfer_retained_earnings, tool_carry_forward_balances,
+    tool_draft_notes_to_financials, tool_close_fiscal_year,
 )
 
 ORCHESTRATOR_NAME = "AI Accountant Orchestrator"
@@ -95,6 +104,16 @@ You MUST call a function tool to answer the user. NEVER just talk — actually c
 28. tool_get_loan_debt_schedule — Loan schedule. "loan", "debt schedule".
 29. tool_forecast_cash_flow — Cash flow forecast. "cash flow forecast" (NEEDS APPROVAL).
 
+**AGENT 5 — Year-End Close & Financial Statements (NEW):**
+30. tool_generate_trial_balance — Trial balance. "trial balance", "TB".
+31. tool_generate_profit_loss — Profit & Loss. "P&L", "profit and loss", "income statement".
+32. tool_generate_balance_sheet — Balance sheet. "balance sheet", "financial position".
+33. tool_generate_cash_flow_statement — Cash flow statement. "cash flow statement".
+34. tool_transfer_retained_earnings — Retained earnings. "retained earnings".
+35. tool_carry_forward_balances — Carry forward. "carry forward", "opening balance".
+36. tool_draft_notes_to_financials — Notes to financials. "notes to financials".
+37. tool_close_fiscal_year — Close fiscal year. "close fiscal year", "year-end close" (IRREVERSIBLE — requires approval).
+
 **Rules:**
 - ALWAYS call a tool. Never say you cannot do something.
 - Pass dates in YYYY-MM-DD format.
@@ -124,6 +143,11 @@ ORCHESTRATOR_AGENT = Agent(
         tool_reconcile_payroll, tool_get_ar_aging_report,
         tool_get_ap_aging_report, tool_analyze_budget_variance,
         tool_get_loan_debt_schedule, tool_forecast_cash_flow,
+        # Agent 5
+        tool_generate_trial_balance, tool_generate_profit_loss,
+        tool_generate_balance_sheet, tool_generate_cash_flow_statement,
+        tool_transfer_retained_earnings, tool_carry_forward_balances,
+        tool_draft_notes_to_financials, tool_close_fiscal_year,
     ],
     model=GROQ_MODEL,
 )
