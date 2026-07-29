@@ -1353,3 +1353,151 @@ class FlagRelatedPartyTransactionOutput(BaseModel):
     matched_via: str = ""  # "contact_id", "reference_fallback", "no_match"
     reasoning: str = ""
     needs_approval: bool = True
+
+
+# --- Tax Agent (Agent 7) ---
+
+# Tool 1: Calculate Withholding Tax
+class CalculateWithholdingTaxInput(BaseModel):
+    amount: Decimal = Field(..., gt=Decimal("0"), description="Gross payment amount")
+    withholding_type: str = Field(..., description="Type: 'salary', 'contract', 'supply', 'service', 'rent', 'commission'")
+    transaction_date: date = Field(default_factory=date.today, description="Transaction date")
+
+
+class CalculateWithholdingTaxOutput(BaseModel):
+    gross_amount: Decimal
+    withholding_type: str
+    rate_applied: Decimal = Decimal("0")
+    tax_amount: Decimal = Decimal("0")
+    net_amount: Decimal
+    rate_source: str = ""
+
+
+# Tool 2: Get Tax Planning Advice
+class GetTaxPlanningAdviceInput(BaseModel):
+    query: str = Field(..., min_length=1, max_length=500, description="User's tax planning question")
+    fiscal_year: int = Field(..., description="Fiscal year")
+
+
+class GetTaxPlanningAdviceOutput(BaseModel):
+    advice: str
+    fiscal_year: int
+    data_summary: dict = {}
+    disclaimer: str = "This is AI-generated tax guidance and does not constitute professional tax advice. Consult a qualified tax advisor."
+
+
+# Tool 3: Calculate Advance Minimum Tax
+class CalculateAdvanceMinimumTaxInput(BaseModel):
+    annual_turnover: Decimal = Field(..., gt=Decimal("0"), description="Annual turnover / gross revenue")
+    fiscal_year: int = Field(..., description="Fiscal year")
+    business_type: str = Field(default="company", description="Type: 'company', 'individual', 'aop'")
+
+
+class CalculateAdvanceMinimumTaxOutput(BaseModel):
+    annual_turnover: Decimal
+    applicable_rate: Decimal = Decimal("0")
+    minimum_tax: Decimal = Decimal("0")
+    basis: str = ""
+    fiscal_year: int
+
+
+# Tool 4: Calculate EOBI Deductions
+class CalculateEobiDeductionsInput(BaseModel):
+    gross_salary: Decimal = Field(..., gt=Decimal("0"), description="Gross salary amount")
+    period: int = Field(..., ge=1, le=12, description="Period (1-12)")
+    fiscal_year: int = Field(..., description="Fiscal year")
+    employee_category: Optional[str] = Field(default=None, description="Category: 'worker', 'staff', 'executive'")
+
+
+class CalculateEobiDeductionsOutput(BaseModel):
+    gross_salary: Decimal
+    employee_contribution: Decimal = Decimal("0")
+    employer_contribution: Decimal = Decimal("0")
+    total_contribution: Decimal = Decimal("0")
+    rate_applied: Decimal = Decimal("0")
+    basis: str = ""
+
+
+# Tool 5: Adjust Sales Tax Input/Output
+class AdjustSalesTaxInputOutputInput(BaseModel):
+    period: int = Field(..., ge=1, le=12, description="Period (1-12)")
+    fiscal_year: int = Field(..., description="Fiscal year")
+    output_tax_amount: Optional[Decimal] = Field(default=None, description="Override output tax amount")
+    input_tax_amount: Optional[Decimal] = Field(default=None, description="Override input tax amount")
+    adjustment_reason: Optional[str] = Field(default=None, max_length=500, description="Reason for adjustment")
+
+
+class AdjustSalesTaxInputOutputOutput(BaseModel):
+    period: int
+    fiscal_year: int
+    calculated_output_tax: Decimal = Decimal("0")
+    calculated_input_tax: Decimal = Decimal("0")
+    net_tax_payable: Decimal = Decimal("0")
+    refund_amount: Decimal = Decimal("0")
+    adjustments: list[str] = []
+    needs_approval: bool = True
+    summary: str = ""
+
+
+# Tool 6: Flag Tax Exemption / Zero Rating
+class FlaggedExemptionEntry(BaseModel):
+    entry_id: str
+    description: str
+    amount: Decimal
+    exemption_type: str = ""
+    confidence: str = "low"
+    reasoning: str = ""
+
+
+class FlagTaxExemptionZeroRatingInput(BaseModel):
+    entry_ids: Optional[list[str]] = Field(default=None, description="Specific entry IDs to check; if None, scans all revenue entries")
+    fiscal_year: int = Field(..., description="Fiscal year")
+    period: Optional[int] = Field(default=None, ge=1, le=12, description="Optional period filter")
+
+
+class FlagTaxExemptionZeroRatingOutput(BaseModel):
+    flagged_entries: list[FlaggedExemptionEntry]
+    total_flagged_amount: Decimal = Decimal("0")
+    needs_approval: bool = True
+    recommendation: str = ""
+
+
+# Tool 7: Prepare Sales Tax Filing
+class PrepareSalesTaxFilingInput(BaseModel):
+    period: int = Field(..., ge=1, le=12, description="Period (1-12)")
+    fiscal_year: int = Field(..., description="Fiscal year")
+    confirm: bool = Field(default=False, description="Must be True to prepare filing")
+
+
+class PrepareSalesTaxFilingOutput(BaseModel):
+    filing_id: str
+    period: int
+    fiscal_year: int
+    sales_tax_payable: Decimal = Decimal("0")
+    input_tax_adjustments: Decimal = Decimal("0")
+    net_amount_payable: Decimal = Decimal("0")
+    filing_data: dict = {}
+    needs_approval: bool = True
+    status: str = "draft"
+    message: str = ""
+
+
+# Tool 8: Prepare Income Tax Filing
+class PrepareIncomeTaxFilingInput(BaseModel):
+    fiscal_year: int = Field(..., description="Fiscal year")
+    confirm: bool = Field(default=False, description="Must be True to prepare filing")
+
+
+class PrepareIncomeTaxFilingOutput(BaseModel):
+    filing_id: str
+    fiscal_year: int
+    total_income: Decimal = Decimal("0")
+    total_expenses: Decimal = Decimal("0")
+    taxable_income: Decimal = Decimal("0")
+    tax_liability: Decimal = Decimal("0")
+    advance_tax_paid: Decimal = Decimal("0")
+    net_tax_due: Decimal = Decimal("0")
+    filing_data: dict = {}
+    needs_approval: bool = True
+    status: str = "draft"
+    message: str = ""

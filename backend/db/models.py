@@ -356,3 +356,27 @@ class ExchangeRate(Base):
     rate = Column(Numeric, nullable=False)
     rate_date = Column(Date, nullable=False)
     source = Column(String, nullable=True)
+
+
+class TaxRate(Base):
+    __tablename__ = "tax_rates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    tax_type = Column(String, nullable=False, index=True)
+    rate = Column(Numeric, nullable=False)
+    effective_from = Column(Date, nullable=False)
+    effective_to = Column(Date, nullable=True)
+    description = Column(String, nullable=True)
+
+
+class EobiRate(Base):
+    __tablename__ = "eobi_rates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    rate_type = Column(String, nullable=False, index=True)
+    rate = Column(Numeric, nullable=False)
+    employee_rate = Column(Numeric, nullable=True)
+    effective_from = Column(Date, nullable=False)
+    effective_to = Column(Date, nullable=True)
+    description = Column(String, nullable=True)
+    max_insurable_amount = Column(Numeric, nullable=True)

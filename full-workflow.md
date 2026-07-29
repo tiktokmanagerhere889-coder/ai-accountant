@@ -4,7 +4,7 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 **Framework:** OpenAI Agents SDK — Manager pattern (Orchestrator calls specialist agents as tools, specialist agents never talk to the user directly).
 
-**Total: 1 Orchestrator + 6 Specialist Agents + 45 tools + 3 direct-backend (non-AI) features = 48 components.**
+**Total: 1 Orchestrator + 7 Specialist Agents + 53 tools + 3 direct-backend (non-AI) features = 56 components.**
 
 ---
 
@@ -120,14 +120,16 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 | Tool | Approval | What it does |
 |---|---|---|
-| `prepare_sales_tax_filing` | **Yes** | Prepares numbers; human submits via FBR portal |
-| `prepare_income_tax_filing` | **Yes** | Same, income tax |
-| `calculate_withholding_tax` | No | Rule-based, fixed once rate table entered |
-| `get_tax_planning_advice` | No | Conversational tax guidance |
-| `adjust_sales_tax_input_output` | **Yes** | Calculates refund adjustment |
-| `calculate_advance_minimum_tax` | No | Deterministic once coded |
-| `flag_tax_exemption_zero_rating` | **Yes** | Flags qualifying sales |
-| `calculate_eobi_deductions` | No | Fixed % payroll deductions |
+| Tool | Approval | What it does | DB Tables |
+|---|---|---|---|
+| `calculate_withholding_tax` | No | WHT on payments — rate from `tax_rates` table or default | `tax_rates` |
+| `get_tax_planning_advice` | No | Conversational tax guidance from stored financial data | `journal_entries` |
+| `calculate_advance_minimum_tax` | No | AMT on turnover — rate from `tax_rates` by business type | `tax_rates` |
+| `calculate_eobi_deductions` | No | EOBI employer + employee deductions, ceiling capped | `eobi_rates` |
+| `adjust_sales_tax_input_output` | **Yes** | Sales tax input/output adjustment with override support | `journal_entries` |
+| `flag_tax_exemption_zero_rating` | **Yes** | Flags zero-rated/exempt revenue entries | `journal_entries`, `contacts` |
+| `prepare_sales_tax_filing` | **Yes** | Prepares FBR sales tax filing data (confirm=True req) | `journal_entries` |
+| `prepare_income_tax_filing` | **Yes** | Prepares FBR income tax filing data (confirm=True req) | `journal_entries` |
 
 ---
 
@@ -197,4 +199,4 @@ These are the tools that must pause and wait for human confirmation before writi
 21. `maintain_statutory_registers` (Audit & Regulatory)
 22. `generate_custom_report` (Advisory)
 
-**15 tools require approval, 30 do not, out of 45 total (Agents 1-6 implemented).**
+**18 tools require approval, 35 do not, out of 53 total (Agents 1-7 implemented).**

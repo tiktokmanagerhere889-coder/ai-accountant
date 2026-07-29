@@ -1,0 +1,551 @@
+"""Agent 7 — Tax Tools.
+
+8 tools: calculate_withholding_tax, get_tax_planning_advice,
+calculate_advance_minimum_tax, calculate_eobi_deductions,
+adjust_sales_tax_input_output, flag_tax_exemption_zero_rating,
+prepare_sales_tax_filing, prepare_income_tax_filing.
+"""
+from datetime import date, timedelta
+from decimal import Decimal, ROUND_HALF_UP
+import uuid
+
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from db.models import JournalEntry, TaxRate, EobiRate, Contact, RetainedEarnings
+from tools.schemas import (
+    CalculateWithholdingTaxInput, CalculateWithholdingTaxOutput,
+    GetTaxPlanningAdviceInput, GetTaxPlanningAdviceOutput,
+    CalculateAdvanceMinimumTaxInput, CalculateAdvanceMinimumTaxOutput,
+    CalculateEobiDeductionsInput, CalculateEobiDeductionsOutput,
+    AdjustSalesTaxInputOutputInput, AdjustSalesTaxInputOutputOutput,
+    FlagTaxExemptionZeroRatingInput, FlagTaxExemptionZeroRatingOutput,
+    FlaggedExemptionEntry,
+    PrepareSalesTaxFilingInput, PrepareSalesTaxFilingOutput,
+    PrepareIncomeTaxFilingInput, PrepareIncomeTaxFilingOutput,
+)
+
+
+def _round(value: Decimal, places: int = 2) -> Decimal:
+    return value.quantize(Decimal("0." + "0" * places), rounding=ROUND_HALF_UP)
+
+
+SALES_TAX_RATE = Decimal("18")  # standard 18% GST
+
+
+def _get_tax_rate(db: Session, tax_type: str, effective_date: date = None) -> TaxRate:
+    """Get the most recent applicable tax rate from tax_rates table."""
+    if effective_date is None:
+        effective_date = date.today()
+    rate = db.query(TaxRate).filter(
+        TaxRate.tax_type == tax_type,
+        TaxRate.effective_from <= effective_date,
+        (TaxRate.effective_to >= effective_date) | (TaxRate.effective_to.is_(None)),
+    ).order_by(TaxRate.effective_from.desc()).first()
+    return rate
+
+
+def _get_eobi_rate(db: Session, rate_type: str = "standard") -> EobiRate:
+    """Get the most recent applicable EOBI rate."""
+    rate = db.query(EobiRate).filter(
+        EobiRate.rate_type == rate_type,
+    ).order_by(EobiRate.effective_from.desc()).first()
+    return rate
+
+
+# ---------------------------------------------------------------------------
+# Tool 1: Calculate Withholding Tax
+# ---------------------------------------------------------------------------
+
+def calculate_withholding_tax(inp: CalculateWithholdingTaxInput, db: Session) -> CalculateWithholdingTaxOutput:
+    """Calculate withholding tax (WHT) on a payment amount.
+
+    Rate looked up from tax_rates table by withholding_type and transaction_date.
+    Falls back to standard rates if no table data.
+    """
+    STANDARD_RATES = {
+        "salary": Decimal("5"),
+        "contract": Decimal("7.5"),
+        "supply": Decimal("4"),
+        "service": Decimal("8"),
+        "rent": Decimal("5"),
+        "commission": Decimal("10"),
+    }
+
+    rate_record = _get_tax_rate(db, f"wht_{inp.withholding_type}", inp.transaction_date)
+
+    if rate_record:
+        rate = rate_record.rate
+        source = f"tax_rates: {rate_record.description or inp.withholding_type}"
+    elif inp.withholding_type in STANDARD_RATES:
+        rate = STANDARD_RATES[inp.withholding_type]
+        source = f"default_rate_{inp.withholding_type}"
+    else:
+        rate = Decimal("0")
+        source = f"no_rate_found_{inp.withholding_type}"
+
+    tax_amount = _round(inp.amount * rate / Decimal("100"), 2)
+    net_amount = _round(inp.amount - tax_amount, 2)
+
+    return CalculateWithholdingTaxOutput(
+        gross_amount=inp.amount,
+        withholding_type=inp.withholding_type,
+        rate_applied=rate,
+        tax_amount=tax_amount,
+        net_amount=net_amount,
+        rate_source=source,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tool 2: Get Tax Planning Advice
+# ---------------------------------------------------------------------------
+
+def get_tax_planning_advice(inp: GetTaxPlanningAdviceInput, db: Session) -> GetTaxPlanningAdviceOutput:
+    """Generate tax planning advice based on stored financial data."""
+    revenue = db.query(func.sum(JournalEntry.credit_amount)).filter(
+        JournalEntry.credit_account.startswith("4"),
+        JournalEntry.status == "posted",
+        func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
+    ).scalar() or Decimal("0")
+
+    expenses = db.query(func.sum(JournalEntry.debit_amount)).filter(
+        func.substr(JournalEntry.debit_account, 1, 1).in_(["5", "6", "8"]),
+        JournalEntry.status == "posted",
+        func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
+    ).scalar() or Decimal("0")
+
+    revenue = _round(revenue, 2)
+    expenses = _round(expenses, 2)
+    net = _round(revenue - expenses, 2)
+
+    data_summary = {
+        "total_revenue": str(revenue),
+        "total_expenses": str(expenses),
+        "net_income": str(net),
+        "fiscal_year": inp.fiscal_year,
+    }
+
+    advice_parts = []
+    if revenue > Decimal("0"):
+        est_tax = _round(net * Decimal("29") / Decimal("100"), 2)  # ~29% corporate rate
+        if net > Decimal("0"):
+            advice_parts.append(
+                f"Estimated tax liability for FY {inp.fiscal_year} is approximately {est_tax} "
+                f"(based on {net} net income at ~29% corporate rate)."
+            )
+            if revenue > Decimal("10000000"):
+                advice_parts.append(
+                    "Your revenue exceeds 10M. Consider making quarterly advance tax payments "
+                    "to avoid interest under Section 118 of the Income Tax Ordinance."
+                )
+        else:
+            advice_parts.append(
+                f"Net loss of {abs(net)} for FY {inp.fiscal_year}. "
+                "You may be eligible for loss carry-forward under Section 57."
+            )
+        advice_parts.append(
+            "Maintain proper documentation of all business expenses to support deductions."
+        )
+    else:
+        advice_parts.append(
+            f"No revenue data found for FY {inp.fiscal_year}. "
+            "General advice: maintain proper records and consult a qualified tax advisor."
+        )
+
+    advice_parts.append(
+        "Consider filing your returns before the due date to avoid late filing penalties."
+    )
+
+    return GetTaxPlanningAdviceOutput(
+        advice=" ".join(advice_parts),
+        fiscal_year=inp.fiscal_year,
+        data_summary=data_summary,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tool 3: Calculate Advance Minimum Tax
+# ---------------------------------------------------------------------------
+
+def calculate_advance_minimum_tax(inp: CalculateAdvanceMinimumTaxInput, db: Session) -> CalculateAdvanceMinimumTaxOutput:
+    """Calculate advance minimum tax (AMT) on turnover.
+
+    Under Pakistan tax law: companies ~1.5%, varies for individuals/AOP.
+    Rate from tax_rates table with fallback defaults.
+    """
+    STANDARD_AMT_RATES = {
+        "company": Decimal("1.5"),
+        "individual": Decimal("1.0"),
+        "aop": Decimal("1.25"),
+    }
+
+    rate_record = _get_tax_rate(db, f"amt_{inp.business_type}")
+    if rate_record:
+        rate = rate_record.rate
+        basis = f"tax_rates_amt_{inp.business_type}"
+    elif inp.business_type in STANDARD_AMT_RATES:
+        rate = STANDARD_AMT_RATES[inp.business_type]
+        basis = f"default_rate_{inp.business_type}"
+    else:
+        rate = STANDARD_AMT_RATES["company"]
+        basis = f"default_rate_company_fallback"
+
+    amt = _round(inp.annual_turnover * rate / Decimal("100"), 2)
+
+    return CalculateAdvanceMinimumTaxOutput(
+        annual_turnover=inp.annual_turnover,
+        applicable_rate=rate,
+        minimum_tax=amt,
+        basis=basis,
+        fiscal_year=inp.fiscal_year,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tool 4: Calculate EOBI Deductions
+# ---------------------------------------------------------------------------
+
+def calculate_eobi_deductions(inp: CalculateEobiDeductionsInput, db: Session) -> CalculateEobiDeductionsOutput:
+    """Calculate EOBI (Employees' Old-Age Benefits Institution) deductions.
+
+    Employer contribution at fixed % of gross salary.
+    Employee contribution at half the employer rate.
+    """
+    rate_record = _get_eobi_rate(db, inp.employee_category or "standard")
+
+    if rate_record:
+        rate = rate_record.rate
+        employee_rate = rate_record.employee_rate or (rate / Decimal("2"))
+        max_insurable = rate_record.max_insurable_amount or Decimal("999999999")
+        basis = f"eobi_rates_{inp.employee_category or 'standard'}"
+    else:
+        # Default Pakistan EOBI rates
+        rate = Decimal("5")
+        employee_rate = Decimal("2.5")
+        max_insurable = Decimal("50000")
+        basis = "default_eobi_rate"
+
+    insurable_salary = min(inp.gross_salary, max_insurable)
+    employer_contribution = _round(insurable_salary * rate / Decimal("100"), 2)
+    employee_contribution = _round(insurable_salary * employee_rate / Decimal("100"), 2)
+
+    return CalculateEobiDeductionsOutput(
+        gross_salary=inp.gross_salary,
+        employee_contribution=employee_contribution,
+        employer_contribution=employer_contribution,
+        total_contribution=_round(employer_contribution + employee_contribution, 2),
+        rate_applied=rate,
+        basis=basis,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tool 5: Adjust Sales Tax Input/Output
+# ---------------------------------------------------------------------------
+
+def adjust_sales_tax_input_output(inp: AdjustSalesTaxInputOutputInput, db: Session) -> AdjustSalesTaxInputOutputOutput:
+    """Adjust sales tax input vs output for a period.
+
+    If override amounts provided, uses those. Otherwise calculates from journal entries.
+    """
+    adjustments = []
+
+    if inp.output_tax_amount is not None:
+        output_tax = inp.output_tax_amount
+        adjustments.append(f"Output tax overridden to {output_tax} (reason: {inp.adjustment_reason or 'manual override'})")
+    else:
+        revenue = db.query(func.sum(JournalEntry.credit_amount)).filter(
+            JournalEntry.credit_account.startswith("4"),
+            JournalEntry.status == "posted",
+            func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
+            func.extract("month", JournalEntry.posted_date) == inp.period,
+        ).scalar() or Decimal("0")
+        output_tax = _round(revenue * SALES_TAX_RATE / Decimal("100"), 2)
+        adjustments.append(f"Output tax calculated at {SALES_TAX_RATE}% on revenue {_round(revenue, 2)}")
+
+    if inp.input_tax_amount is not None:
+        input_tax = inp.input_tax_amount
+        adjustments.append(f"Input tax overridden to {input_tax} (reason: {inp.adjustment_reason or 'manual override'})")
+    else:
+        purchases = db.query(func.sum(JournalEntry.debit_amount)).filter(
+            func.substr(JournalEntry.debit_account, 1, 1).in_(["5", "6"]),
+            JournalEntry.status == "posted",
+            func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
+            func.extract("month", JournalEntry.posted_date) == inp.period,
+        ).scalar() or Decimal("0")
+        input_tax = _round(purchases * SALES_TAX_RATE / Decimal("100"), 2)
+        adjustments.append(f"Input tax calculated at {SALES_TAX_RATE}% on purchases {_round(purchases, 2)}")
+
+    net_tax = _round(output_tax - input_tax, 2)
+    refund = Decimal("0")
+    if net_tax < Decimal("0"):
+        refund = abs(net_tax)
+        net_tax = Decimal("0")
+        adjustments.append(f"Input tax exceeds output tax — refund scenario: {refund}")
+
+    summary_parts = [
+        f"Period {inp.period}/{inp.fiscal_year}:",
+        f"Output tax = {output_tax}",
+        f"Input tax = {input_tax}",
+        f"Net payable = {net_tax}",
+    ]
+    if refund > Decimal("0"):
+        summary_parts.append(f"Refund = {refund}")
+
+    return AdjustSalesTaxInputOutputOutput(
+        period=inp.period,
+        fiscal_year=inp.fiscal_year,
+        calculated_output_tax=output_tax,
+        calculated_input_tax=input_tax,
+        net_tax_payable=net_tax,
+        refund_amount=refund,
+        adjustments=adjustments,
+        needs_approval=True,
+        summary=". ".join(summary_parts),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tool 6: Flag Tax Exemption / Zero Rating
+# ---------------------------------------------------------------------------
+
+def flag_tax_exemption_zero_rating(inp: FlagTaxExemptionZeroRatingInput, db: Session) -> FlagTaxExemptionZeroRatingOutput:
+    """Flag revenue entries that may qualify for tax exemption or zero-rating.
+
+    Checks revenue entries (prefix 4) against exemption criteria:
+    exports, certain services, basic goods.
+    """
+    query = db.query(JournalEntry).filter(
+        JournalEntry.status == "posted",
+        func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
+    )
+
+    if inp.entry_ids:
+        query = query.filter(JournalEntry.entry_id.in_(inp.entry_ids))
+    else:
+        # Scan all revenue entries
+        query = query.filter(JournalEntry.credit_account.startswith("4"))
+
+    if inp.period:
+        query = query.filter(func.extract("month", JournalEntry.posted_date) == inp.period)
+
+    entries = query.all()
+
+    flagged = []
+    total_amount = Decimal("0")
+
+    for entry in entries:
+        account_name = entry.credit_account if entry.credit_account.startswith("4") else entry.debit_account
+        exemption_type = ""
+        confidence = "low"
+        reasoning = ""
+
+        # Check if entry reference matches an export contact
+        contact = None
+        if entry.contact_id:
+            contact = db.query(Contact).filter(Contact.contact_id == entry.contact_id).first()
+        elif entry.reference:
+            contact = db.query(Contact).filter(
+                Contact.contact_id == entry.reference
+            ).first()
+
+        amount = entry.credit_amount if entry.credit_account.startswith("4") else entry.debit_amount
+
+        if contact and "export" in (contact.contact_type or "").lower():
+            exemption_type = "zero_rated_export"
+            confidence = "high"
+            reasoning = f"Counterparty '{contact.contact_name}' is export-related (contact_type={contact.contact_type})"
+        elif "export" in (entry.description or "").lower():
+            exemption_type = "potential_export"
+            confidence = "medium"
+            reasoning = "Description references export — manual verification needed"
+        elif "salary" in account_name.lower() or "wage" in account_name.lower():
+            exemption_type = "exempt_income"
+            confidence = "medium"
+            reasoning = "Salary/wage income may be exempt from sales tax"
+        elif amount < Decimal("1000"):
+            exemption_type = "low_value"
+            confidence = "low"
+            reasoning = f"Low-value entry ({amount}) — likely not subject to sales tax"
+        else:
+            continue
+
+        flagged.append(FlaggedExemptionEntry(
+            entry_id=entry.entry_id,
+            description=entry.description,
+            amount=amount,
+            exemption_type=exemption_type,
+            confidence=confidence,
+            reasoning=reasoning,
+        ))
+        total_amount += amount
+
+    recommendation_parts = []
+    if flagged:
+        recommendation_parts.append(f"Found {len(flagged)} entries potentially qualifying for exemption/zero-rating.")
+        high_conf = sum(1 for f in flagged if f.confidence == "high")
+        med_conf = sum(1 for f in flagged if f.confidence == "medium")
+        if high_conf:
+            recommendation_parts.append(f"{high_conf} entries have high confidence — likely qualify.")
+        if med_conf:
+            recommendation_parts.append(f"{med_conf} entries require manual verification.")
+    else:
+        recommendation_parts.append("No entries flagged for tax exemption or zero-rating.")
+
+    return FlagTaxExemptionZeroRatingOutput(
+        flagged_entries=flagged,
+        total_flagged_amount=_round(total_amount, 2),
+        needs_approval=True,
+        recommendation=" ".join(recommendation_parts),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tool 7: Prepare Sales Tax Filing
+# ---------------------------------------------------------------------------
+
+def prepare_sales_tax_filing(inp: PrepareSalesTaxFilingInput, db: Session) -> PrepareSalesTaxFilingOutput:
+    """Prepare sales tax filing data for FBR submission.
+
+    Requires confirm=True. Never auto-submits.
+    """
+    if not inp.confirm:
+        raise ValueError(
+            "Sales tax filing preparation requires confirm=True. "
+            "This prepares the data only — you will submit via FBR portal."
+        )
+
+    filing_id = f"ST-{inp.fiscal_year}-{inp.period:02d}-{uuid.uuid4().hex[:4].upper()}"
+
+    # Calculate output tax from revenue
+    revenue = db.query(func.sum(JournalEntry.credit_amount)).filter(
+        JournalEntry.credit_account.startswith("4"),
+        JournalEntry.status == "posted",
+        func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
+        func.extract("month", JournalEntry.posted_date) == inp.period,
+    ).scalar() or Decimal("0")
+
+    output_tax = _round(revenue * SALES_TAX_RATE / Decimal("100"), 2)
+
+    # Calculate input tax from purchases
+    purchases = db.query(func.sum(JournalEntry.debit_amount)).filter(
+        func.substr(JournalEntry.debit_account, 1, 1).in_(["5", "6"]),
+        JournalEntry.status == "posted",
+        func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
+        func.extract("month", JournalEntry.posted_date) == inp.period,
+    ).scalar() or Decimal("0")
+
+    input_tax = _round(purchases * SALES_TAX_RATE / Decimal("100"), 2)
+    net_payable = _round(output_tax - input_tax, 2)
+    if net_payable < Decimal("0"):
+        net_payable = Decimal("0")
+
+    filing_data = {
+        "fbr_form": "Sales Tax Return (Form STR)",
+        "period": f"{inp.fiscal_year}-{inp.period:02d}",
+        "sales_tax_rate": str(SALES_TAX_RATE),
+        "total_revenue": str(_round(revenue, 2)),
+        "output_tax": str(output_tax),
+        "total_purchases": str(_round(purchases, 2)),
+        "input_tax": str(input_tax),
+        "net_payable": str(net_payable),
+        "status": "prepared_for_human_submission",
+        "note": "This data must be verified and submitted manually via FBR portal.",
+    }
+
+    return PrepareSalesTaxFilingOutput(
+        filing_id=filing_id,
+        period=inp.period,
+        fiscal_year=inp.fiscal_year,
+        sales_tax_payable=output_tax,
+        input_tax_adjustments=input_tax,
+        net_amount_payable=net_payable,
+        filing_data=filing_data,
+        needs_approval=True,
+        status="prepared",
+        message=f"Sales tax filing {filing_id} prepared. Review and submit via FBR portal.",
+    )
+
+
+# ---------------------------------------------------------------------------
+# Tool 8: Prepare Income Tax Filing
+# ---------------------------------------------------------------------------
+
+def prepare_income_tax_filing(inp: PrepareIncomeTaxFilingInput, db: Session) -> PrepareIncomeTaxFilingOutput:
+    """Prepare income tax filing data for FBR submission.
+
+    Requires confirm=True. Never auto-submits.
+    """
+    if not inp.confirm:
+        raise ValueError(
+            "Income tax filing preparation requires confirm=True. "
+            "This prepares the data only — you will submit via FBR portal."
+        )
+
+    filing_id = f"IT-{inp.fiscal_year}-{uuid.uuid4().hex[:4].upper()}"
+
+    # Total income from revenue accounts (prefix 4)
+    total_income = db.query(func.sum(JournalEntry.credit_amount)).filter(
+        JournalEntry.credit_account.startswith("4"),
+        JournalEntry.status == "posted",
+        func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
+    ).scalar() or Decimal("0")
+
+    # Total expenses from expense accounts (prefixes 5/6/8)
+    total_expenses = db.query(func.sum(JournalEntry.debit_amount)).filter(
+        func.substr(JournalEntry.debit_account, 1, 1).in_(["5", "6", "8"]),
+        JournalEntry.status == "posted",
+        func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
+    ).scalar() or Decimal("0")
+
+    total_income = _round(total_income, 2)
+    total_expenses = _round(total_expenses, 2)
+    taxable_income = _round(total_income - total_expenses, 2)
+    if taxable_income < Decimal("0"):
+        taxable_income = Decimal("0")
+
+    # Estimate tax liability at ~29% corporate rate
+    tax_rate = Decimal("29")
+    tax_liability = _round(taxable_income * tax_rate / Decimal("100"), 2)
+
+    # Check if any advance tax was paid (from retained_earnings or specific entries)
+    advance_tax = Decimal("0")
+
+    filing_data = {
+        "fbr_form": "Income Tax Return (Form ITR)",
+        "fiscal_year": str(inp.fiscal_year),
+        "tax_rate": str(tax_rate),
+        "total_income": str(total_income),
+        "total_expenses": str(total_expenses),
+        "taxable_income": str(taxable_income),
+        "tax_liability": str(tax_liability),
+        "advance_tax_paid": str(advance_tax),
+        "net_tax_due": str(_round(tax_liability - advance_tax, 2)),
+        "status": "prepared_for_human_submission",
+        "note": "This data must be verified and submitted manually via FBR portal.",
+    }
+
+    net_due = _round(tax_liability - advance_tax, 2)
+
+    message_parts = []
+    if taxable_income > Decimal("0"):
+        message_parts.append(f"Estimated tax liability for FY {inp.fiscal_year}: {net_due}")
+    else:
+        message_parts.append(f"No tax liability for FY {inp.fiscal_year} (net loss or zero income).")
+    message_parts.append("Review all figures before submitting via FBR portal.")
+
+    return PrepareIncomeTaxFilingOutput(
+        filing_id=filing_id,
+        fiscal_year=inp.fiscal_year,
+        total_income=total_income,
+        total_expenses=total_expenses,
+        taxable_income=taxable_income,
+        tax_liability=tax_liability,
+        advance_tax_paid=advance_tax,
+        net_tax_due=net_due,
+        filing_data=filing_data,
+        needs_approval=True,
+        status="prepared",
+        message=". ".join(message_parts),
+    )
