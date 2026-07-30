@@ -15,6 +15,7 @@ export interface AgentDef {
     name: string;
     description: string;
     approval: boolean;
+    aiOnly: boolean;
     inputs: { name: string; type: string; placeholder: string; required: boolean; default?: string }[];
   }[];
 }
@@ -31,6 +32,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "check_cash_position",
         description: "Live cash balance from DB",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "as_of_date", type: "date", placeholder: "As of date", required: false },
           { name: "account_id", type: "text", placeholder: "Cash Account ID (e.g. 1000-Cash)", required: false }
@@ -40,6 +42,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "record_transaction_nl",
         description: "Parses plain-English transaction and stores it",
         approval: false,
+        aiOnly: true,
         inputs: [
           { name: "description", type: "text", placeholder: "e.g. Paid office rent 50000", required: true },
           { name: "posted_date", type: "date", placeholder: "Posting date", required: false },
@@ -50,6 +53,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "process_receipt_image",
         description: "Vision extraction of amount/vendor from receipt photo",
         approval: true,
+        aiOnly: true,
         inputs: [
           { name: "image_filename", type: "text", placeholder: "Filename (e.g. receipt.png)", required: true },
           { name: "image_data", type: "textarea", placeholder: "Base64 string data or mock prefix", required: true },
@@ -60,6 +64,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "check_bank_transactions",
         description: "Queries bank transaction records",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "account_id", type: "text", placeholder: "Account ID", required: false },
           { name: "from_date", type: "date", placeholder: "From Date", required: false },
@@ -71,6 +76,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "manage_petty_cash",
         description: "Petty cash entries + replenishment triggers",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "action", type: "text", placeholder: "expense, add_fund, check_replenishment", required: true },
           { name: "fund_id", type: "text", placeholder: "Fund ID e.g. PC-001", required: false },
@@ -91,6 +97,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "create_journal_entry",
         description: "Manually construct double-entry ledger entry",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "description", type: "text", placeholder: "Entry Description", required: true },
           { name: "posted_date", type: "date", placeholder: "Date", required: false },
@@ -104,6 +111,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "get_general_ledger",
         description: "Aggregated ledger views",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "from_date", type: "date", placeholder: "From Date", required: false },
           { name: "to_date", type: "date", placeholder: "To Date", required: false },
@@ -114,6 +122,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "suggest_chart_of_accounts",
         description: "Recommends accounting chart structures",
         approval: true,
+        aiOnly: true,
         inputs: [
           { name: "business_type", type: "text", placeholder: "e.g. tech_startup, retail", required: true },
           { name: "description", type: "text", placeholder: "Additional Details", required: false }
@@ -123,6 +132,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "get_ap_subledger",
         description: "Accounts Payable status",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "from_date", type: "date", placeholder: "From Date", required: false },
           { name: "to_date", type: "date", placeholder: "To Date", required: false },
@@ -133,6 +143,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "get_ar_subledger",
         description: "Accounts Receivable status",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "from_date", type: "date", placeholder: "From Date", required: false },
           { name: "to_date", type: "date", placeholder: "To Date", required: false },
@@ -143,6 +154,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "get_payroll_ledger",
         description: "Aggregated salary distributions",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "from_date", type: "date", placeholder: "From Date", required: false },
           { name: "to_date", type: "date", placeholder: "To Date", required: false },
@@ -153,6 +165,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "categorize_fixed_asset",
         description: "Add fixed asset & depreciation schemes",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "asset_name", type: "text", placeholder: "e.g. Delivery Van", required: true },
           { name: "purchase_cost", type: "text", placeholder: "Purchase Cost", required: true },
@@ -164,6 +177,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "manage_contact",
         description: "CRUD vendor or customer contacts",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "action", type: "text", placeholder: "add, update, delete, search", required: true },
           { name: "contact_type", type: "text", placeholder: "vendor or customer", required: true },
@@ -187,6 +201,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "run_bank_reconciliation",
         description: "Matches bank statement lines against ledger entries",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "bank_account_id", type: "text", placeholder: "Bank ID e.g. BA-001", required: true },
           { name: "statement_date", type: "date", placeholder: "Statement Date", required: true },
@@ -198,6 +213,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "post_accrual_entry",
         description: "Post month-end accrual adjustments",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "accrual_type", type: "text", placeholder: "salary/utilities/rent", required: true },
           { name: "amount", type: "text", placeholder: "Amount", required: true },
@@ -209,6 +225,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "reconcile_vendor_statement",
         description: "Match vendor reports against AP ledgers",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "vendor_contact_id", type: "text", placeholder: "Vendor ID", required: true },
           { name: "statement_date", type: "date", placeholder: "Statement Date", required: true },
@@ -221,6 +238,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "track_cheque_clearing",
         description: "Monitor cheques lifecycles",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "action", type: "text", placeholder: "issue/clear/bounce/status", required: true },
           { name: "cheque_id", type: "text", placeholder: "Cheque Ref", required: false },
@@ -232,6 +250,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "track_lc_bank_guarantee",
         description: "LC/BG guarantees monitoring",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "action", type: "text", placeholder: "issue/amend/close/status", required: true },
           { name: "lc_id", type: "text", placeholder: "LC ID", required: false },
@@ -253,12 +272,14 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "review_unpaid_bills",
         description: "Get total overdue unpaid bills",
         approval: false,
+        aiOnly: false,
         inputs: []
       },
       {
         name: "calculate_prepaid_adjustment",
         description: "Split advanced payments proportionally",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "prepaid_id", type: "text", placeholder: "Prepaid Entry ID", required: true },
           { name: "target_date", type: "date", placeholder: "Adjustment Date", required: true }
@@ -268,6 +289,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "calculate_depreciation",
         description: "Fixed assets depreciation schedules",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "asset_id", type: "text", placeholder: "Asset ID", required: true },
           { name: "period_date", type: "date", placeholder: "Period Date", required: true }
@@ -277,6 +299,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "analyze_budget_variance",
         description: "Compares projections against actual spendings",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "fiscal_year", type: "number", placeholder: "2026", required: true },
           { name: "period", type: "number", placeholder: "Month 1-12", required: false }
@@ -286,6 +309,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "forecast_cash_flow",
         description: "Generate forward liquidity projections",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "days", type: "number", placeholder: "e.g. 30", required: true }
         ]
@@ -303,6 +327,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "generate_trial_balance",
         description: "Audit ledger balances equivalence",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "as_of_date", type: "date", placeholder: "Ending date", required: true }
         ]
@@ -311,6 +336,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "generate_profit_loss",
         description: "Net revenue minus overall expenses",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "from_date", type: "date", placeholder: "From Date", required: true },
           { name: "to_date", type: "date", placeholder: "To Date", required: true }
@@ -320,6 +346,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "generate_balance_sheet",
         description: "Assess Assets, Liabilities, and Equity balances",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "as_of_date", type: "date", placeholder: "Reference Date", required: true }
         ]
@@ -328,6 +355,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "generate_cash_flow_statement",
         description: "Financial activities cash distribution summary",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "from_date", type: "date", placeholder: "From Date", required: true },
           { name: "to_date", type: "date", placeholder: "To Date", required: true }
@@ -337,6 +365,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "close_fiscal_year",
         description: "Locks the fiscal accounts database",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true },
           { name: "closing_date", type: "date", placeholder: "Date of Close", required: true },
@@ -356,6 +385,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "calculate_breakeven",
         description: "Compute volume/revenue thresholds",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "fixed_costs", type: "text", placeholder: "Fixed Costs", required: true },
           { name: "variable_cost_per_unit", type: "text", placeholder: "Variable Cost/Unit", required: true },
@@ -366,6 +396,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "convert_foreign_currency",
         description: "Revalue foreign transactions",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "amount", type: "text", placeholder: "Amount", required: true },
           { name: "from_currency", type: "text", placeholder: "e.g. USD", required: true },
@@ -377,6 +408,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "calculate_standard_costing_variance",
         description: "Track differences between standard vs actual rates",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "material_id", type: "text", placeholder: "Material ID", required: true },
           { name: "actual_qty", type: "text", placeholder: "Actual Qty Used", required: true },
@@ -387,6 +419,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "allocate_overhead_cost",
         description: "Apportion company overhead expenses",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "total_overhead", type: "text", placeholder: "Total Overhead Amount", required: true },
           { name: "allocation_method", type: "text", placeholder: "e.g. square_footage, direct_labor", required: true },
@@ -406,6 +439,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "calculate_withholding_tax",
         description: "WHT computations",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "amount", type: "text", placeholder: "Payment Amount", required: true },
           { name: "withholding_type", type: "text", placeholder: "rent/salary/service", required: true },
@@ -416,6 +450,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "calculate_eobi_deductions",
         description: "Social security computations",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "gross_salary", type: "text", placeholder: "Gross Salary", required: true },
           { name: "period", type: "number", placeholder: "Month 1-12", required: true },
@@ -426,6 +461,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "adjust_sales_tax_input_output",
         description: "Input/Output adjustments",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "period", type: "number", placeholder: "Month 1-12", required: true },
           { name: "fiscal_year", type: "number", placeholder: "2026", required: true },
@@ -437,6 +473,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "prepare_sales_tax_filing",
         description: "Draft FBR Sales Tax filing structure",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "period", type: "number", placeholder: "Month 1-12", required: true },
           { name: "fiscal_year", type: "number", placeholder: "2026", required: true },
@@ -456,6 +493,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "detect_anomaly_transactions",
         description: "Flag round sums or weekend entries",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "from_date", type: "date", placeholder: "From Date", required: true },
           { name: "to_date", type: "date", placeholder: "To Date", required: true },
@@ -466,6 +504,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "get_compliance_deadlines",
         description: "Remind of SECP / FBR dates",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "fiscal_year", type: "number", placeholder: "2026", required: false },
           { name: "status", type: "text", placeholder: "upcoming/overdue/completed", required: false }
@@ -475,6 +514,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "support_internal_audit",
         description: "Runs system anomalies scan",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "fiscal_year", type: "number", placeholder: "2026", required: true },
           { name: "period", type: "number", placeholder: "Month 1-12", required: false }
@@ -484,6 +524,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "maintain_statutory_registers",
         description: "CRUD statutory registry records",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "action", type: "text", placeholder: "add/update/delete/view", required: true },
           { name: "register_type", type: "text", placeholder: "directors/members/charges", required: true },
@@ -505,6 +546,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "analyze_spending_patterns",
         description: "Renders details of expenditures patterns",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "from_date", type: "date", placeholder: "From Date", required: true },
           { name: "to_date", type: "date", placeholder: "To Date", required: true }
@@ -514,6 +556,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "calculate_financial_ratios",
         description: "Calculates profitability, liquidity, and efficiency",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "fiscal_year", type: "number", placeholder: "2026", required: true }
         ]
@@ -522,6 +565,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "assess_financial_health",
         description: "Outputs a 0-100 system health evaluation",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "fiscal_year", type: "number", placeholder: "2026", required: true }
         ]
@@ -530,12 +574,14 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "generate_cost_cutting_recommendations",
         description: "Rank expense reduction suggestions",
         approval: false,
+        aiOnly: true,
         inputs: []
       },
       {
         name: "generate_custom_report",
         description: "Section-based financial review compilation",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "report_type", type: "text", placeholder: "summary/detailed/comparative", required: true },
           { name: "from_date", type: "date", placeholder: "From Date", required: true },
@@ -555,12 +601,14 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "check_system_status",
         description: "Check database & provider networks health",
         approval: false,
+        aiOnly: false,
         inputs: []
       },
       {
         name: "get_usage_statistics",
         description: "Database transaction analytics",
         approval: false,
+        aiOnly: false,
         inputs: [
           { name: "from_date", type: "date", placeholder: "Start Date", required: true },
           { name: "to_date", type: "date", placeholder: "End Date", required: true }
@@ -570,6 +618,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "manage_system_preferences",
         description: "Company global parameters adjustment",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "action", type: "text", placeholder: "view/update/reset", required: true },
           { name: "setting_key", type: "text", placeholder: "Setting Key", required: false },
@@ -580,6 +629,7 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "schedule_system_task",
         description: "Schedule system maintenance tasks",
         approval: true,
+        aiOnly: false,
         inputs: [
           { name: "task_type", type: "text", placeholder: "backup/export_data/cleanup", required: true },
           { name: "schedule_time", type: "text", placeholder: "now/off_peak/datetime", required: false },

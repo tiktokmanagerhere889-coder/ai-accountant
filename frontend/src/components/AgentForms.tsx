@@ -13,6 +13,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [executionMode, setExecutionMode] = useState<"ai" | "direct">("direct");
 
   const selectedTool = agent.tools.find((t) => t.name === activeTool);
 
@@ -29,22 +30,42 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
     const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
     try {
-      // Build natural language instruction for Orchestrator to execute the tool
-      let instruction = `Run the tool ${selectedTool.name} with parameters: `;
-      const paramList = selectedTool.inputs.map((inp) => {
-        const value = formData[inp.name] || inp.default || "";
-        return `${inp.name}: "${value}"`;
-      });
-      instruction += paramList.join(", ");
+      if (executionMode === "direct") {
+        // Direct execution — bypass LLM
+        const params: Record<string, string> = {};
+        selectedTool.inputs.forEach((inp) => {
+          const value = formData[inp.name] || inp.default || "";
+          if (value) params[inp.name] = value;
+        });
 
-      const response = await axios.post(`${apiBase}/chat`, { message: instruction }, { timeout: 30000 });
-      onToolExecuted({
-        tool: selectedTool.name,
-        output: response.data.response,
-        timestamp: new Date().toLocaleTimeString(),
-      });
+        const response = await axios.post(`${apiBase}/tools/execute`, {
+          tool_name: selectedTool.name,
+          params,
+        }, { timeout: 30000 });
+
+        onToolExecuted({
+          tool: selectedTool.name,
+          output: JSON.stringify(response.data.result, null, 2),
+          timestamp: new Date().toLocaleTimeString(),
+        });
+      } else {
+        // AI execution — via orchestrator
+        let instruction = `Run the tool ${selectedTool.name} with parameters: `;
+        const paramList = selectedTool.inputs.map((inp) => {
+          const value = formData[inp.name] || inp.default || "";
+          return `${inp.name}: "${value}"`;
+        });
+        instruction += paramList.join(", ");
+
+        const response = await axios.post(`${apiBase}/chat`, { message: instruction }, { timeout: 30000 });
+        onToolExecuted({
+          tool: selectedTool.name,
+          output: response.data.response,
+          timestamp: new Date().toLocaleTimeString(),
+        });
+      }
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || "Failed to execute tool");
+      setError(err.response?.data?.detail || err.response?.data?.error || err.message || "Failed to execute tool");
     } finally {
       setLoading(false);
     }
@@ -130,6 +151,41 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
               <div className="flex items-center gap-2 p-3 text-sm rounded bg-red-500/10 text-red-500 border border-red-500/20">
                 <AlertCircle className="w-4 h-4" />
                 <span>{error}</span>
+              </div>
+            )}
+
+            {!selectedTool.aiOnly && (
+              <div className="flex items-center gap-2 pt-2">
+                <span className="text-xs text-gray-500 font-medium">Execute mode:</span>
+                <button
+                  type="button"
+                  onClick={() => setExecutionMode("direct")}
+                  className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${
+                    executionMode === "direct"
+                      ? "bg-accent-light text-white"
+                      : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  Execute Direct
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExecutionMode("ai")}
+                  className={`px-3 py-1.5 text-xs rounded font-medium transition-colors ${
+                    executionMode === "ai"
+                      ? "bg-accent-light text-white"
+                      : "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                  }`}
+                >
+                  Execute with AI
+                </button>
+              </div>
+            )}
+            {selectedTool.aiOnly && (
+              <div className="pt-2">
+                <span className="text-[10px] px-2 py-1 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 font-semibold inline-flex items-center gap-1">
+                  <span>⚡</span> AI Required — this tool only works with AI execution
+                </span>
               </div>
             )}
 

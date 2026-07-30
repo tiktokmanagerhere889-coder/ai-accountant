@@ -38,7 +38,7 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
       if (numMatch) {
         setCashBalance(parseFloat(numMatch[1]).toLocaleString("en-US", { minimumFractionDigits: 2 }));
       } else {
-        setCashBalance("500,000.00"); // seed fallback display
+        setCashBalance("Unavailable");
       }
 
       // 2. Fetch recent ledger entries
@@ -49,16 +49,9 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
       // Basic parsing of general ledger details
       const entriesMatch = ledgerRes.data.response.match(/entry_id":\s*"?([^"\s,]+)/g);
       if (entriesMatch) {
-        // Mock seed display list based on size for visual high-fidelity UI
-        setTransactions([
-          { id: "JE-20260729-001", desc: "Paid Office Rent July", amount: "65,000.00", type: "debit", account: "6000-Office Rent" },
-          { id: "JE-20260729-002", desc: "Electricity Bill Payment", amount: "12,000.00", type: "debit", account: "6200-Utilities" },
-          { id: "JE-SEED-001", desc: "Opening Capital Balance", amount: "500,000.00", type: "credit", account: "3000-Equity" }
-        ]);
+          setTransactions([]);
       } else {
-        setTransactions([
-          { id: "JE-SEED-001", desc: "Opening Capital Balance", amount: "500,000.00", type: "credit", account: "3000-Equity" }
-        ]);
+        setTransactions([]);
       }
 
       // 3. Fetch audit logs count
@@ -72,7 +65,7 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
     } catch (err) {
       console.error("Dashboard statistics retrieval failed:", err);
       // Soft fallbacks so dashboard renders cleanly
-      setCashBalance("500,000.00");
+      setCashBalance("Unavailable");
       setAuditLoading(false);
     }
   };
@@ -98,7 +91,11 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
             <DollarSign className="w-5 h-5 text-accent-light" />
           </div>
           <div className="text-2xl font-semibold font-mono tabular-nums text-gray-900 dark:text-gray-100">
-            PKR {cashBalance}
+            {cashBalance === "Unavailable" ? (
+              <span className="text-sm font-normal text-gray-500">Currently Unavailable</span>
+            ) : (
+              `PKR ${cashBalance}`
+            )}
           </div>
           <button
             onClick={() => onSelectAgent("daily-entry")}

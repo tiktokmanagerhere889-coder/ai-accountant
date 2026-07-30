@@ -15,6 +15,7 @@ from sqlalchemy import func
 from db.database import get_db, init_db
 from db.models import Base, AuditLog, UserRole, SystemBackupLog, JournalEntry
 from agent_defs.orchestrator import run_orchestrator
+from tool_registry import execute_tool, list_all_tools, get_tool_info
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO)
@@ -293,3 +294,37 @@ async def chat(request: ChatRequest):
     except Exception as e:
         logger.error(f"Orchestrator invocation error: {e}")
         raise HTTPException(status_code=500, detail="An internal error occurred while processing your request.")
+
+
+# Direct Tool Execution (bypasses LLM)
+
+class ToolExecuteRequest(BaseModel):
+    tool_name: str = Field(..., description="Tool name from the registry")
+    params: dict = Field(default_factory=dict, description="Tool parameters as key-value pairs")
+
+
+class ToolExecuteResponse(BaseModel):
+    success: bool
+    result: Optional[Any] = None
+    error: Optional[str] = None
+
+
+@app.get("/tools/list")
+def list_tools_endpoint():
+    """List all available tools with metadata (ai_only, description)."""
+    return {"tools": list_all_tools()}
+
+
+@app.post("/tools/execute", response_model=ToolExecuteResponse)
+def execute_tool_direct(request: ToolExecuteRequest):
+    """Execute a tool directly without going through the LLM orchestrator.
+
+    Tools with ai_only=True will still execute but may produce lower-quality
+    output without AI interpretation.
+    """
+    try:
+        result = execute_tool(request.tool_name, request.params)
+        return ToolExecuteResponse(success=True, result=result)
+    except Exception as e:
+        logger.error(f"Tool execution error ({request.tool_name}): {e}")
+        return ToolExecuteResponse(success=False, error=str(e))
