@@ -82,7 +82,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 dark:border-gray-800 overflow-x-auto pb-px">
+      <div className="flex flex-wrap border-b border-gray-200 dark:border-gray-800 gap-0.5 pb-px">
         {agent.tools.map((tool) => (
           <button
             key={tool.name}
@@ -91,7 +91,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
               setFormData({});
               setError(null);
             }}
-            className={`px-4 py-2 text-sm font-medium transition-all border-b-2 whitespace-nowrap ${
+            className={`px-3 py-2 text-sm font-medium transition-all border-b-2 ${
               activeTool === tool.name
                 ? "border-accent-light text-accent-light"
                 : "border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200"
