@@ -15,8 +15,8 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded max-w-md w-full p-6 shadow-2xl relative">
         <button
           onClick={onClose}
-          aria-label="Close Settings Modal"
-          className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+          aria-label="Close settings"
+          className="absolute top-4 right-4 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
         >
           <X className="w-5 h-5" />
         </button>
@@ -35,9 +35,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             </label>
             <input
               type="password"
+              autoComplete="off"
               value={cerebrasKey}
               onChange={(e) => setCerebrasKey(e.target.value)}
-              className="w-full text-xs px-3 py-2.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-accent-light font-mono"
+              className="w-full text-xs px-3 py-2.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light font-mono"
             />
           </div>
           <div>
@@ -46,9 +47,10 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             </label>
             <input
               type="password"
+              autoComplete="off"
               value={groqKey}
               onChange={(e) => setGroqKey(e.target.value)}
-              className="w-full text-xs px-3 py-2.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-accent-light font-mono"
+              className="w-full text-xs px-3 py-2.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light font-mono"
             />
           </div>
 

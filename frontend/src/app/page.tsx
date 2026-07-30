@@ -11,10 +11,31 @@ import DirectFeatures from "@/components/DirectFeatures";
 import SettingsModal from "@/components/SettingsModal";
 import { AGENTS_DATA } from "@/components/agentsData";
 
+class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
+  constructor(props: {children: React.ReactNode}) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex items-center justify-center h-screen bg-surface-light dark:bg-surface-dark text-gray-800 dark:text-gray-200">
+          <div className="text-center p-8">
+            <h2 className="text-xl font-semibold mb-2">Something went wrong</h2>
+            <p className="text-gray-500">Please refresh the page to try again.</p>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export default function Home() {
   const [currentView, setCurrentView] = useState("dashboard");
   const [darkMode, setDarkMode] = useState(true);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dbHealthy, setDbHealthy] = useState(true);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -49,7 +70,8 @@ export default function Home() {
   const selectedAgent = AGENTS_DATA.find((a) => a.id === currentView);
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-200 transition-colors duration-200`}>
+    <ErrorBoundary>
+      <div className={`min-h-screen flex flex-col font-sans bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-200`}>
       {/* Top Bar */}
       <header className="flex items-center justify-between px-6 py-3 border-b bg-surface-light dark:bg-surface-dark border-gray-200 dark:border-gray-800 flex-shrink-0 z-10">
         <div className="flex items-center gap-3">
@@ -89,7 +111,7 @@ export default function Home() {
       </header>
 
       {/* Primary Panels splits */}
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 overflow-hidden flex-col lg:flex-row">
         {/* Navigation Sidebar */}
         <Sidebar
           currentView={currentView}
@@ -100,7 +122,7 @@ export default function Home() {
         />
 
         {/* Center Panel (Main contents) */}
-        <main className="flex-1 overflow-y-auto p-8 max-w-5xl mx-auto w-full">
+        <main className="flex-1 overflow-y-auto p-8 w-full lg:max-w-5xl mx-auto">
           {currentView === "dashboard" && (
             <Dashboard
               onSelectAgent={setCurrentView}
@@ -130,5 +152,6 @@ export default function Home() {
       {/* Settings preferences modal */}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
+    </ErrorBoundary>
   );
 }

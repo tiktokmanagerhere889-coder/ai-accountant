@@ -1,8 +1,8 @@
 import React from "react";
 import {
-  DollarSign, BookOpen, Layers, Calendar, Landmark, Scale, ShieldCheck,
-  Settings as SettingsIcon, BarChart3, AlertCircle, FileText, ArrowRightLeft,
-  PiggyBank, Percent, ChevronRight, HelpCircle, HardDrive, LayoutDashboard
+  DollarSign, BookOpen, Calendar, Landmark, ShieldCheck,
+  Settings as SettingsIcon, BarChart3, FileText, ArrowRightLeft,
+  Percent
 } from "lucide-react";
 
 export interface AgentDef {

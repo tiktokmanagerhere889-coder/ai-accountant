@@ -111,7 +111,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
                     onChange={(e) => handleInputChange(input.name, e.target.value)}
                     placeholder={input.placeholder}
                     rows={4}
-                    className="w-full text-sm px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-accent-light"
+                    className="w-full text-sm px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light"
                   />
                 ) : (
                   <input
@@ -120,7 +120,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
                     value={formData[input.name] || ""}
                     onChange={(e) => handleInputChange(input.name, e.target.value)}
                     placeholder={input.placeholder}
-                    className="w-full text-sm px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-accent-light"
+                    className="w-full text-sm px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light"
                   />
                 )}
               </div>

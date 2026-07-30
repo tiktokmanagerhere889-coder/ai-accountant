@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 import {
-  TrendingUp, TrendingDown, DollarSign, ListTodo, AlertTriangle, ShieldCheck,
-  Percent, ArrowRight, RefreshCw, Layers
+  DollarSign, ListTodo, AlertTriangle, ShieldCheck,
+  Percent, ArrowRight, RefreshCw
 } from "lucide-react";
 
 interface DashboardProps {
@@ -19,6 +19,7 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
     open: 0,
   });
 
+  const [auditLoading, setAuditLoading] = useState(true);
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
   useEffect(() => {
@@ -26,6 +27,7 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
   }, [refreshTrigger]);
 
   const fetchDashboardStats = async () => {
+    setAuditLoading(true);
     try {
       // 1. Fetch cash position (Uses backend checker)
       const cashRes = await axios.post(`${apiBase}/chat`, {
@@ -66,11 +68,12 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
         resolved: logsRes.data.filter((l: any) => l.action.includes("RESOLVED")).length,
         open: logsRes.data.filter((l: any) => !l.action.includes("RESOLVED")).length,
       });
-
+      setAuditLoading(false);
     } catch (err) {
       console.error("Dashboard statistics retrieval failed:", err);
       // Soft fallbacks so dashboard renders cleanly
       setCashBalance("500,000.00");
+      setAuditLoading(false);
     }
   };
 
@@ -112,7 +115,11 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
             <ListTodo className="w-5 h-5 text-amber-500" />
           </div>
           <div className="text-2xl font-semibold font-mono text-gray-900 dark:text-gray-100">
-            {auditStats.total} <span className="text-xs font-normal text-gray-500">Logged Actions</span>
+            {auditLoading ? (
+              <div className="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            ) : (
+              <span className="text-2xl font-bold">{auditStats.total}</span>
+            )} <span className="text-xs font-normal text-gray-500">Logged Actions</span>
           </div>
           <button
             onClick={() => onSelectAgent("audit")}
@@ -149,7 +156,7 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
               Recent General Ledger postings
             </h3>
             <button onClick={fetchDashboardStats} aria-label="Refresh dashboard data">
-              <RefreshCw className="w-4 h-4 text-gray-400 hover:text-gray-600 cursor-pointer" />
+              <RefreshCw className="w-4 h-4 text-gray-400 hover:text-gray-600" />
             </button>
           </div>
           {transactions.length === 0 ? (
@@ -180,14 +187,14 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
             System Alerts
           </h3>
           <div className="space-y-4">
-            <div className="p-3.5 rounded border border-emerald-500/20 bg-emerald-500/10 flex items-start gap-3">
+            <div className="p-3.5 rounded border border-emerald-500/20 bg-emerald-500/10 dark:bg-emerald-500/20 flex items-start gap-3">
               <ShieldCheck className="w-5 h-5 text-emerald-500 flex-shrink-0" />
               <div className="text-xs">
                 <div className="font-semibold text-emerald-800 dark:text-emerald-400">Database Connection</div>
                 <div className="text-gray-600 dark:text-gray-400 mt-0.5">PostgreSQL instances connected and fully synced.</div>
               </div>
             </div>
-            <div className="p-3.5 rounded border border-amber-500/20 bg-amber-500/10 flex items-start gap-3">
+            <div className="p-3.5 rounded border border-amber-500/20 bg-amber-500/10 dark:bg-amber-500/20 flex items-start gap-3">
               <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
               <div className="text-xs">
                 <div className="font-semibold text-amber-800 dark:text-amber-400">Audit Reminders</div>

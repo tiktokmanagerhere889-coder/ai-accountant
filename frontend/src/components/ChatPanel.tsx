@@ -158,7 +158,7 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
   }
 
   return (
-    <div className="flex flex-col h-full bg-surface-light dark:bg-surface-dark border-l border-gray-200 dark:border-gray-800 w-96 flex-shrink-0">
+    <div className="flex flex-col h-full bg-surface-light dark:bg-surface-dark border-l border-gray-200 dark:border-gray-800 w-full lg:w-80 xl:w-96 flex-shrink-0">
       {/* Header */}
       <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2">
         <Sparkles className="w-5 h-5 text-accent-light" />
@@ -229,12 +229,13 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
           placeholder="Ask AI Accountant..."
-          className="flex-1 px-3 py-2 text-sm rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-accent-light"
+          className="flex-1 px-3 py-2 text-sm rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light"
         />
         <button
           onClick={handleSend}
+          disabled={loading}
           aria-label="Send Message"
-          className="p-2.5 rounded bg-accent-light hover:bg-accent-light/90 text-white transition-colors"
+          className="p-2.5 rounded bg-accent-light hover:bg-accent-light/90 text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           <Send className="w-4 h-4" />
         </button>

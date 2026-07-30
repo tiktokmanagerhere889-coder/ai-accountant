@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { Plus, Trash2, ArrowUpRight, ClipboardList, Loader2, Play } from "lucide-react";
+import { Plus, Loader2 } from "lucide-react";
 
 export interface AuditRecord {
   audit_id: string;
@@ -33,6 +33,8 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [backups, setBackups] = useState<BackupRecord[]>([]);
   const [loading, setLoading] = useState(false);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [formSuccess, setFormSuccess] = useState<string | null>(null);
 
   // Audit Form state
   const [auditUserId, setAuditUserId] = useState("");
@@ -62,6 +64,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
       }
     } catch (err) {
       console.error("Fetch failed", err);
+      setFormError("Failed to load data");
     } finally {
       setLoading(false);
     }
@@ -69,6 +72,8 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
 
   const handleCreateAudit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+    setFormSuccess(null);
     try {
       await axios.post(`${apiBase}/audit-trail`, {
         user_id: auditUserId,
@@ -76,34 +81,48 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
         table_name: auditTable,
         record_id: auditRecordId,
       });
+      setFormSuccess("Audit trail created successfully");
       setAuditUserId("");
       setAuditAction("");
       setAuditTable("");
       setAuditRecordId("");
       fetchData();
     } catch (err) {
-      console.error(err);
+      setFormError((err as any).response?.data?.detail || (err as Error).message || "Failed to create audit trail");
     }
   };
 
   const handleCreateRole = async (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError(null);
+    setFormSuccess(null);
     const perms = rolePermissions.split(",").map((p) => p.trim()).filter(Boolean);
     try {
       await axios.post(`${apiBase}/roles`, {
         role_name: roleName,
         permissions: perms,
       });
+      setFormSuccess("Role created successfully");
       setRoleName("");
       setRolePermissions("");
       fetchData();
     } catch (err) {
-      console.error(err);
+      setFormError((err as any).response?.data?.detail || (err as Error).message || "Failed to create role");
     }
   };
 
   return (
     <div className="space-y-8">
+      {formError && (
+        <div className="mb-4 p-3 rounded bg-red-500/10 border border-red-500/20 text-red-700 dark:text-red-400 text-sm">
+          {formError}
+        </div>
+      )}
+      {formSuccess && (
+        <div className="mb-4 p-3 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400 text-sm">
+          {formSuccess}
+        </div>
+      )}
       {view === "audit-trail" ? (
         <div className="space-y-6">
           <div>
@@ -131,7 +150,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
                   value={auditUserId}
                   onChange={(e) => setAuditUserId(e.target.value)}
                   placeholder="e.g. USR-123"
-                  className="w-full text-xs px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-accent-light"
+                  className="w-full text-xs px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light"
                 />
               </div>
               <div>
@@ -144,7 +163,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
                   value={auditAction}
                   onChange={(e) => setAuditAction(e.target.value)}
                   placeholder="e.g. UPDATE_LEDGER"
-                  className="w-full text-xs px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-accent-light"
+                  className="w-full text-xs px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light"
                 />
               </div>
               <div>
@@ -157,7 +176,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
                   value={auditTable}
                   onChange={(e) => setAuditTable(e.target.value)}
                   placeholder="e.g. journal_entries"
-                  className="w-full text-xs px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-accent-light"
+                  className="w-full text-xs px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light"
                 />
               </div>
               <div className="flex items-end gap-2">
@@ -171,7 +190,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
                     value={auditRecordId}
                     onChange={(e) => setAuditRecordId(e.target.value)}
                     placeholder="e.g. JE-902"
-                    className="w-full text-xs px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-accent-light"
+                    className="w-full text-xs px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light"
                   />
                 </div>
                 <button
@@ -192,7 +211,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
               </span>
               <button
                 onClick={fetchData}
-                className="text-xs text-accent-light hover:underline font-medium"
+                className="text-xs text-accent-light hover:underline font-medium px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 Refresh
               </button>
@@ -205,7 +224,8 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
             ) : audits.length === 0 ? (
               <p className="p-8 text-center text-sm text-gray-500">No logs found.</p>
             ) : (
-              <table className="w-full text-left border-collapse text-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-gray-100 dark:bg-gray-800/40 text-gray-600 dark:text-gray-400 font-medium">
                     <th className="p-3">Audit ID</th>
@@ -233,6 +253,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </div>
@@ -263,7 +284,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
                   value={roleName}
                   onChange={(e) => setRoleName(e.target.value)}
                   placeholder="e.g. Finance_Manager"
-                  className="w-full text-xs px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-accent-light"
+                  className="w-full text-xs px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light"
                 />
               </div>
               <div className="md:col-span-2 flex items-end gap-2">
@@ -277,7 +298,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
                     value={rolePermissions}
                     onChange={(e) => setRolePermissions(e.target.value)}
                     placeholder="e.g. read_ledger, approve_close, manage_backups"
-                    className="w-full text-xs px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:border-accent-light"
+                    className="w-full text-xs px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light"
                   />
                 </div>
                 <button
@@ -298,7 +319,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
               </span>
               <button
                 onClick={fetchData}
-                className="text-xs text-accent-light hover:underline font-medium"
+                className="text-xs text-accent-light hover:underline font-medium px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 Refresh
               </button>
@@ -311,7 +332,8 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
             ) : roles.length === 0 ? (
               <p className="p-8 text-center text-sm text-gray-500">No roles defined yet.</p>
             ) : (
-              <table className="w-full text-left border-collapse text-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-gray-100 dark:bg-gray-800/40 text-gray-600 dark:text-gray-400 font-medium">
                     <th className="p-3">Role ID</th>
@@ -344,6 +366,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </div>
