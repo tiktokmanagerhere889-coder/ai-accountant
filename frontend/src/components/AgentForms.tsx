@@ -37,7 +37,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
       });
       instruction += paramList.join(", ");
 
-      const response = await axios.post(`${apiBase}/chat`, { message: instruction });
+      const response = await axios.post(`${apiBase}/chat`, { message: instruction }, { timeout: 30000 });
       onToolExecuted({
         tool: selectedTool.name,
         output: response.data.response,

@@ -30,7 +30,6 @@ from fastapi.middleware.cors import CORSMiddleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # Allows all origins, adjust if needed for production domain locking
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -293,4 +292,4 @@ async def chat(request: ChatRequest):
         return ChatResponse(response=response_text)
     except Exception as e:
         logger.error(f"Orchestrator invocation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="An internal error occurred while processing your request.")

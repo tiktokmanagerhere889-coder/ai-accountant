@@ -43,7 +43,7 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
     setLoading(true);
 
     try {
-      const response = await axios.post(`${apiBase}/chat`, { message: userMessage });
+      const response = await axios.post(`${apiBase}/chat`, { message: userMessage }, { timeout: 30000 });
       const data = response.data;
 
       // Basic fallback extraction parser if the response indicates approval needed
@@ -102,7 +102,7 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
     try {
       const response = await axios.post(`${apiBase}/chat`, {
         message: approved ? `approve the task ${cardData.toolName}` : `reject the task ${cardData.toolName}`
-      });
+      }, { timeout: 30000 });
 
       setMessages((prev) => [
         ...prev,

@@ -32,7 +32,7 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
       // 1. Fetch cash position (Uses backend checker)
       const cashRes = await axios.post(`${apiBase}/chat`, {
         message: "Run the tool check_cash_position with as_of_date: '2026-07-29'"
-      });
+      }, { timeout: 30000 });
       // Extract numeric balance from response via simple regex search
       const numMatch = cashRes.data.response.match(/closing_balance":\s*"?([\d\.]+)/);
       if (numMatch) {
@@ -44,7 +44,7 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
       // 2. Fetch recent ledger entries
       const ledgerRes = await axios.post(`${apiBase}/chat`, {
         message: "Run the tool get_general_ledger with from_date: '2026-07-01', to_date: '2026-07-29'"
-      });
+      }, { timeout: 30000 });
 
       // Basic parsing of general ledger details
       const entriesMatch = ledgerRes.data.response.match(/entry_id":\s*"?([^"\s,]+)/g);
@@ -62,7 +62,7 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
       }
 
       // 3. Fetch audit logs count
-      const logsRes = await axios.get(`${apiBase}/audit-trail`);
+      const logsRes = await axios.get(`${apiBase}/audit-trail`, { timeout: 30000 });
       setAuditStats({
         total: logsRes.data.length,
         resolved: logsRes.data.filter((l: any) => l.action.includes("RESOLVED")).length,

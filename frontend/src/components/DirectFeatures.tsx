@@ -56,10 +56,10 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
     setLoading(true);
     try {
       if (view === "audit-trail") {
-        const res = await axios.get(`${apiBase}/audit-trail`);
+        const res = await axios.get(`${apiBase}/audit-trail`, { timeout: 30000 });
         setAudits(res.data);
       } else if (view === "roles") {
-        const res = await axios.get(`${apiBase}/roles`);
+        const res = await axios.get(`${apiBase}/roles`, { timeout: 30000 });
         setRoles(res.data);
       }
     } catch (err) {
@@ -80,7 +80,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
         action: auditAction,
         table_name: auditTable,
         record_id: auditRecordId,
-      });
+      }, { timeout: 30000 });
       setFormSuccess("Audit trail created successfully");
       setAuditUserId("");
       setAuditAction("");
@@ -101,7 +101,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
       await axios.post(`${apiBase}/roles`, {
         role_name: roleName,
         permissions: perms,
-      });
+      }, { timeout: 30000 });
       setFormSuccess("Role created successfully");
       setRoleName("");
       setRolePermissions("");

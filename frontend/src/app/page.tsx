@@ -46,7 +46,7 @@ export default function Home() {
   useEffect(() => {
     const checkHealth = async () => {
       try {
-        const response = await axios.get(`${apiBase}/health`);
+        const response = await axios.get(`${apiBase}/health`, { timeout: 30000 });
         setDbHealthy(response.data.database === "healthy");
       } catch (err) {
         setDbHealthy(false);

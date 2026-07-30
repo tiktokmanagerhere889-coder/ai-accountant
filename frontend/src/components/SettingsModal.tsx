@@ -16,7 +16,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
     const fetchKeyStatus = async () => {
       try {
         const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
-        const res = await axios.get(`${apiBase}/settings/api-keys`);
+        const res = await axios.get(`${apiBase}/settings/api-keys`, { timeout: 30000 });
         setKeyStatus(res.data.keys || {});
       } catch (err) {
         // Backend might not have the endpoint yet, silent fail
