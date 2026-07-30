@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from datetime import date
 from decimal import Decimal
 
@@ -451,6 +452,16 @@ class SystemBackupLog(Base):
     size_bytes = Column(Integer, nullable=True)
     notes = Column(Text, nullable=True)
     parameters = Column(Text, nullable=True)
+
+
+class UserApiKey(Base):
+    __tablename__ = "user_api_keys"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    key_name = Column(String, unique=True, nullable=False)
+    key_value = Column(String, nullable=False)
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
 
 
 class AuditLog(Base):

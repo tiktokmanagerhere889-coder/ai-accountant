@@ -9,6 +9,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from agents.models.openai_provider import OpenAIProvider
+from db.database import SessionLocal
+from db.models import UserApiKey as DBUserApiKey
 
 # Load .env from project root
 dotenv_path = Path(__file__).resolve().parents[2] / ".env"
@@ -23,9 +25,20 @@ GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_FALLBACK_MODEL = os.environ.get("GROQ_FALLBACK_MODEL", "llama3-70b-8192")
 CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "llama3.1-70b")
 
-# API keys from .env
-GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
-CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY", "")
+def get_api_key(key_name: str) -> str:
+    """Check user_api_keys table first, fall back to env var.
+
+    Safe to call before init_db() — silently falls back to env var if table doesn't exist yet.
+    """
+    try:
+        db = SessionLocal()
+        record = db.query(DBUserApiKey).filter(DBUserApiKey.key_name == key_name).first()
+        db.close()
+        if record and record.key_value:
+            return record.key_value
+    except Exception:
+        pass
+    return os.environ.get(key_name, "")
 
 
 def create_cerebras_provider() -> OpenAIProvider:
@@ -36,7 +49,7 @@ def create_cerebras_provider() -> OpenAIProvider:
     """
     return OpenAIProvider(
         base_url="https://api.cerebras.ai/v1",
-        api_key=CEREBRAS_API_KEY,
+        api_key=get_api_key("CEREBRAS_API_KEY"),
         use_responses=False,
     )
 
@@ -49,6 +62,6 @@ def create_groq_provider() -> OpenAIProvider:
     """
     return OpenAIProvider(
         base_url="https://api.groq.com/openai/v1",
-        api_key=GROQ_API_KEY,
+        api_key=get_api_key("GROQ_API_KEY"),
         use_responses=False,
     )

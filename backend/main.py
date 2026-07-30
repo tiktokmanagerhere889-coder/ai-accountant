@@ -253,6 +253,37 @@ def get_backup_history(db: Session = Depends(get_db)):
     ]
 
 
+# API Key Management
+@app.post("/settings/api-keys")
+def save_api_keys(keys: dict, db: Session = Depends(get_db)):
+    """Save user-provided API keys. Accepts { key_name: key_value } pairs."""
+    from db.models import UserApiKey
+    for key_name, key_value in keys.items():
+        if key_name not in ("GROQ_API_KEY", "CEREBRAS_API_KEY"):
+            continue
+        existing = db.query(UserApiKey).filter(UserApiKey.key_name == key_name).first()
+        if existing:
+            existing.key_value = key_value
+        else:
+            db.add(UserApiKey(id=str(uuid.uuid4()), key_name=key_name, key_value=key_value))
+    db.commit()
+    return {"status": "saved", "message": "API keys updated successfully"}
+
+
+@app.get("/settings/api-keys")
+def get_api_key_status(db: Session = Depends(get_db)):
+    """Return which API keys have been user-configured (without exposing key values)."""
+    from db.models import UserApiKey
+    import os
+    user_keys = db.query(UserApiKey).all()
+    configured = {k.key_name: True for k in user_keys}
+    # Also check which env vars exist
+    for name in ("GROQ_API_KEY", "CEREBRAS_API_KEY"):
+        if os.environ.get(name):
+            configured.setdefault(name, False)
+    return {"keys": configured}
+
+
 # Orchestrator Routes (AI Routing)
 
 @app.post("/chat", response_model=ChatResponse)

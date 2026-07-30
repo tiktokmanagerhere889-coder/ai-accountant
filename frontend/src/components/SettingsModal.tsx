@@ -1,5 +1,6 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { X, Key, ShieldCheck } from "lucide-react";
+import axios from "axios";
 
 interface SettingsModalProps {
   onClose: () => void;
@@ -9,6 +10,38 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
   // Read and simulate settings from env structure
   const [cerebrasKey, setCerebrasKey] = React.useState("••••••••••••••••••••••••");
   const [groqKey, setGroqKey] = React.useState("••••••••••••••••••••••••");
+  const [keyStatus, setKeyStatus] = React.useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    const fetchKeyStatus = async () => {
+      try {
+        const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+        const res = await axios.get(`${apiBase}/settings/api-keys`);
+        setKeyStatus(res.data.keys || {});
+      } catch (err) {
+        // Backend might not have the endpoint yet, silent fail
+      }
+    };
+    fetchKeyStatus();
+  }, []);
+
+  const handleSave = async () => {
+    try {
+      const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+      await axios.post(`${apiBase}/settings/api-keys`, {
+        GROQ_API_KEY: groqKey,
+        CEREBRAS_API_KEY: cerebrasKey
+      });
+      // Refresh status
+      const res = await axios.get(`${apiBase}/settings/api-keys`);
+      setKeyStatus(res.data.keys || {});
+      // Show success message
+      alert("API keys saved successfully. They will be used for all future requests.");
+    } catch (err) {
+      console.error("Failed to save API keys", err);
+      alert("Failed to save API keys. Backend might not be running.");
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
@@ -33,25 +66,39 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
             <label className="block text-[10px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-1.5">
               CEREBRAS API KEY
             </label>
-            <input
-              type="password"
-              autoComplete="off"
-              value={cerebrasKey}
-              onChange={(e) => setCerebrasKey(e.target.value)}
-              className="w-full text-xs px-3 py-2.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light font-mono"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                type="password"
+                autoComplete="off"
+                value={cerebrasKey}
+                onChange={(e) => setCerebrasKey(e.target.value)}
+                className="flex-1 text-xs px-3 py-2.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light font-mono"
+              />
+              {keyStatus["CEREBRAS_API_KEY"] ? (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-semibold whitespace-nowrap">&#10003; Configured</span>
+              ) : (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-500/10 text-gray-500 font-semibold whitespace-nowrap">Using Default</span>
+              )}
+            </div>
           </div>
           <div>
             <label className="block text-[10px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-1.5">
               GROQ API KEY
             </label>
-            <input
-              type="password"
-              autoComplete="off"
-              value={groqKey}
-              onChange={(e) => setGroqKey(e.target.value)}
-              className="w-full text-xs px-3 py-2.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light font-mono"
-            />
+            <div className="flex items-center gap-2">
+              <input
+                type="password"
+                autoComplete="off"
+                value={groqKey}
+                onChange={(e) => setGroqKey(e.target.value)}
+                className="flex-1 text-xs px-3 py-2.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light font-mono"
+              />
+              {keyStatus["GROQ_API_KEY"] ? (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-semibold whitespace-nowrap">&#10003; Configured</span>
+              ) : (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-500/10 text-gray-500 font-semibold whitespace-nowrap">Using Default</span>
+              )}
+            </div>
           </div>
 
           <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 text-emerald-800 dark:text-emerald-400 text-xs rounded flex gap-2.5">
@@ -62,7 +109,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
 
         <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-800 flex justify-end">
           <button
-            onClick={onClose}
+            onClick={handleSave}
             className="px-5 py-2 rounded bg-accent-light hover:bg-accent-light/95 text-white font-medium text-xs transition-colors"
           >
             Save preferences
