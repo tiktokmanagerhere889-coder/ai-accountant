@@ -449,8 +449,8 @@ def suggest_chart_of_accounts(input: SuggestChartOfAccountsInput, db: Optional[S
 # ---------------------------------------------------------------------------
 
 def get_ap_subledger(
-    db: Session,
     inp: GetAPSubledgerInput,
+    db: Session,
 ) -> GetAPSubledgerOutput:
     """Retrieve AP (accounts payable) subledger grouped by vendor reference.
 
@@ -512,8 +512,8 @@ def get_ap_subledger(
 # ---------------------------------------------------------------------------
 
 def get_ar_subledger(
-    db: Session,
     inp: GetARSubledgerInput,
+    db: Session,
 ) -> GetARSubledgerOutput:
     """Retrieve AR (accounts receivable) subledger grouped by customer reference.
 
@@ -575,8 +575,8 @@ def get_ar_subledger(
 # ---------------------------------------------------------------------------
 
 def get_payroll_ledger(
-    db: Session,
     inp: GetPayrollLedgerInput,
+    db: Session,
 ) -> GetPayrollLedgerOutput:
     """Retrieve payroll ledger entries with totals and warning flags.
 

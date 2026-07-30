@@ -81,7 +81,7 @@ class TestGetAPSubledger:
             from_date=date(2026, 6, 1),
             to_date=date(2026, 6, 30),
         )
-        result = get_ap_subledger(self.session, inp)
+        result = get_ap_subledger(inp, self.session)
         assert len(result.entries) == 2
         vendor_names = {e.vendor_name for e in result.entries}
         assert vendor_names == {"VENDOR-A", "VENDOR-B"}
@@ -94,7 +94,7 @@ class TestGetAPSubledger:
             from_date=date(2025, 1, 1),
             to_date=date(2025, 1, 31),
         )
-        result = get_ap_subledger(self.session, inp)
+        result = get_ap_subledger(inp, self.session)
         assert len(result.entries) == 0
         assert result.total_outstanding == Decimal("0.00")
 
@@ -105,7 +105,7 @@ class TestGetAPSubledger:
             to_date=date(2026, 6, 30),
             vendor_contact_id="VENDOR-A",
         )
-        result = get_ap_subledger(self.session, inp)
+        result = get_ap_subledger(inp, self.session)
         assert len(result.entries) == 1
         assert result.entries[0].vendor_name == "VENDOR-A"
         assert result.entries[0].invoice_amount == Decimal("8000.00")
@@ -161,7 +161,7 @@ class TestGetARSubledger:
             from_date=date(2026, 6, 1),
             to_date=date(2026, 6, 30),
         )
-        result = get_ar_subledger(self.session, inp)
+        result = get_ar_subledger(inp, self.session)
         assert len(result.entries) == 2
         assert result.total_outstanding == Decimal("10000.00")
         customer_names = {e.customer_name for e in result.entries}
@@ -173,7 +173,7 @@ class TestGetARSubledger:
             from_date=date(2025, 1, 1),
             to_date=date(2025, 1, 31),
         )
-        result = get_ar_subledger(self.session, inp)
+        result = get_ar_subledger(inp, self.session)
         assert len(result.entries) == 0
         assert result.total_outstanding == Decimal("0.00")
 
@@ -226,7 +226,7 @@ class TestGetPayrollLedger:
             from_date=date(2026, 6, 1),
             to_date=date(2026, 6, 30),
         )
-        result = get_payroll_ledger(self.session, inp)
+        result = get_payroll_ledger(inp, self.session)
         assert len(result.entries) == 3
         assert result.total_salary == Decimal("140000.00")
         assert result.total_deductions == Decimal("48000.00")
@@ -238,7 +238,7 @@ class TestGetPayrollLedger:
             from_date=date(2025, 1, 1),
             to_date=date(2025, 1, 31),
         )
-        result = get_payroll_ledger(self.session, inp)
+        result = get_payroll_ledger(inp, self.session)
         assert len(result.entries) == 0
         assert result.total_salary == Decimal("0.00")
         assert result.total_deductions == Decimal("0.00")
@@ -251,7 +251,7 @@ class TestGetPayrollLedger:
             to_date=date(2026, 6, 30),
             employee_name="John Doe",
         )
-        result = get_payroll_ledger(self.session, inp)
+        result = get_payroll_ledger(inp, self.session)
         assert len(result.entries) == 1
         assert result.entries[0].employee_name == "John Doe"
         assert result.entries[0].salary_amount == Decimal("50000.00")
@@ -263,7 +263,7 @@ class TestGetPayrollLedger:
             from_date=date(2026, 6, 1),
             to_date=date(2026, 6, 30),
         )
-        result = get_payroll_ledger(self.session, inp)
+        result = get_payroll_ledger(inp, self.session)
         # Bob Wilson has deductions > salary -> warning should be True
         bob = [e for e in result.entries if e.employee_name == "Bob Wilson"][0]
         assert bob.warning is True

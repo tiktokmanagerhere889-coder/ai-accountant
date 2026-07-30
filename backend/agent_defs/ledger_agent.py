@@ -148,7 +148,7 @@ def tool_get_ap_subledger(
     )
     db = _get_session()
     try:
-        r = get_ap_subledger(db, inp)
+        r = get_ap_subledger(inp, db)
         return json.dumps(json.loads(r.model_dump_json()), indent=2, default=str)
     finally:
         db.close()
@@ -175,7 +175,7 @@ def tool_get_ar_subledger(
     )
     db = _get_session()
     try:
-        r = get_ar_subledger(db, inp)
+        r = get_ar_subledger(inp, db)
         return json.dumps(json.loads(r.model_dump_json()), indent=2, default=str)
     finally:
         db.close()
@@ -202,7 +202,7 @@ def tool_get_payroll_ledger(
     )
     db = _get_session()
     try:
-        r = get_payroll_ledger(db, inp)
+        r = get_payroll_ledger(inp, db)
         return json.dumps(json.loads(r.model_dump_json()), indent=2, default=str)
     finally:
         db.close()
