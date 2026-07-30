@@ -11,7 +11,7 @@ from typing import Any, Callable, Optional
 
 from sqlalchemy.orm import Session
 
-from db.database import get_db
+from db.database import get_session
 
 # --- Cash ---
 from tools.cash_tools import (
@@ -437,7 +437,7 @@ def execute_tool(tool_name: str, params: dict) -> dict:
     validated_input = input_schema(**params)
 
     # Most tools need a DB session
-    db = get_db()
+    db = get_session()
     try:
         result = fn(validated_input, db)
         return _to_dict(result)

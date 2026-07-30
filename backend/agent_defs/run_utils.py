@@ -25,6 +25,10 @@ SKIP_PROVIDER_PATTERNS = [
     "payment required",
     "insufficient credits",
     "quota exceeded",
+    "429",
+    "too many requests",
+    "rate limit",
+    "rate_limit",
 ]
 
 

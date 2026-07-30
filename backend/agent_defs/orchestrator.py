@@ -16,7 +16,7 @@ Currently registered:
   - Agent 9: Advisory (5 tools)
   - Agent 10: System Admin (4 tools)
 """
-import sys, os, typing
+import sys, os, typing, logging
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agents import Agent, function_tool, Runner
@@ -26,6 +26,8 @@ from agent_defs.model_providers import (
     create_cerebras_provider, create_groq_provider,
     GROQ_MODEL, GROQ_FALLBACK_MODEL, CEREBRAS_MODEL,
 )
+
+logger = logging.getLogger("orchestrator")
 from agent_defs.run_utils import run_with_retry
 
 # Specialist agent runners
@@ -156,6 +158,8 @@ async def run_orchestrator(user_request: str) -> str:
                 run_config=RunConfig(model_provider=provider_fn()),
             )
             return result.final_output
-        except Exception:
-            last_error = f"{label}: failure"
+        except Exception as e:
+            error_detail = str(e)[:100]
+            last_error = f"{label}: {error_detail}"
+            logger.warning(f"Provider {label} failed: {error_detail}")
     return f"Error: All providers unavailable.\n{last_error}"
