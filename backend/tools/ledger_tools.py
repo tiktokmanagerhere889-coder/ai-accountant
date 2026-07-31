@@ -4,10 +4,11 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, or_
 from sqlalchemy.orm import Session
 
 from db.models import JournalEntry, PayrollEntry
+from tools.account_utils import ar_filter_clause, ap_filter_clause
 from tools.schemas import (
     APEntryItem,
     AREntryItem,
@@ -454,17 +455,18 @@ def get_ap_subledger(
 ) -> GetAPSubledgerOutput:
     """Retrieve AP (accounts payable) subledger grouped by vendor reference.
 
-    Queries journal_entries where debit_account starts with "2000",
-    groups by the reference field, and calculates outstanding totals.
+    Payable accounts are resolved dynamically from the user's chart.
+    Queries journal_entries where the credit side is a payable account
+    (an AP invoice), groups by reference, and totals the outstanding amounts.
     """
     query = db.query(
         JournalEntry.reference,
-        func.sum(JournalEntry.debit_amount).label("total_amount"),
+        func.sum(JournalEntry.credit_amount).label("total_amount"),
         func.count(JournalEntry.id).label("entry_count"),
         func.max(JournalEntry.posted_date).label("latest_date"),
         func.min(JournalEntry.entry_id).label("first_entry_id"),
     ).filter(
-        JournalEntry.debit_account.startswith("2000"),
+        ap_filter_clause(JournalEntry.credit_account, db),
         JournalEntry.posted_date >= inp.from_date,
         JournalEntry.posted_date <= inp.to_date,
         JournalEntry.reference.isnot(None),
@@ -517,8 +519,8 @@ def get_ar_subledger(
 ) -> GetARSubledgerOutput:
     """Retrieve AR (accounts receivable) subledger grouped by customer reference.
 
-    Queries journal_entries where debit_account starts with "1200",
-    groups by the reference field, and calculates outstanding totals.
+    Receivable accounts are resolved dynamically from the user's
+    chart_of_accounts (see tools.account_utils), never hardcoded.
     """
     query = db.query(
         JournalEntry.reference,
@@ -527,7 +529,7 @@ def get_ar_subledger(
         func.max(JournalEntry.posted_date).label("latest_date"),
         func.min(JournalEntry.entry_id).label("first_entry_id"),
     ).filter(
-        JournalEntry.debit_account.startswith("1200"),
+        ar_filter_clause(JournalEntry.debit_account, db),
         JournalEntry.posted_date >= inp.from_date,
         JournalEntry.posted_date <= inp.to_date,
         JournalEntry.reference.isnot(None),

@@ -13,6 +13,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from db.models import JournalEntry, TaxRate, EobiRate, Contact, RetainedEarnings
+from tools.account_utils import revenue_filter_clause, expense_filter_clause
 from tools.schemas import (
     CalculateWithholdingTaxInput, CalculateWithholdingTaxOutput,
     GetTaxPlanningAdviceInput, GetTaxPlanningAdviceOutput,
@@ -30,9 +31,6 @@ def _round(value: Decimal, places: int = 2) -> Decimal:
     return value.quantize(Decimal("0." + "0" * places), rounding=ROUND_HALF_UP)
 
 
-SALES_TAX_RATE = Decimal("18")  # standard 18% GST
-
-
 def _get_tax_rate(db: Session, tax_type: str, effective_date: date = None) -> TaxRate:
     """Get the most recent applicable tax rate from tax_rates table."""
     if effective_date is None:
@@ -43,6 +41,37 @@ def _get_tax_rate(db: Session, tax_type: str, effective_date: date = None) -> Ta
         (TaxRate.effective_to >= effective_date) | (TaxRate.effective_to.is_(None)),
     ).order_by(TaxRate.effective_from.desc()).first()
     return rate
+
+
+def _rate_or_zero(db: Session, tax_type: str, effective_date: date = None) -> tuple[Decimal, str]:
+    """Look up a tax rate from the DB. Returns (rate, source_label).
+
+    If the rate is not configured in tax_rates, returns (0, 'not_configured')
+    so the caller can surface a clear message — never a silent hardcoded rate.
+    """
+    record = _get_tax_rate(db, tax_type, effective_date)
+    if record is None:
+        return Decimal("0"), "not_configured"
+    return Decimal(str(record.rate)), f"tax_rates:{record.description or tax_type}"
+
+
+def _is_revenue_entry(entry) -> bool:
+    """True if an entry's credit side is a revenue account (name-based)."""
+    return any(k in entry.credit_account.lower() for k in ("revenue", "sales"))
+
+
+def _sales_tax_rate(db: Session, effective_date: date = None) -> tuple[Decimal, str]:
+    """Sales tax rate resolved from tax_rates table (type SALES_TAX).
+
+    Returns (rate, source). If not configured, (0, 'not_configured') so the
+    caller can warn instead of using a hardcoded percentage.
+    """
+    return _rate_or_zero(db, "SALES_TAX", effective_date)
+
+
+def _corporate_tax_rate(db: Session, effective_date: date = None) -> tuple[Decimal, str]:
+    """Corporate income tax rate resolved from tax_rates table (type INCOME_TAX)."""
+    return _rate_or_zero(db, "INCOME_TAX", effective_date)
 
 
 def _get_eobi_rate(db: Session, rate_type: str = "standard") -> EobiRate:
@@ -60,29 +89,17 @@ def _get_eobi_rate(db: Session, rate_type: str = "standard") -> EobiRate:
 def calculate_withholding_tax(inp: CalculateWithholdingTaxInput, db: Session) -> CalculateWithholdingTaxOutput:
     """Calculate withholding tax (WHT) on a payment amount.
 
-    Rate looked up from tax_rates table by withholding_type and transaction_date.
-    Falls back to standard rates if no table data.
+    Rate is resolved from tax_rates table by withholding_type (wht_<type>).
+    No hardcoded fallback — if the rate is not configured, a clear error is
+    raised instead of silently using a stale/assumed percentage.
     """
-    STANDARD_RATES = {
-        "salary": Decimal("5"),
-        "contract": Decimal("7.5"),
-        "supply": Decimal("4"),
-        "service": Decimal("8"),
-        "rent": Decimal("5"),
-        "commission": Decimal("10"),
-    }
+    rate, source = _rate_or_zero(db, f"wht_{inp.withholding_type}", inp.transaction_date)
 
-    rate_record = _get_tax_rate(db, f"wht_{inp.withholding_type}", inp.transaction_date)
-
-    if rate_record:
-        rate = rate_record.rate
-        source = f"tax_rates: {rate_record.description or inp.withholding_type}"
-    elif inp.withholding_type in STANDARD_RATES:
-        rate = STANDARD_RATES[inp.withholding_type]
-        source = f"default_rate_{inp.withholding_type}"
-    else:
-        rate = Decimal("0")
-        source = f"no_rate_found_{inp.withholding_type}"
+    if rate == Decimal("0"):
+        raise ValueError(
+            f"Withholding tax rate for '{inp.withholding_type}' is not configured "
+            "in tax_rates (wht_<type>). Add the rate before computing WHT."
+        )
 
     tax_amount = _round(inp.amount * rate / Decimal("100"), 2)
     net_amount = _round(inp.amount - tax_amount, 2)
@@ -104,13 +121,13 @@ def calculate_withholding_tax(inp: CalculateWithholdingTaxInput, db: Session) ->
 def get_tax_planning_advice(inp: GetTaxPlanningAdviceInput, db: Session) -> GetTaxPlanningAdviceOutput:
     """Generate tax planning advice based on stored financial data."""
     revenue = db.query(func.sum(JournalEntry.credit_amount)).filter(
-        JournalEntry.credit_account.startswith("4"),
+        revenue_filter_clause(JournalEntry.credit_account, db),
         JournalEntry.status == "posted",
         func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
     ).scalar() or Decimal("0")
 
     expenses = db.query(func.sum(JournalEntry.debit_amount)).filter(
-        func.substr(JournalEntry.debit_account, 1, 1).in_(["5", "6", "8"]),
+        expense_filter_clause(JournalEntry.debit_account, db),
         JournalEntry.status == "posted",
         func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
     ).scalar() or Decimal("0")
@@ -127,8 +144,9 @@ def get_tax_planning_advice(inp: GetTaxPlanningAdviceInput, db: Session) -> GetT
     }
 
     advice_parts = []
+    corp_rate, _src = _corporate_tax_rate(db)
     if revenue > Decimal("0"):
-        est_tax = _round(net * Decimal("29") / Decimal("100"), 2)  # ~29% corporate rate
+        est_tax = _round(net * corp_rate / Decimal("100"), 2) if corp_rate > Decimal("0") else Decimal("0")
         if net > Decimal("0"):
             advice_parts.append(
                 f"Estimated tax liability for FY {inp.fiscal_year} is approximately {est_tax} "
@@ -171,25 +189,15 @@ def get_tax_planning_advice(inp: GetTaxPlanningAdviceInput, db: Session) -> GetT
 def calculate_advance_minimum_tax(inp: CalculateAdvanceMinimumTaxInput, db: Session) -> CalculateAdvanceMinimumTaxOutput:
     """Calculate advance minimum tax (AMT) on turnover.
 
-    Under Pakistan tax law: companies ~1.5%, varies for individuals/AOP.
-    Rate from tax_rates table with fallback defaults.
+    Rate is resolved from tax_rates table by business type (amt_<type>).
+    No hardcoded fallback — if the rate is not configured, a clear error is raised.
     """
-    STANDARD_AMT_RATES = {
-        "company": Decimal("1.5"),
-        "individual": Decimal("1.0"),
-        "aop": Decimal("1.25"),
-    }
-
-    rate_record = _get_tax_rate(db, f"amt_{inp.business_type}")
-    if rate_record:
-        rate = rate_record.rate
-        basis = f"tax_rates_amt_{inp.business_type}"
-    elif inp.business_type in STANDARD_AMT_RATES:
-        rate = STANDARD_AMT_RATES[inp.business_type]
-        basis = f"default_rate_{inp.business_type}"
-    else:
-        rate = STANDARD_AMT_RATES["company"]
-        basis = f"default_rate_company_fallback"
+    rate, basis = _rate_or_zero(db, f"amt_{inp.business_type}")
+    if rate == Decimal("0"):
+        raise ValueError(
+            f"AMT rate for business type '{inp.business_type}' is not configured "
+            "in tax_rates (amt_<type>). Add the rate before computing AMT."
+        )
 
     amt = _round(inp.annual_turnover * rate / Decimal("100"), 2)
 
@@ -209,22 +217,26 @@ def calculate_advance_minimum_tax(inp: CalculateAdvanceMinimumTaxInput, db: Sess
 def calculate_eobi_deductions(inp: CalculateEobiDeductionsInput, db: Session) -> CalculateEobiDeductionsOutput:
     """Calculate EOBI (Employees' Old-Age Benefits Institution) deductions.
 
-    Employer contribution at fixed % of gross salary.
-    Employee contribution at half the employer rate.
+    Employer/employee rates resolved from eobi_rates table. No hardcoded
+    fallback — if no rate is configured, a clear error is raised.
     """
     rate_record = _get_eobi_rate(db, inp.employee_category or "standard")
+    if rate_record is None:
+        raise ValueError(
+            "EOBI rate is not configured in eobi_rates "
+            f"(rate_type='{inp.employee_category or 'standard'}'). "
+            "Add the rate before computing EOBI deductions."
+        )
 
-    if rate_record:
-        rate = rate_record.rate
-        employee_rate = rate_record.employee_rate or (rate / Decimal("2"))
-        max_insurable = rate_record.max_insurable_amount or Decimal("999999999")
-        basis = f"eobi_rates_{inp.employee_category or 'standard'}"
-    else:
-        # Default Pakistan EOBI rates
-        rate = Decimal("5")
-        employee_rate = Decimal("2.5")
-        max_insurable = Decimal("50000")
-        basis = "default_eobi_rate"
+    rate = rate_record.rate
+    employee_rate = rate_record.employee_rate
+    if employee_rate is None:
+        raise ValueError(
+            "EOBI employee_rate is not configured for "
+            f"rate_type='{inp.employee_category or 'standard'}'."
+        )
+    max_insurable = rate_record.max_insurable_amount or Decimal("999999999")
+    basis = f"eobi_rates_{inp.employee_category or 'standard'}"
 
     insurable_salary = min(inp.gross_salary, max_insurable)
     employer_contribution = _round(insurable_salary * rate / Decimal("100"), 2)
@@ -251,31 +263,43 @@ def adjust_sales_tax_input_output(inp: AdjustSalesTaxInputOutputInput, db: Sessi
     """
     adjustments = []
 
+    sales_rate, rate_src = _sales_tax_rate(db)
+
     if inp.output_tax_amount is not None:
         output_tax = inp.output_tax_amount
         adjustments.append(f"Output tax overridden to {output_tax} (reason: {inp.adjustment_reason or 'manual override'})")
     else:
+        if sales_rate == Decimal("0"):
+            raise ValueError(
+                "Sales tax rate is not configured in tax_rates (SALES_TAX). "
+                "Add the rate before computing sales tax."
+            )
         revenue = db.query(func.sum(JournalEntry.credit_amount)).filter(
-            JournalEntry.credit_account.startswith("4"),
+            revenue_filter_clause(JournalEntry.credit_account, db),
             JournalEntry.status == "posted",
             func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
             func.extract("month", JournalEntry.posted_date) == inp.period,
         ).scalar() or Decimal("0")
-        output_tax = _round(revenue * SALES_TAX_RATE / Decimal("100"), 2)
-        adjustments.append(f"Output tax calculated at {SALES_TAX_RATE}% on revenue {_round(revenue, 2)}")
+        output_tax = _round(revenue * sales_rate / Decimal("100"), 2)
+        adjustments.append(f"Output tax calculated at {sales_rate}% ({rate_src}) on revenue {_round(revenue, 2)}")
 
     if inp.input_tax_amount is not None:
         input_tax = inp.input_tax_amount
         adjustments.append(f"Input tax overridden to {input_tax} (reason: {inp.adjustment_reason or 'manual override'})")
     else:
+        if sales_rate == Decimal("0"):
+            raise ValueError(
+                "Sales tax rate is not configured in tax_rates (SALES_TAX). "
+                "Add the rate before computing sales tax."
+            )
         purchases = db.query(func.sum(JournalEntry.debit_amount)).filter(
-            func.substr(JournalEntry.debit_account, 1, 1).in_(["5", "6"]),
+            expense_filter_clause(JournalEntry.debit_account, db),
             JournalEntry.status == "posted",
             func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
             func.extract("month", JournalEntry.posted_date) == inp.period,
         ).scalar() or Decimal("0")
-        input_tax = _round(purchases * SALES_TAX_RATE / Decimal("100"), 2)
-        adjustments.append(f"Input tax calculated at {SALES_TAX_RATE}% on purchases {_round(purchases, 2)}")
+        input_tax = _round(purchases * sales_rate / Decimal("100"), 2)
+        adjustments.append(f"Input tax calculated at {sales_rate}% ({rate_src}) on purchases {_round(purchases, 2)}")
 
     net_tax = _round(output_tax - input_tax, 2)
     refund = Decimal("0")
@@ -324,8 +348,8 @@ def flag_tax_exemption_zero_rating(inp: FlagTaxExemptionZeroRatingInput, db: Ses
     if inp.entry_ids:
         query = query.filter(JournalEntry.entry_id.in_(inp.entry_ids))
     else:
-        # Scan all revenue entries
-        query = query.filter(JournalEntry.credit_account.startswith("4"))
+        # Scan all revenue entries (accounts resolved from chart)
+        query = query.filter(revenue_filter_clause(JournalEntry.credit_account, db))
 
     if inp.period:
         query = query.filter(func.extract("month", JournalEntry.posted_date) == inp.period)
@@ -336,7 +360,8 @@ def flag_tax_exemption_zero_rating(inp: FlagTaxExemptionZeroRatingInput, db: Ses
     total_amount = Decimal("0")
 
     for entry in entries:
-        account_name = entry.credit_account if entry.credit_account.startswith("4") else entry.debit_account
+        is_rev = _is_revenue_entry(entry)
+        account_name = entry.credit_account if is_rev else entry.debit_account
         exemption_type = ""
         confidence = "low"
         reasoning = ""
@@ -350,7 +375,7 @@ def flag_tax_exemption_zero_rating(inp: FlagTaxExemptionZeroRatingInput, db: Ses
                 Contact.contact_id == entry.reference
             ).first()
 
-        amount = entry.credit_amount if entry.credit_account.startswith("4") else entry.debit_amount
+        amount = entry.credit_amount if is_rev else entry.debit_amount
 
         if contact and "export" in (contact.contact_type or "").lower():
             exemption_type = "zero_rated_export"
@@ -418,25 +443,32 @@ def prepare_sales_tax_filing(inp: PrepareSalesTaxFilingInput, db: Session) -> Pr
 
     filing_id = f"ST-{inp.fiscal_year}-{inp.period:02d}-{uuid.uuid4().hex[:4].upper()}"
 
+    sales_rate, rate_src = _sales_tax_rate(db)
+    if sales_rate == Decimal("0"):
+        raise ValueError(
+            "Sales tax rate is not configured in tax_rates (SALES_TAX). "
+            "Add the rate before preparing the filing."
+        )
+
     # Calculate output tax from revenue
     revenue = db.query(func.sum(JournalEntry.credit_amount)).filter(
-        JournalEntry.credit_account.startswith("4"),
+        revenue_filter_clause(JournalEntry.credit_account, db),
         JournalEntry.status == "posted",
         func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
         func.extract("month", JournalEntry.posted_date) == inp.period,
     ).scalar() or Decimal("0")
 
-    output_tax = _round(revenue * SALES_TAX_RATE / Decimal("100"), 2)
+    output_tax = _round(revenue * sales_rate / Decimal("100"), 2)
 
     # Calculate input tax from purchases
     purchases = db.query(func.sum(JournalEntry.debit_amount)).filter(
-        func.substr(JournalEntry.debit_account, 1, 1).in_(["5", "6"]),
+        expense_filter_clause(JournalEntry.debit_account, db),
         JournalEntry.status == "posted",
         func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
         func.extract("month", JournalEntry.posted_date) == inp.period,
     ).scalar() or Decimal("0")
 
-    input_tax = _round(purchases * SALES_TAX_RATE / Decimal("100"), 2)
+    input_tax = _round(purchases * sales_rate / Decimal("100"), 2)
     net_payable = _round(output_tax - input_tax, 2)
     if net_payable < Decimal("0"):
         net_payable = Decimal("0")
@@ -444,7 +476,7 @@ def prepare_sales_tax_filing(inp: PrepareSalesTaxFilingInput, db: Session) -> Pr
     filing_data = {
         "fbr_form": "Sales Tax Return (Form STR)",
         "period": f"{inp.fiscal_year}-{inp.period:02d}",
-        "sales_tax_rate": str(SALES_TAX_RATE),
+        "sales_tax_rate": str(sales_rate),
         "total_revenue": str(_round(revenue, 2)),
         "output_tax": str(output_tax),
         "total_purchases": str(_round(purchases, 2)),
@@ -485,16 +517,16 @@ def prepare_income_tax_filing(inp: PrepareIncomeTaxFilingInput, db: Session) -> 
 
     filing_id = f"IT-{inp.fiscal_year}-{uuid.uuid4().hex[:4].upper()}"
 
-    # Total income from revenue accounts (prefix 4)
+    # Total income from revenue accounts (resolved from chart)
     total_income = db.query(func.sum(JournalEntry.credit_amount)).filter(
-        JournalEntry.credit_account.startswith("4"),
+        revenue_filter_clause(JournalEntry.credit_account, db),
         JournalEntry.status == "posted",
         func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
     ).scalar() or Decimal("0")
 
-    # Total expenses from expense accounts (prefixes 5/6/8)
+    # Total expenses from expense accounts (resolved from chart)
     total_expenses = db.query(func.sum(JournalEntry.debit_amount)).filter(
-        func.substr(JournalEntry.debit_account, 1, 1).in_(["5", "6", "8"]),
+        expense_filter_clause(JournalEntry.debit_account, db),
         JournalEntry.status == "posted",
         func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
     ).scalar() or Decimal("0")
@@ -505,8 +537,14 @@ def prepare_income_tax_filing(inp: PrepareIncomeTaxFilingInput, db: Session) -> 
     if taxable_income < Decimal("0"):
         taxable_income = Decimal("0")
 
-    # Estimate tax liability at ~29% corporate rate
-    tax_rate = Decimal("29")
+    # Estimate tax liability using rate configured in tax_rates (INCOME_TAX)
+    corp_rate, _rate_src = _corporate_tax_rate(db)
+    if corp_rate == Decimal("0"):
+        raise ValueError(
+            "Corporate income tax rate is not configured in tax_rates (INCOME_TAX). "
+            "Add the rate before preparing the filing."
+        )
+    tax_rate = corp_rate
     tax_liability = _round(taxable_income * tax_rate / Decimal("100"), 2)
 
     # Check if any advance tax was paid (from retained_earnings or specific entries)

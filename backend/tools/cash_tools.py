@@ -8,15 +8,19 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from db.models import JournalEntry
+from tools.account_utils import get_cash_prefixes
 from tools.schemas import CheckCashPositionInput, CheckCashPositionOutput
 
 
-CASH_ACCOUNT_PREFIXES = ("1000", "1001", "1002", "1100")
-
-
-def _is_cash_account(account_code: str) -> bool:
-    """Check if an account code is a cash/bank account."""
-    return account_code.startswith(CASH_ACCOUNT_PREFIXES)
+def _is_cash_account(account_code: str, db: Session) -> bool:
+    """Check if an account is a cash/bank account — resolved from the user's chart."""
+    name = account_code.lower()
+    if any(k in name for k in ("cash", "bank")):
+        return True
+    prefixes = get_cash_prefixes(db)
+    if prefixes:
+        return any(account_code.startswith(p) for p in prefixes)
+    return False
 
 
 def check_cash_position(input: CheckCashPositionInput, db: Session) -> CheckCashPositionOutput:
@@ -89,8 +93,8 @@ def check_cash_position(input: CheckCashPositionInput, db: Session) -> CheckCash
             warning=closing < 0,
         )
 
-    # Consolidated: only CASH accounts (start with 1000, 1001, 1002, 1100)
-    cash_accounts = {acc: b for acc, b in account_balances.items() if _is_cash_account(acc)}
+    # Consolidated: only CASH accounts (resolved from the user's chart)
+    cash_accounts = {acc: b for acc, b in account_balances.items() if _is_cash_account(acc, db)}
     total_debits = sum(b["debits"] for b in cash_accounts.values())
     total_credits = sum(b["credits"] for b in cash_accounts.values())
     closing_balance = total_debits - total_credits

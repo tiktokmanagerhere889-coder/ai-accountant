@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Optional
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from db.models import (
@@ -13,6 +13,7 @@ from db.models import (
     PrepaidExpense, FixedAsset, DepreciationSchedule,
     IntangibleAsset, AmortizationSchedule, PayrollEntry,
 )
+from tools.account_utils import ar_filter_clause, ap_filter_clause, salary_filter_clause
 from tools.schemas import (
     APAgingBucket,
     AnalyzeBudgetVarianceInput,
@@ -57,7 +58,8 @@ def get_ap_aging_report(
 ) -> GetAPAgingReportOutput:
     """Generate an accounts payable aging report as of a given date.
 
-    Queries journal_entries where debit_account starts with "2000",
+    Payable accounts are resolved dynamically from the user's chart.
+    Queries journal_entries where the credit side is a payable account,
     groups by vendor reference (contact_id), and buckets outstanding
     amounts into aging ranges: current (0-30), 31-60, 61-90, 90+ days.
 
@@ -68,7 +70,7 @@ def get_ap_aging_report(
       - Unknown vendor reference handled gracefully.
     """
     query = db.query(JournalEntry).filter(
-        JournalEntry.debit_account.startswith("2000"),
+        ap_filter_clause(JournalEntry.credit_account, db),
         JournalEntry.status == "posted",
     )
 
@@ -115,15 +117,15 @@ def get_ap_aging_report(
         for entry in ref_entries:
             days_diff = (input.as_of_date - entry.posted_date).days
             if days_diff <= 0:
-                current += entry.debit_amount
+                current += entry.credit_amount
             elif days_diff <= 30:
-                current += entry.debit_amount
+                current += entry.credit_amount
             elif days_diff <= 60:
-                aged_31_60 += entry.debit_amount
+                aged_31_60 += entry.credit_amount
             elif days_diff <= 90:
-                aged_61_90 += entry.debit_amount
+                aged_61_90 += entry.credit_amount
             else:
-                aged_90_plus += entry.debit_amount
+                aged_90_plus += entry.credit_amount
 
         total = current + aged_31_60 + aged_61_90 + aged_90_plus
         buckets.append(APAgingBucket(
@@ -595,7 +597,7 @@ def review_unpaid_bills(
     returns overdue items with aging.
     """
     query = db.query(JournalEntry).filter(
-        JournalEntry.debit_account.startswith("2000"),
+        ap_filter_clause(JournalEntry.credit_account, db),
         JournalEntry.status == "posted",
     )
     if input.vendor_contact_id is not None:
@@ -613,7 +615,7 @@ def review_unpaid_bills(
             days_overdue = 0
 
         # Apply min_days_overdue filter
-        outstanding = entry.debit_amount
+        outstanding = entry.credit_amount
         if input.min_days_overdue is not None and days_overdue < input.min_days_overdue:
             continue
 
@@ -626,7 +628,7 @@ def review_unpaid_bills(
         item = UnpaidBillItem(
             entry_id=entry.entry_id,
             vendor_name=vendor_name,
-            invoice_amount=entry.debit_amount,
+            invoice_amount=entry.credit_amount,
             outstanding_balance=outstanding,
             due_date=due_date,
             days_overdue=days_overdue,
@@ -873,7 +875,7 @@ def reconcile_payroll(
     gl_salary = db.query(
         func.sum(JournalEntry.debit_amount).label("total"),
     ).filter(
-        JournalEntry.debit_account.startswith("6100"),
+        salary_filter_clause(JournalEntry.debit_account, db),
         JournalEntry.posted_date >= input.from_date,
         JournalEntry.posted_date <= input.to_date,
         JournalEntry.status == "posted",
@@ -938,7 +940,7 @@ def get_ar_aging_report(
     groups by customer reference, and buckets into aging ranges.
     """
     query = db.query(JournalEntry).filter(
-        JournalEntry.debit_account.startswith("1200"),
+        ar_filter_clause(JournalEntry.debit_account, db),
         JournalEntry.status == "posted",
     )
     if input.customer_contact_id is not None:

@@ -5,7 +5,7 @@ from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Optional
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, or_
 from sqlalchemy.orm import Session
 
 from db.models import (
@@ -17,6 +17,7 @@ from db.models import (
     ReconciliationRun,
     ReconciliationMatch,
 )
+from tools.account_utils import ar_filter_clause, ap_filter_clause
 from tools.schemas import (
     BankChargeItem,
     ChequeStatusItem,
@@ -1018,8 +1019,8 @@ def _match_statement_lines(statement_lines, journal_entries):
 # ---------------------------------------------------------------------------
 
 def reconcile_vendor_statement(
-    db: Session,
     inp: ReconcileVendorStatementInput,
+    db: Session,
 ) -> ReconcileVendorStatementOutput:
     """Match vendor statement lines against internal AP journal entries.
 
@@ -1037,9 +1038,9 @@ def reconcile_vendor_statement(
             f"Vendor contact '{inp.vendor_contact_id}' not found in contacts table"
         )
 
-    # Query AP journal entries (debit_account starts with "2000") in date range
+    # Query AP journal entries (payable accounts resolved from chart, credit side)
     journal_entries = db.query(JournalEntry).filter(
-        JournalEntry.debit_account.startswith("2000"),
+        ap_filter_clause(JournalEntry.credit_account, db),
         JournalEntry.posted_date >= inp.from_date,
         JournalEntry.posted_date <= inp.to_date,
     ).order_by(JournalEntry.posted_date).all()
@@ -1056,14 +1057,14 @@ def reconcile_vendor_statement(
             differences.append(StatementDifferenceItem(
                 reference=entry.reference or "",
                 statement_amount=Decimal("0.00"),
-                internal_amount=entry.debit_amount,
-                difference=-entry.debit_amount,
+                internal_amount=entry.credit_amount,
+                difference=-entry.credit_amount,
                 reason="Recorded in internal books but not found on vendor statement",
             ))
 
     # Net difference between statement total and internal total
     statement_total = sum(line.amount for line in inp.statement_lines)
-    internal_total = sum(entry.debit_amount for entry in journal_entries)
+    internal_total = sum(entry.credit_amount for entry in journal_entries)
     total_difference = statement_total - internal_total
 
     return ReconcileVendorStatementOutput(
@@ -1081,8 +1082,8 @@ def reconcile_vendor_statement(
 # ---------------------------------------------------------------------------
 
 def reconcile_customer_statement(
-    db: Session,
     inp: ReconcileCustomerStatementInput,
+    db: Session,
 ) -> ReconcileCustomerStatementOutput:
     """Match customer statement lines against internal AR journal entries.
 
@@ -1102,7 +1103,7 @@ def reconcile_customer_statement(
 
     # Query AR journal entries (debit_account starts with "1200") in date range
     journal_entries = db.query(JournalEntry).filter(
-        JournalEntry.debit_account.startswith("1200"),
+        ar_filter_clause(JournalEntry.debit_account, db),
         JournalEntry.posted_date >= inp.from_date,
         JournalEntry.posted_date <= inp.to_date,
     ).order_by(JournalEntry.posted_date).all()
@@ -1155,8 +1156,8 @@ _CHARGE_KEYWORD_MAP = {
 
 
 def reconcile_bank_charges(
-    db: Session,
     inp: ReconcileBankChargesInput,
+    db: Session,
 ) -> ReconcileBankChargesOutput:
     """Match bank charge transactions against internal journal entries.
 

@@ -14,6 +14,10 @@ from db.models import (
     JournalEntry, ChartOfAccount, FixedAsset, IntangibleAsset,
     RetainedEarnings, FiscalYearClose,
 )
+from tools.account_utils import (
+    get_cash_prefixes, get_revenue_prefixes, get_expense_prefixes,
+    revenue_filter_clause, expense_filter_clause,
+)
 from tools.schemas import (
     GenerateTrialBalanceInput, GenerateTrialBalanceOutput, TrialBalanceAccount,
     GenerateProfitLossInput, GenerateProfitLossOutput, PnLItem,
@@ -29,9 +33,6 @@ from tools.schemas import (
 # Helpers
 # ---------------------------------------------------------------------------
 
-CASH_PREFIXES = ("1000", "1001", "1002", "1100")
-
-
 def _split_account(value: str):
     """Split '1000-Cash' into (code, name). Returns (value, value) if no hyphen."""
     parts = value.split("-", 1)
@@ -45,10 +46,71 @@ def _get_prefix(code: str) -> str:
     return code.strip()[0]
 
 
-def _is_cash_account(account: str) -> bool:
-    """Check if an account code matches cash prefixes."""
+def _is_cash_account(account: str, db: Session) -> bool:
+    """Check if an account is a cash/bank account — resolved from the user's chart."""
+    name = account.lower()
+    # Safety-net name match (works even before chart populated)
+    if any(k in name for k in ("cash", "bank")):
+        return True
     code, _ = _split_account(account)
-    return code.startswith(CASH_PREFIXES)
+    prefixes = get_cash_prefixes(db)
+    if prefixes:
+        return any(code.startswith(p) for p in prefixes)
+    return False
+
+
+def _is_revenue_account(account: str, db: Session) -> bool:
+    """Check if an account is a revenue account — resolved from the user's chart."""
+    name = account.lower()
+    if any(k in name for k in ("revenue", "sales")):
+        return True
+    code, _ = _split_account(account)
+    prefixes = get_revenue_prefixes(db)
+    if prefixes:
+        return any(code.startswith(p) for p in prefixes)
+    return False
+
+
+def _is_expense_account(account: str, db: Session) -> bool:
+    """Check if an account is an expense account — resolved from the user's chart."""
+    name = account.lower()
+    if any(k in name for k in ("expense", "cost of goods", "cogs")):
+        return True
+    code, _ = _split_account(account)
+    prefixes = get_expense_prefixes(db)
+    if prefixes:
+        return any(code.startswith(p) for p in prefixes)
+    return False
+
+
+def _chart_type_for(db: Session, account_code: str) -> str | None:
+    """Look up the account_type of a code from the user's chart (by code prefix)."""
+    code, _ = _split_account(account_code)
+    acc = db.query(ChartOfAccount).filter(
+        ChartOfAccount.account_code.startswith(code)
+    ).first()
+    return acc.account_type.lower() if acc else None
+
+
+def _is_investing_account(account: str, db: Session) -> bool:
+    """True if account type is an asset that is not cash/bank (fixed, intangible, investment)."""
+    atype = _chart_type_for(db, account)
+    if atype == "asset":
+        # Assets other than cash/bank/AR are investing
+        return not (_is_cash_account(account, db) or _is_receivable_account(account))
+    return False
+
+
+def _is_financing_account(account: str, db: Session) -> bool:
+    """True if account type is a liability (loan, payable) or equity (capital, retained earnings)."""
+    atype = _chart_type_for(db, account)
+    return atype in ("liability", "equity")
+
+
+def _is_receivable_account(account: str) -> bool:
+    """Name-based receivable check (AR, not inventory)."""
+    name = account.lower()
+    return any(k in name for k in ("receivable", "debtor"))
 
 
 def _aggregate_entries(db: Session, from_date: date, to_date: date) -> list:
@@ -146,15 +208,15 @@ def generate_profit_loss(
     expense_map: dict[str, Decimal] = {}
 
     for entry in entries:
-        # Revenue: credit side with prefix 4
+        # Revenue: credit side on a revenue account (resolved from chart)
         c_code, c_name = _split_account(entry.credit_account)
-        if c_code.startswith("4"):
+        if _is_revenue_account(entry.credit_account, db):
             key = f"{c_code}-{c_name}"
             revenue_map[key] = revenue_map.get(key, Decimal("0")) + entry.credit_amount
 
-        # Expenses: debit side with prefix 5, 6, or 8
+        # Expenses: debit side on an expense account (resolved from chart)
         d_code, d_name = _split_account(entry.debit_account)
-        if d_code.startswith(("5", "6", "8")):
+        if _is_expense_account(entry.debit_account, db):
             key = f"{d_code}-{d_name}"
             expense_map[key] = expense_map.get(key, Decimal("0")) + entry.debit_amount
 
@@ -222,10 +284,10 @@ def generate_balance_sheet(
     total_revenue = Decimal("0")
     total_expenses = Decimal("0")
     for code, net_bal in balances.items():
-        if code.startswith("4"):
+        if _is_revenue_account(code, db):
             # Revenue: credit balance shows as negative net
             total_revenue += abs(net_bal) if net_bal < Decimal("0") else net_bal
-        elif code.startswith(("5", "6", "8")):
+        elif _is_expense_account(code, db):
             # Expense: debit balance shows as positive net
             total_expenses += net_bal if net_bal > Decimal("0") else abs(net_bal)
 
@@ -335,9 +397,9 @@ def generate_cash_flow_statement(
 
     opening_cash = Decimal("0")
     for entry in opening_entries:
-        if _is_cash_account(entry.debit_account):
+        if _is_cash_account(entry.debit_account, db):
             opening_cash += entry.debit_amount
-        if _is_cash_account(entry.credit_account):
+        if _is_cash_account(entry.credit_account, db):
             opening_cash -= entry.credit_amount
 
     # Current period cash changes
@@ -354,34 +416,35 @@ def generate_cash_flow_statement(
         c_code, c_name = _split_account(entry.credit_account)
         desc = entry.description or ""
 
-        # Determine cash impact
-        cash_on_debit = d_code.startswith(CASH_PREFIXES)
-        cash_on_credit = c_code.startswith(CASH_PREFIXES)
+        # Determine cash impact — accounts resolved from the user's chart
+        cash_on_debit = _is_cash_account(entry.debit_account, db)
+        cash_on_credit = _is_cash_account(entry.credit_account, db)
 
         if not cash_on_debit and not cash_on_credit:
             continue  # no cash impact
 
         # Determine category based on the non-cash side
         other_code = c_code if cash_on_debit else d_code
-        other_prefix = other_code[0] if other_code else ""
+        other_name = c_name if cash_on_debit else d_name
 
         amount = entry.debit_amount if cash_on_debit else -(entry.credit_amount)
 
-        if other_prefix == "4" or other_prefix in ("5", "6", "8"):
+        other_full = f"{other_code}-{other_name}"
+        if _is_revenue_account(other_full, db) or _is_expense_account(other_full, db):
             # Operating: revenue/expense
             operating_items.append(CashFlowItem(
                 description=f"{desc} ({other_code})",
                 amount=amount,
             ))
             net_operating += amount
-        elif other_prefix == "1" and other_code.startswith(("11", "12", "13", "14", "15", "16")):
+        elif _is_investing_account(other_full, db):
             # Investing: fixed assets / long-term assets
             investing_items.append(CashFlowItem(
                 description=f"{desc} ({other_code})",
                 amount=amount,
             ))
             net_investing += amount
-        elif other_prefix == "2" or other_prefix == "3":
+        elif _is_financing_account(other_full, db):
             # Financing: loans or equity
             financing_items.append(CashFlowItem(
                 description=f"{desc} ({other_code})",
@@ -399,9 +462,9 @@ def generate_cash_flow_statement(
     # Current period cash change
     current_cash = opening_cash
     for entry in entries:
-        if _is_cash_account(entry.debit_account):
+        if _is_cash_account(entry.debit_account, db):
             current_cash += entry.debit_amount
-        if _is_cash_account(entry.credit_account):
+        if _is_cash_account(entry.credit_account, db):
             current_cash -= entry.credit_amount
 
     net_change = current_cash - opening_cash
@@ -438,24 +501,22 @@ def transfer_retained_earnings(
     period_start = date(input.fiscal_year, 1, 1)
     period_end = date(input.fiscal_year, 12, 31)
 
-    # Total revenue (credit to 4xxx)
+    # Total revenue (credit to revenue accounts, resolved from chart)
     rev = db.query(func.sum(JournalEntry.credit_amount)).filter(
         JournalEntry.posted_date >= period_start,
         JournalEntry.posted_date <= period_end,
-        JournalEntry.credit_account.startswith("4"),
+        revenue_filter_clause(JournalEntry.credit_account, db),
         JournalEntry.status == "posted",
     ).scalar() or Decimal("0")
 
-    # Total expenses (debit to 5xxx, 6xxx, 8xxx)
-    exp = Decimal("0")
-    for prefix in ("5", "6", "8"):
-        e = db.query(func.sum(JournalEntry.debit_amount)).filter(
-            JournalEntry.posted_date >= period_start,
-            JournalEntry.posted_date <= period_end,
-            JournalEntry.debit_account.startswith(prefix),
-            JournalEntry.status == "posted",
-        ).scalar() or Decimal("0")
-        exp += Decimal(str(e))
+    # Total expenses (debit to expense accounts, resolved from chart)
+    exp = db.query(func.sum(JournalEntry.debit_amount)).filter(
+        JournalEntry.posted_date >= period_start,
+        JournalEntry.posted_date <= period_end,
+        expense_filter_clause(JournalEntry.debit_account, db),
+        JournalEntry.status == "posted",
+    ).scalar() or Decimal("0")
+    exp = Decimal(str(exp))
 
     net_income = Decimal(str(rev)) - exp
 
@@ -738,12 +799,12 @@ def close_fiscal_year(
 
     for entry in revenue_entries:
         c_code, _ = _split_account(entry.credit_account)
-        if c_code.startswith("4"):
+        if _is_revenue_account(entry.credit_account, db):
             total_revenue += entry.credit_amount
             revenue_accounts.add(c_code)
 
         d_code, _ = _split_account(entry.debit_account)
-        if d_code.startswith(("5", "6", "8")):
+        if _is_expense_account(entry.debit_account, db):
             total_expenses += entry.debit_amount
             expense_accounts.add(d_code)
 

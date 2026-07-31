@@ -120,6 +120,10 @@ from tools.schemas import (
     TrackLCBGOutput,
     ReconcileVendorStatementInput,
     ReconcileVendorStatementOutput,
+    ReconcileCustomerStatementInput,
+    ReconcileCustomerStatementOutput,
+    ReconcileBankChargesInput,
+    ReconcileBankChargesOutput,
 )
 
 # --- Month-End ---
@@ -333,8 +337,8 @@ REGISTRY: dict[str, ToolEntry] = {
     "track_cheque_clearing": (track_cheque_clearing, TrackChequeClearingInput, TrackChequeClearingOutput, False),
     "track_lc_bank_guarantee": (track_lc_bank_guarantee, TrackLCBGInput, TrackLCBGOutput, False),
     "reconcile_vendor_statement": (reconcile_vendor_statement, ReconcileVendorStatementInput, ReconcileVendorStatementOutput, False),
-    "reconcile_customer_statement": (reconcile_customer_statement, ReconcileVendorStatementInput, dict, False),
-    "reconcile_bank_charges": (reconcile_bank_charges, ReconcileVendorStatementInput, dict, False),
+    "reconcile_customer_statement": (reconcile_customer_statement, ReconcileCustomerStatementInput, ReconcileCustomerStatementOutput, False),
+    "reconcile_bank_charges": (reconcile_bank_charges, ReconcileBankChargesInput, ReconcileBankChargesOutput, False),
 
     # === Month-End (10 tools) ===
     "review_unpaid_bills": (review_unpaid_bills, ReviewUnpaidBillsInput, ReviewUnpaidBillsOutput, False),

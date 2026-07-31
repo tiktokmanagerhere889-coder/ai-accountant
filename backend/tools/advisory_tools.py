@@ -12,6 +12,7 @@ from sqlalchemy import func, extract, or_
 from sqlalchemy.orm import Session
 
 from db.models import JournalEntry, Budget, RetainedEarnings
+from tools.account_utils import get_expense_prefixes, get_revenue_prefixes, expense_filter_clause
 from tools.schemas import (
     CategorySpend, MonthlySpend,
     AnalyzeSpendingPatternsInput, AnalyzeSpendingPatternsOutput,
@@ -37,16 +38,23 @@ def _get_prefix(code: str) -> str:
 
 
 def _aggregate_expenses(db: Session, from_date: date, to_date: date, account_prefixes: list[str] | None = None) -> list[JournalEntry]:
-    """Aggregate expense entries (prefixes 5/6/8) in a date range."""
-    prefixes = account_prefixes or ["5", "6", "8"]
+    """Aggregate expense entries in a date range.
+
+    Prefixes resolved from the user's chart_of_accounts when not supplied.
+    """
+    prefixes = account_prefixes or get_expense_prefixes(db)
     query = db.query(JournalEntry).filter(
         JournalEntry.posted_date >= from_date,
         JournalEntry.posted_date <= to_date,
         JournalEntry.status == "posted",
     )
-    # Filter by debit account prefix
-    prefix_filters = [JournalEntry.debit_account.startswith(p) for p in prefixes]
-    query = query.filter(prefix_filters[0] if len(prefix_filters) == 1 else or_(*prefix_filters))
+    if prefixes:
+        # Filter by debit account prefix
+        prefix_filters = [JournalEntry.debit_account.startswith(p) for p in prefixes]
+        query = query.filter(prefix_filters[0] if len(prefix_filters) == 1 else or_(*prefix_filters))
+    else:
+        # Safety net: name-based expense match when chart not populated
+        query = query.filter(expense_filter_clause(JournalEntry.debit_account, db))
     return query.all()
 
 

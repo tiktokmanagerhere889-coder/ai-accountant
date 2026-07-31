@@ -359,6 +359,7 @@ class ExchangeRate(Base):
     rate = Column(Numeric, nullable=False)
     rate_date = Column(Date, nullable=False)
     source = Column(String, nullable=True)
+    fetched_at = Column(DateTime, default=func.now(), nullable=True)
 
 
 class TaxRate(Base):
