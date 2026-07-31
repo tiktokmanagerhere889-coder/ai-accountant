@@ -14,6 +14,7 @@ from sqlalchemy import func
 
 from db.database import get_db, init_db
 from db.models import Base, AuditLog, UserRole, SystemBackupLog, JournalEntry
+from db.seed_and_migrate import run_migrations
 from agent_defs.orchestrator import run_orchestrator
 from tool_registry import execute_tool, list_all_tools, get_tool_info
 
@@ -23,6 +24,9 @@ logger = logging.getLogger("api")
 
 # Ensure all tables are initialized
 init_db()
+
+# Idempotent migrations + seeds (fetched_at column, tax/EOBI/asset configs)
+run_migrations()
 
 app = FastAPI(title="AI Accountant Backend", version="1.0.0")
 
