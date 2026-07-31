@@ -112,6 +112,7 @@ def create_journal_entry(input: CreateJournalEntryInput, db: Session) -> CreateJ
         description=input.description,
         posted_date=input.posted_date,
         reference=input.reference,
+        contact_id=input.contact_id,
         debit_account=input.debit_account,
         debit_amount=input.debit_amount,
         credit_account=input.credit_account,

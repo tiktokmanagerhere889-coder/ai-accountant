@@ -101,6 +101,8 @@ export const AGENTS_DATA: AgentDef[] = [
         inputs: [
           { name: "description", type: "text", placeholder: "Entry Description", required: true },
           { name: "posted_date", type: "date", placeholder: "Date", required: false },
+          { name: "reference", type: "text", placeholder: "Invoice/Ref (e.g. INV-101)", required: false },
+          { name: "contact_id", type: "text", placeholder: "Contact ID (e.g. CONT-001)", required: false },
           { name: "debit_account", type: "text", placeholder: "Debit Account e.g. 6000-Office Rent", required: true },
           { name: "debit_amount", type: "text", placeholder: "Debit Amount", required: true },
           { name: "credit_account", type: "text", placeholder: "Credit Account e.g. 1000-Cash", required: true },

@@ -29,23 +29,30 @@ def check_cash_position(input: CheckCashPositionInput, db: Session) -> CheckCash
     Queries all posted journal entries up to as_of_date, groups by account,
     and returns the net position. Uses deterministic DB aggregation — no AI.
     """
+    # Normalize "ALL" (case-insensitive) to None → consolidated cash view.
+    # This lets users type ALL in the account field to see the full cash
+    # position instead of the literal account "ALL" not being found.
+    account_filter = input.account_id
+    if account_filter is not None and account_filter.strip().upper() == "ALL":
+        account_filter = None
+
     query = select(JournalEntry).where(
         JournalEntry.status == "posted",
         JournalEntry.posted_date <= input.as_of_date,
     )
 
-    if input.account_id is not None:
+    if account_filter is not None:
         query = query.where(
-            (JournalEntry.debit_account == input.account_id) |
-            (JournalEntry.credit_account == input.account_id)
+            (JournalEntry.debit_account == account_filter) |
+            (JournalEntry.credit_account == account_filter)
         )
 
     entries = db.execute(query).scalars().all()
 
-    if input.account_id is not None and not entries:
+    if account_filter is not None and not entries:
         return CheckCashPositionOutput(
-            account_id=input.account_id,
-            account_name=f"Account '{input.account_id}' not found",
+            account_id=account_filter,
+            account_name=f"Account '{account_filter}' not found",
             opening_balance=Decimal("0.00"),
             total_debits=Decimal("0.00"),
             total_credits=Decimal("0.00"),
@@ -57,8 +64,8 @@ def check_cash_position(input: CheckCashPositionInput, db: Session) -> CheckCash
 
     if not entries:
         return CheckCashPositionOutput(
-            account_id=input.account_id or "ALL",
-            account_name="All Cash Accounts" if input.account_id is None else "Unknown",
+            account_id=account_filter or "ALL",
+            account_name="All Cash Accounts" if account_filter is None else "Unknown",
             opening_balance=Decimal("0.00"),
             total_debits=Decimal("0.00"),
             total_credits=Decimal("0.00"),
@@ -78,12 +85,12 @@ def check_cash_position(input: CheckCashPositionInput, db: Session) -> CheckCash
         account_balances[entry.debit_account]["debits"] += entry.debit_amount
         account_balances[entry.credit_account]["credits"] += entry.credit_amount
 
-    if input.account_id is not None:
-        bal = account_balances.get(input.account_id, {"debits": Decimal("0.00"), "credits": Decimal("0.00")})
+    if account_filter is not None:
+        bal = account_balances.get(account_filter, {"debits": Decimal("0.00"), "credits": Decimal("0.00")})
         closing = bal["debits"] - bal["credits"]
         return CheckCashPositionOutput(
-            account_id=input.account_id,
-            account_name=input.account_id,
+            account_id=account_filter,
+            account_name=account_filter,
             opening_balance=Decimal("0.00"),
             total_debits=bal["debits"],
             total_credits=bal["credits"],

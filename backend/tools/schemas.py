@@ -345,6 +345,7 @@ class CreateJournalEntryInput(BaseModel):
     description: str = Field(..., min_length=1, max_length=500, description="Description of the journal entry")
     posted_date: date = Field(..., description="Date the entry was posted")
     reference: Optional[str] = Field(default=None, max_length=100, description="Optional invoice/receipt reference")
+    contact_id: Optional[str] = Field(default=None, max_length=50, description="Optional vendor/customer contact ID (e.g. CONT-001)")
     debit_account: str = Field(..., min_length=1, description="Account code to debit")
     debit_amount: Decimal = Field(..., gt=Decimal("0"), description="Debit amount")
     credit_account: str = Field(..., min_length=1, description="Account code to credit")
