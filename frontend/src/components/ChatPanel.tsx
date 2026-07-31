@@ -1,10 +1,18 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { Send, Check, X, ShieldAlert, Loader2, Sparkles } from "lucide-react";
+import { Send, Check, X, ShieldAlert, Loader2, Sparkles, Wand2 } from "lucide-react";
+
+interface ToolCallInfo {
+  toolName: string;
+  recordId?: string;
+  summary: string;
+}
 
 interface Message {
   sender: "user" | "ai";
   text: string;
+  toolCalls?: ToolCallInfo[];
+  suggestions?: string[];
   approvalCard?: {
     toolName: string;
     description: string;
@@ -17,11 +25,73 @@ interface ChatPanelProps {
   onTransactionLogged?: () => void;
 }
 
+// Quick-suggestion chips shown before any message is sent
+const QUICK_SUGGESTIONS = [
+  "Show Trial Balance",
+  "Generate P&L",
+  "Check Cash Position",
+  "Show AP Aging",
+  "Run Anomaly Check",
+  "Calculate Financial Ratios",
+];
+
+// Extract tool-call info from an orchestrator response (JSON blocks with tool/entry ids)
+function extractToolCalls(response: string): ToolCallInfo[] {
+  const calls: ToolCallInfo[] = [];
+  // Match JSON blocks containing tool name and/or record ids
+  const blocks = response.match(/\{[\s\S]*?\}/g) || [];
+  for (const block of blocks) {
+    try {
+      const obj = JSON.parse(block);
+      const toolName = obj.tool || obj.tool_name;
+      if (!toolName) continue;
+      const idKey = Object.keys(obj).find((k) =>
+        /^(.*_id|entry_id|asset_id|run_id|task_id|accrual_id|cheque_id|provision_id|filing_id)$/i.test(k)
+      );
+      calls.push({
+        toolName: String(toolName),
+        recordId: idKey ? String(obj[idKey]) : undefined,
+        summary: obj.message || obj.status || obj.description || "Tool executed",
+      });
+    } catch {
+      // not JSON — skip
+    }
+  }
+  return calls;
+}
+
+// Pick 2-3 relevant follow-up suggestions based on what was just asked/done
+function followUpSuggestions(userMessage: string, toolCalls: ToolCallInfo[]): string[] {
+  const msg = userMessage.toLowerCase();
+  const pool: string[] = [];
+
+  if (msg.includes("trial balance") || msg.includes("balance")) pool.push("Show Balance Sheet");
+  if (msg.includes("p&l") || msg.includes("profit") || msg.includes("loss")) pool.push("Show Cash Flow Statement");
+  if (msg.includes("cash")) pool.push("Forecast Cash Flow (30 days)");
+  if (msg.includes("ap") || msg.includes("payable") || msg.includes("aging")) pool.push("Review Unpaid Bills");
+  if (msg.includes("anomaly") || msg.includes("audit")) pool.push("Get Compliance Deadlines");
+  if (msg.includes("ratio") || msg.includes("financial health")) pool.push("Assess Financial Health");
+  if (toolCalls.length && /journal|entry|asset|cheque|accrual/i.test(toolCalls.map(t => t.toolName).join(" "))) {
+    pool.push("View General Ledger");
+  }
+
+  // Fallbacks if nothing matched
+  if (pool.length < 2) {
+    const fallbacks = ["Generate P&L", "Check Cash Position", "Show Trial Balance"];
+    for (const f of fallbacks) {
+      if (!pool.includes(f)) pool.push(f);
+      if (pool.length >= 3) break;
+    }
+  }
+  return pool.slice(0, 3);
+}
+
 export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       sender: "ai",
       text: "Hello! I am your AI Accounting Assistant. You can ask me to perform financial tasks, draft balances, analyze budgets, or record double entries using plain English.",
+      suggestions: QUICK_SUGGESTIONS,
     },
   ]);
   const [input, setInput] = useState("");
@@ -70,12 +140,18 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
         }
       }
 
+      // Extract tool-call info + suggest follow-ups
+      const toolCalls = extractToolCalls(data.response);
+      const suggestions = followUpSuggestions(userMessage, toolCalls);
+
       setMessages((prev) => [
         ...prev,
         {
           sender: "ai",
           text: cleanMarkdownJSON(data.response),
           approvalCard: approvalData || undefined,
+          toolCalls: toolCalls.length ? toolCalls : undefined,
+          suggestions,
         },
       ]);
 
@@ -83,6 +159,39 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
       if (data.response.includes("JE-") || data.response.includes("Journal entry")) {
         onTransactionLogged?.();
       }
+    } catch (error: any) {
+      console.error(error);
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          text: `Error connecting to AI service: ${error.response?.data?.detail || error.message || "Unknown error"}`,
+        },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const sendSuggestion = async (text: string) => {
+    if (!text.trim() || loading) return;
+    setInput("");
+    setMessages((prev) => [...prev, { sender: "user", text }]);
+    setLoading(true);
+    try {
+      const response = await axios.post(`${apiBase}/chat`, { message: text }, { timeout: 30000 });
+      const data = response.data;
+      const toolCalls = extractToolCalls(data.response);
+      const suggestions = followUpSuggestions(text, toolCalls);
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "ai",
+          text: cleanMarkdownJSON(data.response),
+          toolCalls: toolCalls.length ? toolCalls : undefined,
+          suggestions,
+        },
+      ]);
     } catch (error: any) {
       console.error(error);
       setMessages((prev) => [
@@ -180,6 +289,46 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
             >
               {msg.text}
             </div>
+
+            {/* Tool-call feedback (real data confirmation) */}
+            {msg.toolCalls && msg.toolCalls.length > 0 && (
+              <div className="mt-2 w-[85%] space-y-1.5">
+                {msg.toolCalls.map((tc, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 px-3 py-2 rounded bg-accent-light/5 border border-accent-light/20 text-xs text-gray-700 dark:text-gray-300"
+                  >
+                    <Wand2 className="w-3.5 h-3.5 text-accent-light flex-shrink-0" />
+                    <div className="min-w-0">
+                      <span className="font-medium text-accent-light">{tc.toolName}</span>
+                      {" — "}
+                      <span className="text-gray-500 dark:text-gray-400">{tc.summary}</span>
+                      {tc.recordId && (
+                        <span className="ml-1.5 font-mono text-[10px] px-1.5 py-0.5 rounded bg-accent-light/10 text-accent-light">
+                          {tc.recordId}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Follow-up suggestion chips */}
+            {msg.suggestions && msg.suggestions.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-1.5 w-[85%]">
+                {msg.suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => sendSuggestion(s)}
+                    disabled={loading}
+                    className="px-2.5 py-1 text-[11px] rounded-full border border-gray-200 dark:border-gray-700 text-gray-600 dark:text-gray-400 hover:border-accent-light hover:text-accent-light transition-colors"
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Approval Render */}
             {msg.approvalCard && (

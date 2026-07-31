@@ -17,13 +17,13 @@ dotenv_path = Path(__file__).resolve().parents[2] / ".env"
 if dotenv_path.exists():
     load_dotenv(dotenv_path, override=True)
 
-# Model configuration — Groq primary (best free-tier tool calling)
-# llama-4-scout is Groq's newest free model with strong tool use
-# llama-3.3-70b-versatile as fallback — reliable tool calling
-# Cerebras llama3.1-8b as last resort (requires active plan)
+# Model configuration — Groq primary (verified against Groq's live model list 2026-07)
+# primary: llama-3.3-70b-versatile (strong tool calling, free tier)
+# fallback: llama-3.1-8b-instant (fast, reliable)
+# Cerebras: llama-3.3-70b (last resort, requires active plan)
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
-GROQ_FALLBACK_MODEL = os.environ.get("GROQ_FALLBACK_MODEL", "llama3-70b-8192")
-CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "llama3.1-70b")
+GROQ_FALLBACK_MODEL = os.environ.get("GROQ_FALLBACK_MODEL", "llama-3.1-8b-instant")
+CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "llama-3.3-70b")
 
 def get_api_key(key_name: str) -> str:
     """Check user_api_keys table first, fall back to env var.

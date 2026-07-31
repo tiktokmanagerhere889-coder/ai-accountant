@@ -1,11 +1,35 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { AgentDef } from "./agentsData";
-import { Play, ShieldAlert, Check, X, AlertCircle } from "lucide-react";
+import { Play, ShieldAlert, AlertCircle, CheckCircle2 } from "lucide-react";
 
 interface AgentFormsProps {
   agent: AgentDef;
   onToolExecuted: (output: any) => void;
+}
+
+// Extract a human-friendly summary + record ID from a tool result
+function summarizeResult(result: any): { summary: string; recordId?: string } {
+  if (!result || typeof result !== "object") {
+    return { summary: "Completed successfully." };
+  }
+  // Common ID fields across tools
+  const idKey = Object.keys(result).find((k) =>
+    /^(id|.*_id|entry_id|asset_id|journal_entry_id|accrual_id|cheque_id|lc_id|run_id|task_id|provision_id|flag_id|reconciliation_id|filing_id|report_id|register_id)$/i.test(k)
+  );
+  const recordId = idKey ? String(result[idKey]) : undefined;
+
+  // Pick a short summary: message field, or first non-id value
+  const msg = result.message || result.summary || result.status;
+  let summary: string;
+  if (typeof msg === "string") summary = msg;
+  else if (typeof result.total_outstanding !== "undefined") summary = `Total outstanding: ${result.total_outstanding}`;
+  else if (typeof result.total_revenue !== "undefined") summary = `Revenue: ${result.total_revenue}`;
+  else if (typeof result.net_income !== "undefined") summary = `Net income: ${result.net_income}`;
+  else if (typeof result.closing_balance !== "undefined") summary = `Closing balance: ${result.closing_balance}`;
+  else summary = "Completed successfully.";
+
+  return { summary, recordId };
 }
 
 export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
@@ -13,6 +37,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<{ summary: string; recordId?: string } | null>(null);
   const [executionMode, setExecutionMode] = useState<"ai" | "direct">("direct");
 
   const selectedTool = agent.tools.find((t) => t.name === activeTool);
@@ -26,6 +51,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
     if (!selectedTool) return;
     setLoading(true);
     setError(null);
+    setSuccess(null);
 
     const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
@@ -43,6 +69,13 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
           params,
         }, { timeout: 30000 });
 
+        if (response.data.success) {
+          const { summary, recordId } = summarizeResult(response.data.result);
+          setSuccess({ summary, recordId });
+        } else {
+          setError(response.data.error || "Tool execution failed");
+        }
+
         onToolExecuted({
           tool: selectedTool.name,
           output: JSON.stringify(response.data.result, null, 2),
@@ -58,6 +91,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
         instruction += paramList.join(", ");
 
         const response = await axios.post(`${apiBase}/chat`, { message: instruction }, { timeout: 30000 });
+        setSuccess({ summary: "AI response received. See output below for details." });
         onToolExecuted({
           tool: selectedTool.name,
           output: response.data.response,
@@ -90,6 +124,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
               setActiveTool(tool.name);
               setFormData({});
               setError(null);
+              setSuccess(null);
             }}
             className={`px-3 py-2 text-sm font-medium transition-all border-b-2 ${
               activeTool === tool.name
@@ -149,8 +184,25 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
 
             {error && (
               <div className="flex items-center gap-2 p-3 text-sm rounded bg-red-500/10 text-red-500 border border-red-500/20">
-                <AlertCircle className="w-4 h-4" />
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
                 <span>{error}</span>
+              </div>
+            )}
+
+            {success && (
+              <div className="flex items-start gap-2 p-3 text-sm rounded bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+                <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                <div className="space-y-0.5">
+                  <div className="font-medium">
+                    {selectedTool.name} executed
+                  </div>
+                  <div>{success.summary}</div>
+                  {success.recordId && (
+                    <div className="font-mono text-xs opacity-90">
+                      Record: {success.recordId}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
