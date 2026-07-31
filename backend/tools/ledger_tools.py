@@ -7,7 +7,7 @@ from typing import Optional
 from sqlalchemy import select, func, or_
 from sqlalchemy.orm import Session
 
-from db.models import JournalEntry, PayrollEntry
+from db.models import JournalEntry, PayrollEntry, Contact
 from tools.account_utils import ar_filter_clause, ap_filter_clause
 from tools.schemas import (
     APEntryItem,
@@ -77,6 +77,15 @@ def create_journal_entry(input: CreateJournalEntryInput, db: Session) -> CreateJ
         raise ValueError(
             f"Debits ({input.debit_amount}) must equal credits ({input.credit_amount})"
         )
+
+    # Validate contact exists if provided (FK to contacts table)
+    if input.contact_id:
+        contact = db.query(Contact).filter(Contact.contact_id == input.contact_id).first()
+        if contact is None:
+            raise ValueError(
+                f"Contact '{input.contact_id}' does not exist. "
+                "Add it first via manage_contact, or leave contact_id empty."
+            )
 
     # Auto-generate entry_id: JE-YYYYMMDD-NNN
     posted = input.posted_date
