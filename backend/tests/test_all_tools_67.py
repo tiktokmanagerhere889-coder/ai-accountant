@@ -3,7 +3,7 @@ Run: cd backend && PYTHONIOENCODING=utf-8 python seed_and_test.py 2>&1
 """
 import sys, os, json
 from decimal import Decimal
-sys.path.insert(0, os.path.dirname(__file__))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from fastapi.testclient import TestClient
 from main import app

@@ -38,6 +38,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ summary: string; recordId?: string } | null>(null);
+  const [output, setOutput] = useState<string | null>(null);
   const [executionMode, setExecutionMode] = useState<"ai" | "direct">("direct");
 
   const selectedTool = agent.tools.find((t) => t.name === activeTool);
@@ -72,8 +73,10 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
         if (response.data.success) {
           const { summary, recordId } = summarizeResult(response.data.result);
           setSuccess({ summary, recordId });
+          setOutput(JSON.stringify(response.data.result, null, 2));
         } else {
           setError(response.data.error || "Tool execution failed");
+          setOutput(null);
         }
 
         onToolExecuted({
@@ -92,6 +95,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
 
         const response = await axios.post(`${apiBase}/chat`, { message: instruction }, { timeout: 30000 });
         setSuccess({ summary: "AI response received. See output below for details." });
+        setOutput(response.data.response);
         onToolExecuted({
           tool: selectedTool.name,
           output: response.data.response,
@@ -125,6 +129,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
               setFormData({});
               setError(null);
               setSuccess(null);
+              setOutput(null);
             }}
             className={`px-3 py-2 text-sm font-medium transition-all border-b-2 ${
               activeTool === tool.name
@@ -257,6 +262,18 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
               </button>
             </div>
           </form>
+
+          {/* Tool output display */}
+          {output && (
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+              <div className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-2">
+                Tool Output
+              </div>
+              <pre className="p-3 rounded bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 text-xs text-gray-800 dark:text-gray-200 overflow-x-auto max-h-96 overflow-y-auto">
+                {output}
+              </pre>
+            </div>
+          )}
         </div>
       )}
     </div>
