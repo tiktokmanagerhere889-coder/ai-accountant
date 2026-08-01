@@ -8,8 +8,16 @@ const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
 export function downloadExport(format: "xlsx" | "csv", agent?: string) {
   const url = `${apiBase}/export/${format}${agent ? `?agent=${agent}` : ""}`;
-  // open in same tab triggers download due to Content-Disposition header
-  window.open(url, "_self");
+  const filename = agent ? `${agent}.${format}` : `all-data.${format}`;
+  // Anchor with download attribute — reliable cross-browser download.
+  // _self navigation can misfire on some browsers; this triggers a real
+  // download without leaving the page.
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 export default function AgentCards() {
