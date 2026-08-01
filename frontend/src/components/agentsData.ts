@@ -73,6 +73,22 @@ export const AGENTS_DATA: AgentDef[] = [
         ]
       },
       {
+        name: "record_bank_transaction",
+        description: "Record a bank register line (statement entry)",
+        approval: false,
+        aiOnly: false,
+        inputs: [
+          { name: "date", type: "date", placeholder: "Transaction date", required: true },
+          { name: "description", type: "text", placeholder: "e.g. Bank charges July", required: true },
+          { name: "amount", type: "text", placeholder: "Amount", required: true },
+          { name: "type", type: "text", placeholder: "debit or credit", required: true },
+          { name: "status", type: "text", placeholder: "cleared/pending", required: false },
+          { name: "reference", type: "text", placeholder: "Ref (cheque no)", required: false },
+          { name: "balance_after", type: "text", placeholder: "Balance after", required: false },
+          { name: "account_id", type: "text", placeholder: "e.g. 1100-Bank Account", required: true }
+        ]
+      },
+      {
         name: "manage_petty_cash",
         description: "Petty cash entries + replenishment triggers",
         approval: false,

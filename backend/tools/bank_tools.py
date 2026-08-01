@@ -11,6 +11,8 @@ from tools.schemas import (
     CheckBankTransactionsInput,
     CheckBankTransactionsOutput,
     BankTransactionItem,
+    RecordBankTransactionInput,
+    RecordBankTransactionOutput,
 )
 
 
@@ -92,4 +94,74 @@ def check_bank_transactions(input: CheckBankTransactionsInput, db: Session) -> C
         period_from=from_date,
         period_to=to_date,
         truncated=truncated,
+    )
+
+
+def _generate_bank_txn_id(db: Session) -> str:
+    """Generate a unique transaction ID like BNK-YYYYMMDD-NNN."""
+    from datetime import date as _date
+    today = _date.today()
+    prefix = f"BNK-{today.strftime('%Y%m%d')}-"
+    existing = db.execute(
+        select(BankTransaction.transaction_id).where(
+            BankTransaction.transaction_id.like(prefix + "%")
+        )
+    ).scalars().all()
+    seq = 0
+    for eid in existing:
+        suffix = eid[len(prefix):]
+        if suffix.isdigit():
+            seq = max(seq, int(suffix))
+    return f"{prefix}{seq + 1:03d}"
+
+
+def record_bank_transaction(input: RecordBankTransactionInput, db: Session) -> RecordBankTransactionOutput:
+    """Record a bank register transaction (bank statement line).
+
+    Saves to bank_transactions table — this is the bank register, separate from
+    journal entries. Bank charges, fees, interest, uncleared cheques all come here.
+    """
+    import json
+
+    if input.type not in ("debit", "credit"):
+        raise ValueError("type must be 'debit' or 'credit'")
+    if input.status not in ("cleared", "pending"):
+        raise ValueError("status must be 'cleared' or 'pending'")
+
+    # Validate account exists
+    account = db.execute(
+        select(BankAccount).where(BankAccount.account_id == input.account_id)
+    ).scalar_one_or_none()
+    if account is None:
+        raise ValueError(f"Bank account '{input.account_id}' not found in bank_accounts")
+
+    txn_id = _generate_bank_txn_id(db)
+    txn = BankTransaction(
+        transaction_id=txn_id,
+        date=input.date,
+        description=input.description,
+        amount=input.amount,
+        type=input.type,
+        status=input.status,
+        reference=input.reference,
+        balance_after=input.balance_after if input.balance_after is not None else Decimal("0"),
+        account_id=input.account_id,
+        custom_fields=json.dumps(input.custom_fields) if input.custom_fields else None,
+    )
+    db.add(txn)
+    db.commit()
+    db.refresh(txn)
+
+    return RecordBankTransactionOutput(
+        transaction_id=txn.transaction_id,
+        date=txn.date,
+        description=txn.description,
+        amount=txn.amount,
+        type=txn.type,
+        status=txn.status,
+        reference=txn.reference,
+        balance_after=txn.balance_after,
+        account_id=txn.account_id,
+        custom_fields=json.loads(txn.custom_fields) if txn.custom_fields else None,
+        message=f"Bank transaction {txn.transaction_id} recorded.",
     )

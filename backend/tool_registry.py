@@ -25,10 +25,13 @@ from tools.schemas import (
 # --- Bank ---
 from tools.bank_tools import (
     check_bank_transactions,
+    record_bank_transaction,
 )
 from tools.schemas import (
     CheckBankTransactionsInput,
     CheckBankTransactionsOutput,
+    RecordBankTransactionInput,
+    RecordBankTransactionOutput,
 )
 
 # --- Petty Cash ---
@@ -319,6 +322,7 @@ REGISTRY: dict[str, ToolEntry] = {
     "record_transaction_nl": (record_transaction_nl, RecordTransactionNLInput, RecordTransactionNLOutput, True),
     "process_receipt_image": (process_receipt_image, ProcessReceiptImageInput, ProcessReceiptImageOutput, True),
     "check_bank_transactions": (check_bank_transactions, CheckBankTransactionsInput, CheckBankTransactionsOutput, False),
+    "record_bank_transaction": (record_bank_transaction, RecordBankTransactionInput, RecordBankTransactionOutput, False),
     "manage_petty_cash": (manage_petty_cash, ManagePettyCashInput, ManagePettyCashOutput, False),
 
     # === Ledger & Master Data (7 tools) ===

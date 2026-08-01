@@ -4,19 +4,22 @@ import json
 import uuid
 import logging
 from datetime import date, datetime
+from io import BytesIO
 from typing import Optional, Any
 from decimal import Decimal
 
 from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from db.database import get_db, init_db
+from db.database import get_db, init_db, get_session
 from db.models import Base, AuditLog, UserRole, SystemBackupLog, JournalEntry
 from db.seed_and_migrate import run_migrations
 from agent_defs.orchestrator import run_orchestrator
 from tool_registry import execute_tool, list_all_tools, get_tool_info
+from export_service import build_xlsx, build_csv
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO)
@@ -332,3 +335,39 @@ def execute_tool_direct(request: ToolExecuteRequest):
     except Exception as e:
         logger.error(f"Tool execution error ({request.tool_name}): {e}")
         return ToolExecuteResponse(success=False, error=str(e))
+
+
+# Data Export (per agent / all agents)
+
+@app.get("/export/xlsx")
+def export_xlsx(agent: Optional[str] = Query(default=None, description="Agent id or 'all'")):
+    """Download professional XLSX report. agent=all or specific agent id."""
+    db = get_session()
+    try:
+        data = build_xlsx(db, agent)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        db.close()
+    return StreamingResponse(
+        BytesIO(data),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="export.xlsx"'},
+    )
+
+
+@app.get("/export/csv")
+def export_csv(agent: Optional[str] = Query(default=None, description="Agent id or 'all'")):
+    """Download plain CSV. agent=all or specific agent id."""
+    db = get_session()
+    try:
+        data = build_csv(db, agent)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    finally:
+        db.close()
+    return StreamingResponse(
+        BytesIO(data),
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="export.csv"'},
+    )

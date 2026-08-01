@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 from datetime import date
 from decimal import Decimal
 from typing import Optional
@@ -141,6 +142,32 @@ class BankTransactionUpdate(BaseModel):
 class BankTransactionResponse(BankTransactionBase):
     id: int
     model_config = {"from_attributes": True}
+
+
+class RecordBankTransactionInput(BaseModel):
+    date: datetime.date = Field(..., description="Transaction date")
+    description: str = Field(..., min_length=1, max_length=500, description="Transaction description")
+    amount: Decimal = Field(..., gt=Decimal("0"), description="Transaction amount")
+    type: str = Field(..., description="'debit' or 'credit'")
+    status: str = Field(default="cleared", description="'cleared' or 'pending'")
+    reference: Optional[str] = Field(default=None, max_length=100, description="Reference (cheque no, invoice)")
+    balance_after: Optional[Decimal] = Field(default=None, description="Running balance after this transaction")
+    account_id: str = Field(..., description="Bank account ID (e.g. 1100-Bank Account)")
+    custom_fields: Optional[dict] = Field(default=None, description="Custom field name->value pairs")
+
+
+class RecordBankTransactionOutput(BaseModel):
+    transaction_id: str
+    date: date
+    description: str
+    amount: Decimal
+    type: str
+    status: str
+    reference: Optional[str]
+    balance_after: Optional[Decimal]
+    account_id: str
+    custom_fields: Optional[dict]
+    message: str
 
 
 # --- Bank Accounts ---

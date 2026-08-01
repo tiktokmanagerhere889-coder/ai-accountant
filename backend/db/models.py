@@ -76,6 +76,7 @@ class BankTransaction(Base):
     type = Column(String, nullable=False)
     status = Column(String, nullable=False)
     reference = Column(String)
+    custom_fields = Column(Text, nullable=True)  # JSON string for custom fields
     balance_after = Column(Numeric, nullable=False)
     account_id = Column(String, nullable=False, index=True)
 
