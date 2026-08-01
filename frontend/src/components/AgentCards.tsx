@@ -22,29 +22,11 @@ export function downloadExport(format: "xlsx" | "csv", agent?: string) {
 
 export default function AgentCards() {
   const [expandedAgent, setExpandedAgent] = useState<string | null>(null);
-  const clickTimer = useRef<number | undefined>(undefined);
 
-  const handleClick = (agentId: string) => {
-    clearTimeout(clickTimer.current);
-    clickTimer.current = window.setTimeout(() => {
-      setExpandedAgent(agentId);
-    }, 250);
-  };
-
-  const handleDoubleClick = (agentId: string) => {
-    clearTimeout(clickTimer.current);
-    setExpandedAgent(null);
-    downloadExport("xlsx", agentId);
-  };
-
-  // Unified handler using e.detail (1 = single, 2 = double) — works even if
-  // the browser fires both events, so a double-click never also triggers export.
-  const handleCardClick = (e: React.MouseEvent, agentId: string) => {
-    if (e.detail === 2) {
-      handleDoubleClick(agentId);
-    } else if (e.detail === 1) {
-      handleClick(agentId);
-    }
+  // Single click always toggles the tools list. Export is only via the
+  // per-card XLSX/CSV buttons (no double-click ambiguity).
+  const toggleExpand = (agentId: string) => {
+    setExpandedAgent((prev) => (prev === agentId ? null : agentId));
   };
 
   return (
@@ -55,7 +37,7 @@ export default function AgentCards() {
         </h2>
         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1 flex items-center gap-1.5">
           <MousePointerClick className="w-3.5 h-3.5" />
-          Single-click a card to view its tools. Double-click to export that agent&apos;s data as XLSX.
+          Click a card to view its tools. Use the XLSX / CSV buttons to export that agent&apos;s data.
         </p>
       </div>
 
@@ -67,7 +49,7 @@ export default function AgentCards() {
           return (
             <div
               key={agent.id}
-              onClick={(e) => handleCardClick(e, agent.id)}
+              onClick={() => toggleExpand(agent.id)}
               className={`group cursor-pointer rounded-lg border bg-surface-light dark:bg-surface-dark border-gray-200 dark:border-gray-800 transition-all select-none ${
                 expanded
                   ? "ring-2 ring-accent-light border-accent-light shadow-md"
@@ -115,8 +97,23 @@ export default function AgentCards() {
                       )}
                     </div>
                   ))}
-                  <div className="text-[10px] text-gray-400 dark:text-gray-500 pt-1">
-                    Double-click this card to download XLSX export
+                  {/* Per-card export buttons (stopPropagation so card click doesn't toggle) */}
+                  <div className="flex items-center gap-2 pt-2 border-t border-gray-200 dark:border-gray-800">
+                    <span className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-wider font-bold">
+                      Export
+                    </span>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); downloadExport("xlsx", agent.id); }}
+                      className="text-[10px] px-2 py-1 rounded bg-accent-light/10 text-accent-light hover:bg-accent-light/20 font-semibold"
+                    >
+                      XLSX
+                    </button>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); downloadExport("csv", agent.id); }}
+                      className="text-[10px] px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 font-semibold"
+                    >
+                      CSV
+                    </button>
                   </div>
                 </div>
               )}
