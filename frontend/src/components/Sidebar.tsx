@@ -1,6 +1,6 @@
 import React from "react";
 import { AGENTS_DATA, AgentDef } from "./agentsData";
-import { LayoutDashboard, Settings, User, BookOpen } from "lucide-react";
+import { LayoutDashboard, LayoutGrid, Settings, User, BookOpen } from "lucide-react";
 
 interface SidebarProps {
   currentView: string;
@@ -77,6 +77,21 @@ export default function Sidebar({
           >
             <LayoutDashboard className="w-5 h-5 flex-shrink-0" />
             {!collapsed && <span>Dashboard Overview</span>}
+          </button>
+        </div>
+
+        {/* Agents Link */}
+        <div>
+          <button
+            onClick={() => onSelectView("agents")}
+            className={`w-full flex items-center gap-3 px-3 py-2 rounded text-sm transition-colors ${
+              currentView === "agents"
+                ? "bg-accent-light text-white font-medium"
+                : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+            }`}
+          >
+            <LayoutGrid className="w-5 h-5 flex-shrink-0" />
+            {!collapsed && <span>Agents</span>}
           </button>
         </div>
 

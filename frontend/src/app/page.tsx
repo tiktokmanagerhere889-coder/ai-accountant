@@ -1,14 +1,15 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { Sun, Moon, Calendar, Database } from "lucide-react";
+import { Sun, Moon, Calendar, Database, Download, FileDown } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import ChatPanel from "@/components/ChatPanel";
 import Dashboard from "@/components/Dashboard";
 import AgentForms from "@/components/AgentForms";
 import DirectFeatures from "@/components/DirectFeatures";
 import SettingsModal from "@/components/SettingsModal";
+import AgentCards, { downloadExport } from "@/components/AgentCards";
 import { AGENTS_DATA } from "@/components/agentsData";
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
@@ -39,6 +40,8 @@ export default function Home() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dbHealthy, setDbHealthy] = useState(true);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
+  const [exportOpen, setExportOpen] = useState(false);
+  const exportRef = useRef<HTMLDivElement | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
@@ -66,6 +69,17 @@ export default function Home() {
       root.classList.remove("dark");
     }
   }, [darkMode]);
+
+  // Close export dropdown on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (exportRef.current && !exportRef.current.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleOutsideClick);
+    return () => document.removeEventListener("mousedown", handleOutsideClick);
+  }, []);
 
   const selectedAgent = AGENTS_DATA.find((a) => a.id === currentView);
 
@@ -107,6 +121,39 @@ export default function Home() {
           >
             {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
+
+          {/* Export Dropdown */}
+          <div className="relative" ref={exportRef}>
+            <button
+              onClick={() => setExportOpen(!exportOpen)}
+              aria-label="Export Data"
+              className="flex items-center gap-1.5 p-2 rounded bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 font-medium"
+            >
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export</span>
+            </button>
+
+            {exportOpen && (
+              <div className="absolute right-0 mt-2 w-72 max-h-[70vh] overflow-y-auto rounded border bg-surface-light dark:bg-surface-dark border-gray-200 dark:border-gray-800 shadow-lg z-50 py-2 text-sm">
+                <ExportRow
+                  label="All Data"
+                  agent="all"
+                  onSelect={() => setExportOpen(false)}
+                />
+
+                <div className="border-t border-gray-200 dark:border-gray-800 my-1" />
+
+                {AGENTS_DATA.map((agent) => (
+                  <ExportRow
+                    key={agent.id}
+                    label={agent.name}
+                    agent={agent.id}
+                    onSelect={() => setExportOpen(false)}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -129,6 +176,8 @@ export default function Home() {
               refreshTrigger={refreshTrigger}
             />
           )}
+
+          {currentView === "agents" && <AgentCards />}
 
           {currentView === "audit-trail" && <DirectFeatures view="audit-trail" />}
 
@@ -153,5 +202,74 @@ export default function Home() {
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
     </div>
     </ErrorBoundary>
+  );
+}
+
+// One export dropdown row: label + [XLSX] [CSV] mini-buttons
+function ExportRow({
+  label,
+  agent,
+  onSelect,
+}: {
+  label: string;
+  agent: string;
+  onSelect: () => void;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => {
+        downloadExport("xlsx", agent);
+        onSelect();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          downloadExport("xlsx", agent);
+          onSelect();
+        }
+      }}
+      className="flex items-center justify-between gap-3 px-4 py-2 hover:bg-gray-100 dark:hover:bg-gray-800 cursor-pointer"
+    >
+      <span className="flex items-center gap-2 font-medium text-gray-800 dark:text-gray-200 min-w-0">
+        <FileDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+        <span className="truncate">{label}</span>
+      </span>
+      <span className="flex items-center gap-1 flex-shrink-0">
+        <ExportMiniButton
+          format="xlsx"
+          agent={agent}
+          onSelect={onSelect}
+        />
+        <ExportMiniButton
+          format="csv"
+          agent={agent}
+          onSelect={onSelect}
+        />
+      </span>
+    </div>
+  );
+}
+
+function ExportMiniButton({
+  format,
+  agent,
+  onSelect,
+}: {
+  format: "xlsx" | "csv";
+  agent: string;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        downloadExport(format, agent);
+        onSelect();
+      }}
+      className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-100 hover:bg-accent-light hover:text-white dark:bg-gray-800 dark:hover:bg-accent-light text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 transition-colors"
+    >
+      {format.toUpperCase()}
+    </button>
   );
 }
