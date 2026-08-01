@@ -254,6 +254,19 @@ export const AGENTS_DATA: AgentDef[] = [
         ]
       },
       {
+        name: "reconcile_customer_statement",
+        description: "Match customer statements against AR ledgers",
+        approval: true,
+        aiOnly: false,
+        inputs: [
+          { name: "customer_contact_id", type: "text", placeholder: "Customer ID", required: true },
+          { name: "statement_date", type: "date", placeholder: "Statement Date", required: true },
+          { name: "from_date", type: "date", placeholder: "From Date", required: true },
+          { name: "to_date", type: "date", placeholder: "To Date", required: true },
+          { name: "statement_lines", type: "textarea", placeholder: "JSON lines list", required: true }
+        ]
+      },
+      {
         name: "track_cheque_clearing",
         description: "Monitor cheques lifecycles",
         approval: false,
@@ -276,6 +289,18 @@ export const AGENTS_DATA: AgentDef[] = [
           { name: "lc_type", type: "text", placeholder: "LC or BG", required: false },
           { name: "beneficiary", type: "text", placeholder: "Beneficiary Name", required: false },
           { name: "amount", type: "text", placeholder: "Amount", required: false }
+        ]
+      },
+      {
+        name: "reconcile_bank_charges",
+        description: "Match bank charge transactions against ledger",
+        approval: false,
+        aiOnly: false,
+        inputs: [
+          { name: "bank_account_id", type: "text", placeholder: "Bank ID e.g. BA-001", required: true },
+          { name: "from_date", type: "date", placeholder: "From Date", required: true },
+          { name: "to_date", type: "date", placeholder: "To Date", required: true },
+          { name: "charge_type", type: "text", placeholder: "service / fee (optional)", required: false }
         ]
       }
     ]
@@ -315,6 +340,47 @@ export const AGENTS_DATA: AgentDef[] = [
         ]
       },
       {
+        name: "calculate_amortization",
+        description: "Intangible assets amortization schedules",
+        approval: false,
+        aiOnly: false,
+        inputs: [
+          { name: "asset_id", type: "text", placeholder: "Asset ID (blank = all active)", required: false },
+          { name: "period_date", type: "date", placeholder: "Period Date", required: false }
+        ]
+      },
+      {
+        name: "reconcile_payroll",
+        description: "Reconcile payroll against ledger salary expense",
+        approval: false,
+        aiOnly: false,
+        inputs: [
+          { name: "from_date", type: "date", placeholder: "From Date", required: true },
+          { name: "to_date", type: "date", placeholder: "To Date", required: true },
+          { name: "employee_name", type: "text", placeholder: "Employee Name (optional)", required: false }
+        ]
+      },
+      {
+        name: "get_ar_aging_report",
+        description: "Accounts receivable aging report (customer balances)",
+        approval: false,
+        aiOnly: false,
+        inputs: [
+          { name: "as_of_date", type: "date", placeholder: "As of Date", required: false },
+          { name: "customer_contact_id", type: "text", placeholder: "Customer ID (optional)", required: false }
+        ]
+      },
+      {
+        name: "get_ap_aging_report",
+        description: "Accounts payable aging report (vendor balances)",
+        approval: false,
+        aiOnly: false,
+        inputs: [
+          { name: "as_of_date", type: "date", placeholder: "As of Date", required: false },
+          { name: "vendor_contact_id", type: "text", placeholder: "Vendor ID (optional)", required: false }
+        ]
+      },
+      {
         name: "analyze_budget_variance",
         description: "Compares projections against actual spendings",
         approval: false,
@@ -331,6 +397,16 @@ export const AGENTS_DATA: AgentDef[] = [
         aiOnly: false,
         inputs: [
           { name: "days", type: "number", placeholder: "e.g. 30", required: true }
+        ]
+      },
+      {
+        name: "get_loan_debt_schedule",
+        description: "Loan/debt amortisation schedule",
+        approval: false,
+        aiOnly: false,
+        inputs: [
+          { name: "loan_id", type: "text", placeholder: "Loan ID", required: true },
+          { name: "as_of_date", type: "date", placeholder: "As of Date (optional)", required: false }
         ]
       }
     ]
