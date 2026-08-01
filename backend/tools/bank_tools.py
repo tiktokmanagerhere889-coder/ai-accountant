@@ -128,12 +128,19 @@ def record_bank_transaction(input: RecordBankTransactionInput, db: Session) -> R
     if input.status not in ("cleared", "pending"):
         raise ValueError("status must be 'cleared' or 'pending'")
 
-    # Validate account exists
+    # Ensure bank account exists — if the user typed a new account id, create it
+    # dynamically (no hardcoded accounts). Account name is derived from the id.
     account = db.execute(
         select(BankAccount).where(BankAccount.account_id == input.account_id)
     ).scalar_one_or_none()
     if account is None:
-        raise ValueError(f"Bank account '{input.account_id}' not found in bank_accounts")
+        account_name = input.account_id.split("-")[-1].strip() if "-" in input.account_id else input.account_id
+        db.add(BankAccount(
+            account_id=input.account_id,
+            account_name=account_name,
+            bank_name=input.account_id.split("-")[0].strip() if "-" in input.account_id else input.account_id,
+        ))
+        db.flush()
 
     txn_id = _generate_bank_txn_id(db)
     txn = BankTransaction(

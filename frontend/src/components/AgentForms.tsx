@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import axios from "axios";
 import { AgentDef } from "./agentsData";
-import { Play, ShieldAlert, AlertCircle, CheckCircle2 } from "lucide-react";
+import { Play, ShieldAlert, AlertCircle, CheckCircle2, Plus, X } from "lucide-react";
 
 interface AgentFormsProps {
   agent: AgentDef;
@@ -40,8 +40,22 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
   const [success, setSuccess] = useState<{ summary: string; recordId?: string } | null>(null);
   const [output, setOutput] = useState<string | null>(null);
   const [executionMode, setExecutionMode] = useState<"ai" | "direct">("direct");
+  // Custom fields for tools that support them (e.g. record_bank_transaction)
+  const [customFields, setCustomFields] = useState<{ name: string; value: string }[]>([]);
 
   const selectedTool = agent.tools.find((t) => t.name === activeTool);
+
+  const addCustomField = () => {
+    setCustomFields((prev) => [...prev, { name: "", value: "" }]);
+  };
+
+  const removeCustomField = (idx: number) => {
+    setCustomFields((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateCustomField = (idx: number, key: "name" | "value", val: string) => {
+    setCustomFields((prev) => prev.map((f, i) => (i === idx ? { ...f, [key]: val } : f)));
+  };
 
   const handleInputChange = (name: string, value: string) => {
     setFormData((prev) => ({ ...prev, [name]: value }));
@@ -59,11 +73,19 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
     try {
       if (executionMode === "direct") {
         // Direct execution — bypass LLM
-        const params: Record<string, string> = {};
+        const params: Record<string, any> = {};
         selectedTool.inputs.forEach((inp) => {
           const value = formData[inp.name] || inp.default || "";
           if (value) params[inp.name] = value;
         });
+
+        // Attach custom fields if any were filled (name + value)
+        const filledCustom = customFields.filter((f) => f.name.trim() && f.value.trim());
+        if (filledCustom.length) {
+          const cf: Record<string, string> = {};
+          filledCustom.forEach((f) => { cf[f.name.trim()] = f.value.trim(); });
+          params.custom_fields = cf;
+        }
 
         const response = await axios.post(`${apiBase}/tools/execute`, {
           tool_name: selectedTool.name,
@@ -130,6 +152,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
               setError(null);
               setSuccess(null);
               setOutput(null);
+              setCustomFields([]);
             }}
             className={`px-3 py-2 text-sm font-medium transition-all border-b-2 ${
               activeTool === tool.name
@@ -186,6 +209,43 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
                 )}
               </div>
             ))}
+
+            {/* Custom fields (name/value pairs) — for record_bank_transaction etc */}
+            {customFields.map((cf, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={cf.name}
+                  onChange={(e) => updateCustomField(idx, "name", e.target.value)}
+                  placeholder="Field name (e.g. Payee)"
+                  className="flex-1 text-sm px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-light"
+                />
+                <input
+                  type="text"
+                  value={cf.value}
+                  onChange={(e) => updateCustomField(idx, "value", e.target.value)}
+                  placeholder="Field value"
+                  className="flex-1 text-sm px-3 py-2 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-light"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeCustomField(idx)}
+                  aria-label="Remove custom field"
+                  className="p-2 rounded text-gray-400 hover:text-red-500 hover:bg-red-500/10 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+            <div className="flex justify-start">
+              <button
+                type="button"
+                onClick={addCustomField}
+                className="flex items-center gap-1.5 text-xs font-medium text-accent-light hover:underline"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add custom field
+              </button>
+            </div>
 
             {error && (
               <div className="flex items-center gap-2 p-3 text-sm rounded bg-red-500/10 text-red-500 border border-red-500/20">

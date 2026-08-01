@@ -25,7 +25,18 @@ export default function AgentCards() {
 
   const handleDoubleClick = (agentId: string) => {
     clearTimeout(clickTimer.current);
+    setExpandedAgent(null);
     downloadExport("xlsx", agentId);
+  };
+
+  // Unified handler using e.detail (1 = single, 2 = double) — works even if
+  // the browser fires both events, so a double-click never also triggers export.
+  const handleCardClick = (e: React.MouseEvent, agentId: string) => {
+    if (e.detail === 2) {
+      handleDoubleClick(agentId);
+    } else if (e.detail === 1) {
+      handleClick(agentId);
+    }
   };
 
   return (
@@ -48,8 +59,7 @@ export default function AgentCards() {
           return (
             <div
               key={agent.id}
-              onClick={() => handleClick(agent.id)}
-              onDoubleClick={() => handleDoubleClick(agent.id)}
+              onClick={(e) => handleCardClick(e, agent.id)}
               className={`group cursor-pointer rounded-lg border bg-surface-light dark:bg-surface-dark border-gray-200 dark:border-gray-800 transition-all select-none ${
                 expanded
                   ? "ring-2 ring-accent-light border-accent-light shadow-md"

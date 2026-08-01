@@ -135,9 +135,27 @@ def _seed_asset_configs() -> None:
 # Runner
 # ---------------------------------------------------------------------------
 
+def _ensure_bank_transactions_custom_fields() -> None:
+    """Add bank_transactions.custom_fields if missing (idempotent)."""
+    insp = inspect(engine)
+    if "bank_transactions" not in insp.get_table_names():
+        logger.info("bank_transactions table missing — skipping custom_fields migration")
+        return
+
+    cols = {c["name"] for c in insp.get_columns("bank_transactions")}
+    if "custom_fields" in cols:
+        logger.info("bank_transactions.custom_fields already present — skip")
+        return
+
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE bank_transactions ADD COLUMN custom_fields TEXT"))
+    logger.info("Added bank_transactions.custom_fields column")
+
+
 def run_migrations() -> None:
     """Run all idempotent migrations + seeds. Safe to call every startup."""
     _ensure_fetched_at_column()
+    _ensure_bank_transactions_custom_fields()
     _seed_tax_rates()
     _seed_eobi_rates()
     _seed_asset_configs()
