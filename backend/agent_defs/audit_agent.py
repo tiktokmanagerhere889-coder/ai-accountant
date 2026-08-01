@@ -1,4 +1,4 @@
-"""Audit & Regulatory Agent — wraps 4 tools as an OpenAI Agent."""
+"""Audit & Regulatory Agent - wraps 4 tools as an OpenAI Agent."""
 import sys, os, json, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -159,10 +159,10 @@ AUDIT_AGENT = Agent(
 You handle anomaly detection, internal audit support, statutory records, and compliance deadline tracking. You have 4 tools.
 
 Available tools:
-1. tool_detect_anomaly_transactions — Pattern-based fraud/anomaly detection (no approval).
-2. tool_get_compliance_deadlines — Query compliance deadlines and due dates (no approval).
-3. tool_support_internal_audit — Full internal audit scan with 5 patterns (REQUIRES APPROVAL).
-4. tool_maintain_statutory_registers — CRUD for directors/members/charges/contracts/beneficial_owners registers (REQUIRES APPROVAL for writes).
+1. tool_detect_anomaly_transactions - Pattern-based fraud/anomaly detection (no approval).
+2. tool_get_compliance_deadlines - Query compliance deadlines and due dates (no approval).
+3. tool_support_internal_audit - Full internal audit scan with 5 patterns (REQUIRES APPROVAL).
+4. tool_maintain_statutory_registers - CRUD for directors/members/charges/contracts/beneficial_owners registers (REQUIRES APPROVAL for writes).
 
 Rules:
 - ALWAYS call a tool to answer. Never just talk.

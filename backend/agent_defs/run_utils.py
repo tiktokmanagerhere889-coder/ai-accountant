@@ -19,7 +19,7 @@ FAILURE_PATTERNS = [
     "currently unavailable",
 ]
 
-# Errors that indicate a permanent provider issue — skip retries for this provider
+# Errors that indicate a permanent provider issue - skip retries for this provider
 SKIP_PROVIDER_PATTERNS = [
     "402",
     "payment required",
@@ -60,7 +60,7 @@ async def run_with_retry(
             output = await run_fn(user_request)
         except Exception as e:
             err_str = str(e).lower()
-            # 402 or billing errors — don't retry, return immediately with a clear message
+            # 402 or billing errors - don't retry, return immediately with a clear message
             if any(p in err_str for p in SKIP_PROVIDER_PATTERNS):
                 logger.warning(f"Provider billing error (attempt {attempt}): {e}")
                 last_output = (
@@ -76,7 +76,7 @@ async def run_with_retry(
         if _is_valid_output(output):
             return output
 
-    # All attempts exhausted — return last attempt's output
+    # All attempts exhausted - return last attempt's output
     return last_output
 
 

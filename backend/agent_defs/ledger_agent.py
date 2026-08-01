@@ -1,4 +1,4 @@
-"""Ledger & Master Data Agent — wraps 8 tools as an OpenAI Agent."""
+"""Ledger & Master Data Agent - wraps 8 tools as an OpenAI Agent."""
 import sys, os, json, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -134,7 +134,7 @@ def tool_get_ap_subledger(
     to_date: typing.Optional[str] = None,
     vendor_contact_id: typing.Optional[str] = None,
 ) -> str:
-    """Get Accounts Payable subledger — what the business owes vendors.
+    """Get Accounts Payable subledger - what the business owes vendors.
 
     Args:
         from_date: Start date YYYY-MM-DD.
@@ -161,7 +161,7 @@ def tool_get_ar_subledger(
     to_date: typing.Optional[str] = None,
     customer_contact_id: typing.Optional[str] = None,
 ) -> str:
-    """Get Accounts Receivable subledger — what customers owe the business.
+    """Get Accounts Receivable subledger - what customers owe the business.
 
     Args:
         from_date: Start date YYYY-MM-DD.
@@ -282,14 +282,14 @@ LEDGER_AGENT = Agent(
 You handle bookkeeping, journal entries, ledgers, charts of accounts, AP/AR subledgers, payroll, fixed assets, and vendor/customer contacts. You have 8 tools.
 
 Available tools:
-1. tool_create_journal_entry — Create a journal entry with specific debit/credit accounts.
-2. tool_get_general_ledger — Get the general ledger grouped by account.
-3. tool_suggest_chart_of_accounts — Suggest chart of accounts for a business type (NEEDS APPROVAL).
-4. tool_get_ap_subledger — Get Accounts Payable (what we owe vendors).
-5. tool_get_ar_subledger — Get Accounts Receivable (what customers owe us).
-6. tool_get_payroll_ledger — Get payroll records for a period.
-7. tool_categorize_fixed_asset — Categorize a fixed asset with depreciation suggestion (NEEDS APPROVAL).
-8. tool_manage_contact — Add/update/delete/search vendor or customer contacts.
+1. tool_create_journal_entry - Create a journal entry with specific debit/credit accounts.
+2. tool_get_general_ledger - Get the general ledger grouped by account.
+3. tool_suggest_chart_of_accounts - Suggest chart of accounts for a business type (NEEDS APPROVAL).
+4. tool_get_ap_subledger - Get Accounts Payable (what we owe vendors).
+5. tool_get_ar_subledger - Get Accounts Receivable (what customers owe us).
+6. tool_get_payroll_ledger - Get payroll records for a period.
+7. tool_categorize_fixed_asset - Categorize a fixed asset with depreciation suggestion (NEEDS APPROVAL).
+8. tool_manage_contact - Add/update/delete/search vendor or customer contacts.
 
 Rules:
 - ALWAYS call a tool to answer. Never just talk.

@@ -37,7 +37,7 @@ from tools.schemas import (
 
 
 # ---------------------------------------------------------------------------
-# Helper – split "1000-Cash" into (code, name)
+# Helper - split "1000-Cash" into (code, name)
 # ---------------------------------------------------------------------------
 
 def _split_account(value: str):
@@ -49,7 +49,7 @@ def _split_account(value: str):
 
 
 # ---------------------------------------------------------------------------
-# Tool 7 – AP Aging Report
+# Tool 7 - AP Aging Report
 # ---------------------------------------------------------------------------
 
 def get_ap_aging_report(
@@ -156,7 +156,7 @@ def get_ap_aging_report(
 
 
 # ---------------------------------------------------------------------------
-# Tool 8 – Budget Variance Analysis
+# Tool 8 - Budget Variance Analysis
 # ---------------------------------------------------------------------------
 
 def analyze_budget_variance(
@@ -286,7 +286,7 @@ def analyze_budget_variance(
 
 
 # ---------------------------------------------------------------------------
-# Helper – add months to a date (avoiding dateutil dependency)
+# Helper - add months to a date (avoiding dateutil dependency)
 # ---------------------------------------------------------------------------
 
 def _add_months(source: date, months: int) -> date:
@@ -300,7 +300,7 @@ def _add_months(source: date, months: int) -> date:
 
 
 # ---------------------------------------------------------------------------
-# Tool 9 – Loan / Debt Schedule
+# Tool 9 - Loan / Debt Schedule
 # ---------------------------------------------------------------------------
 
 def get_loan_debt_schedule(
@@ -461,7 +461,7 @@ def get_loan_debt_schedule(
 
 
 # ---------------------------------------------------------------------------
-# Tool 10 – Cash Flow Forecast
+# Tool 10 - Cash Flow Forecast
 # ---------------------------------------------------------------------------
 
 # Revenue accounts start with "4"; expense accounts start with "5", "6", or "8"
@@ -584,7 +584,7 @@ def forecast_cash_flow(
 
 
 # ---------------------------------------------------------------------------
-# Tool 1 – Review Unpaid Bills
+# Tool 1 - Review Unpaid Bills
 # ---------------------------------------------------------------------------
 
 def review_unpaid_bills(
@@ -648,7 +648,7 @@ def review_unpaid_bills(
 
 
 # ---------------------------------------------------------------------------
-# Tool 2 – Calculate Prepaid Adjustment
+# Tool 2 - Calculate Prepaid Adjustment
 # ---------------------------------------------------------------------------
 
 def calculate_prepaid_adjustment(
@@ -696,7 +696,7 @@ def calculate_prepaid_adjustment(
 
 
 # ---------------------------------------------------------------------------
-# Tool 3 – Calculate Depreciation
+# Tool 3 - Calculate Depreciation
 # ---------------------------------------------------------------------------
 
 def calculate_depreciation(
@@ -775,7 +775,7 @@ def calculate_depreciation(
 
 
 # ---------------------------------------------------------------------------
-# Tool 4 – Calculate Amortization
+# Tool 4 - Calculate Amortization
 # ---------------------------------------------------------------------------
 
 def calculate_amortization(
@@ -852,7 +852,7 @@ def calculate_amortization(
 
 
 # ---------------------------------------------------------------------------
-# Tool 5 – Reconcile Payroll
+# Tool 5 - Reconcile Payroll
 # ---------------------------------------------------------------------------
 
 def reconcile_payroll(
@@ -928,7 +928,7 @@ def reconcile_payroll(
 
 
 # ---------------------------------------------------------------------------
-# Tool 6 – AR Aging Report
+# Tool 6 - AR Aging Report
 # ---------------------------------------------------------------------------
 
 def get_ar_aging_report(

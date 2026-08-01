@@ -25,12 +25,12 @@ def _ensure_fetched_at_column() -> None:
     """Add exchange_rates.fetched_at if it does not already exist (idempotent)."""
     insp = inspect(engine)
     if "exchange_rates" not in insp.get_table_names():
-        logger.info("exchange_rates table missing — skipping fetched_at migration")
+        logger.info("exchange_rates table missing - skipping fetched_at migration")
         return
 
     cols = {c["name"] for c in insp.get_columns("exchange_rates")}
     if "fetched_at" in cols:
-        logger.info("exchange_rates.fetched_at already present — skip")
+        logger.info("exchange_rates.fetched_at already present - skip")
         return
 
     with engine.begin() as conn:
@@ -39,7 +39,7 @@ def _ensure_fetched_at_column() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 2. Seed tax rates (idempotent — check-then-insert, no unique constraint)
+# 2. Seed tax rates (idempotent - check-then-insert, no unique constraint)
 # ---------------------------------------------------------------------------
 
 DEFAULT_TAX_RATES = [
@@ -68,7 +68,7 @@ def _seed_tax_rates() -> None:
                 {"t": tax_type},
             ).scalar()
             if exists:
-                logger.info("tax_rates %s already present — skip", tax_type)
+                logger.info("tax_rates %s already present - skip", tax_type)
                 continue
             conn.execute(
                 text(
@@ -81,7 +81,7 @@ def _seed_tax_rates() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. Seed EOBI rates (idempotent — check-then-insert, no unique constraint)
+# 3. Seed EOBI rates (idempotent - check-then-insert, no unique constraint)
 # ---------------------------------------------------------------------------
 
 def _seed_eobi_rates() -> None:
@@ -90,7 +90,7 @@ def _seed_eobi_rates() -> None:
             text("SELECT 1 FROM eobi_rates WHERE rate_type = 'standard' LIMIT 1")
         ).scalar()
         if exists:
-            logger.info("eobi_rates standard already present — skip")
+            logger.info("eobi_rates standard already present - skip")
             return
         conn.execute(
             text(
@@ -103,7 +103,7 @@ def _seed_eobi_rates() -> None:
 
 
 # ---------------------------------------------------------------------------
-# 4. Seed asset depreciation configs (idempotent — config_key is unique)
+# 4. Seed asset depreciation configs (idempotent - config_key is unique)
 # ---------------------------------------------------------------------------
 
 ASSET_DEPRECIATION_CONFIGS = {
@@ -124,7 +124,7 @@ def _seed_asset_configs() -> None:
             ),
             {"cfg": json.dumps(ASSET_DEPRECIATION_CONFIGS)},
         )
-        # idempotent regardless — count to report
+        # idempotent regardless - count to report
         present = conn.execute(
             text("SELECT count(*) FROM system_config WHERE config_key = 'asset_depreciation_configs'")
         ).scalar()
@@ -139,12 +139,12 @@ def _ensure_bank_transactions_custom_fields() -> None:
     """Add bank_transactions.custom_fields if missing (idempotent)."""
     insp = inspect(engine)
     if "bank_transactions" not in insp.get_table_names():
-        logger.info("bank_transactions table missing — skipping custom_fields migration")
+        logger.info("bank_transactions table missing - skipping custom_fields migration")
         return
 
     cols = {c["name"] for c in insp.get_columns("bank_transactions")}
     if "custom_fields" in cols:
-        logger.info("bank_transactions.custom_fields already present — skip")
+        logger.info("bank_transactions.custom_fields already present - skip")
         return
 
     with engine.begin() as conn:

@@ -1,4 +1,4 @@
-"""Tool: manage_contact — add, update, delete, and search contacts."""
+"""Tool: manage_contact - add, update, delete, and search contacts."""
 from typing import Optional, List
 
 from sqlalchemy.orm import Session
@@ -109,7 +109,7 @@ def manage_contact(
         contact = _find_contact_by_id_or_name(db, input.contact_id, input.contact_name)
         if contact is None:
             raise ValueError(
-                "Contact with id '{}' or name '{}' not found — cannot delete.".format(
+                "Contact with id '{}' or name '{}' not found - cannot delete.".format(
                     input.contact_id or "", input.contact_name or ""
                 )
             )

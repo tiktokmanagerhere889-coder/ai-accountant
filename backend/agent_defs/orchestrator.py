@@ -1,4 +1,4 @@
-"""Orchestrator Agent — routes user requests to the right specialist agent.
+"""Orchestrator Agent - routes user requests to the right specialist agent.
 
 Uses the "Agents as Tools" pattern from OpenAI Agents SDK (not handoffs).
 The Orchestrator holds one agent-tool per specialist agent and calls them
@@ -69,7 +69,7 @@ async def agent_month_end(user_request: str) -> str:
 
 @function_tool
 async def agent_year_end(user_request: str) -> str:
-    """Route to Year-End Close & Financial Statements Agent: trial balance, P&L, balance sheet, cash flow statement, retained earnings, carry forward balances, notes to financials, close fiscal year (IRREVERSIBLE — requires approval)."""
+    """Route to Year-End Close & Financial Statements Agent: trial balance, P&L, balance sheet, cash flow statement, retained earnings, carry forward balances, notes to financials, close fiscal year (IRREVERSIBLE - requires approval)."""
     return await run_with_retry(run_year_end_agent, user_request)
 
 

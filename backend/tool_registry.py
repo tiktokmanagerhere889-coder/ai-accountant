@@ -1,4 +1,4 @@
-"""Tool registry — maps tool names to callable functions for direct execution.
+"""Tool registry - maps tool names to callable functions for direct execution.
 
 Every registered tool can be called directly via POST /tools/execute,
 bypassing the LLM orchestrator entirely.

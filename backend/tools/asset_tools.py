@@ -1,4 +1,4 @@
-"""Tool: categorize_fixed_asset — auto-categorize fixed assets and suggest depreciation parameters.
+"""Tool: categorize_fixed_asset - auto-categorize fixed assets and suggest depreciation parameters.
 
 Depreciation configs (useful life, method, residual %) are resolved from the
 `system_config` table (key: `asset_depreciation_configs`) as JSON. The user

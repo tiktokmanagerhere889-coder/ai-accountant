@@ -1,4 +1,4 @@
-"""System Admin Agent — wraps 4 tools as an OpenAI Agent."""
+"""System Admin Agent - wraps 4 tools as an OpenAI Agent."""
 import sys, os, json, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -145,10 +145,10 @@ SYSTEM_ADMIN_AGENT = Agent(
 You handle system health monitoring, usage stats, configuration management, and task scheduling. You have 4 tools.
 
 Available tools:
-1. tool_check_system_status — Run health checks on DB, providers, agents (no approval).
-2. tool_get_usage_statistics — Analyze system usage and success rates (no approval).
-3. tool_manage_system_preferences — View/update/reset company settings (REQUIRES APPROVAL for update/reset).
-4. tool_schedule_system_task — Schedule backup/export/maintenance/cleanup tasks (REQUIRES APPROVAL).
+1. tool_check_system_status - Run health checks on DB, providers, agents (no approval).
+2. tool_get_usage_statistics - Analyze system usage and success rates (no approval).
+3. tool_manage_system_preferences - View/update/reset company settings (REQUIRES APPROVAL for update/reset).
+4. tool_schedule_system_task - Schedule backup/export/maintenance/cleanup tasks (REQUIRES APPROVAL).
 
 Rules:
 - ALWAYS call a tool to answer. Never just talk.

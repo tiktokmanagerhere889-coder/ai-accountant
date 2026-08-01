@@ -1,4 +1,4 @@
-"""Agent 6 — Cost, Advanced Accounting & Budgeting Tools.
+"""Agent 6 - Cost, Advanced Accounting & Budgeting Tools.
 
 8 tools: calculate_breakeven, convert_foreign_currency, prepare_budget_forecast,
 calculate_standard_costing_variance, allocate_overhead_cost,
@@ -114,8 +114,8 @@ def convert_foreign_currency(inp: ConvertForeignCurrencyInput, db: Session) -> C
 
     Rate resolution order:
       1. Fresh cached rate from exchange_rates table (fetched within last 24h).
-      2. Live rate from open.er-api.com (free, no key) — saved to exchange_rates.
-      3. Stale cached rate — used ONLY if live fetch fails, with a clear warning.
+      2. Live rate from open.er-api.com (free, no key) - saved to exchange_rates.
+      3. Stale cached rate - used ONLY if live fetch fails, with a clear warning.
     Never falls back to 1:1 silently.
     """
     if inp.from_currency.upper() == inp.to_currency.upper():
@@ -133,7 +133,7 @@ def convert_foreign_currency(inp: ConvertForeignCurrencyInput, db: Session) -> C
     to_curr = inp.to_currency.upper()
     today = date.today()
 
-    # Step 1: Look up cached rate — fresh if fetched within last 24h
+    # Step 1: Look up cached rate - fresh if fetched within last 24h
     cached = db.query(ExchangeRate).filter(
         ExchangeRate.from_currency == from_curr,
         ExchangeRate.to_currency == to_curr,
@@ -190,10 +190,10 @@ def convert_foreign_currency(inp: ConvertForeignCurrencyInput, db: Session) -> C
             rate_date=live_date,
         )
 
-    # Step 3: Live fetch failed — use stale cached rate with a clear warning
+    # Step 3: Live fetch failed - use stale cached rate with a clear warning
     if cached:
         warning = (
-            f"Live rate fetch failed for {from_curr}→{to_curr}. "
+            f"Live rate fetch failed for {from_curr}->{to_curr}. "
             f"Using cached rate from {cached.rate_date}."
         )
         converted = _round(inp.amount * cached.rate, 2)
@@ -208,9 +208,9 @@ def convert_foreign_currency(inp: ConvertForeignCurrencyInput, db: Session) -> C
             warning=warning,
         )
 
-    # Step 4: Nothing available — hard error, never silent 1:1
+    # Step 4: Nothing available - hard error, never silent 1:1
     raise ValueError(
-        f"Could not resolve exchange rate for {from_curr}→{to_curr}: "
+        f"Could not resolve exchange rate for {from_curr}->{to_curr}: "
         "no cached rate and live API unavailable. Try again later."
     )
 
@@ -406,7 +406,7 @@ def allocate_overhead_cost(inp: AllocateOverheadCostInput, db: Session) -> Alloc
     total_basis = sum(item.value for item in inp.allocation_pool)
 
     if total_basis == Decimal("0"):
-        raise ValueError("Allocation basis values sum to zero — cannot allocate.")
+        raise ValueError("Allocation basis values sum to zero - cannot allocate.")
 
     allocations = []
     total_allocated = Decimal("0")
@@ -461,7 +461,7 @@ def calculate_revenue_recognition(
 
     if prev >= total_rec:
         raise ValueError(
-            f"Previously recognized ({prev}) >= total recognizable ({total_rec}) — "
+            f"Previously recognized ({prev}) >= total recognizable ({total_rec}) - "
             f"over-recognized or fully recognized."
         )
 
@@ -506,7 +506,7 @@ def flag_provision_contingent_liability(
         treatment = "recognize"
         status = "pending_approval"
         reasoning = (
-            f"IAS 37: Probability is '{prob}' — obligation is likely. "
+            f"IAS 37: Probability is '{prob}' - obligation is likely. "
             f"Recommend recognizing a liability of {inp.estimated_amount} "
             f"with corresponding expense. Debit: appropriate expense account, "
             f"Credit: Provision for {inp.description}."
@@ -515,14 +515,14 @@ def flag_provision_contingent_liability(
         treatment = "disclose"
         status = "draft"
         reasoning = (
-            f"IAS 37: Probability is 'possible' — obligation may arise. "
+            f"IAS 37: Probability is 'possible' - obligation may arise. "
             f"Recommend disclosure in notes only. No journal entry needed."
         )
     elif prob == "remote":
         treatment = "ignore"
         status = "draft"
         reasoning = (
-            f"IAS 37: Probability is 'remote' — obligation unlikely to arise. "
+            f"IAS 37: Probability is 'remote' - obligation unlikely to arise. "
             f"No recognition or disclosure required."
         )
     else:
@@ -552,7 +552,7 @@ def flag_related_party_transaction(
     """Check if a transaction involves a related party.
 
     Matching (hybrid):
-    1. If journal_entry.contact_id is set → look up contact.related_party directly (reliable)
+    1. If journal_entry.contact_id is set -> look up contact.related_party directly (reliable)
     2. Fallback: match journal_entry.reference against contacts.contact_id
        or contacts.contact_name (case-insensitive, trimmed)
     """
@@ -619,7 +619,7 @@ def flag_related_party_transaction(
         if matched_contact.related_party:
             reasoning += f" Marked as related party per contacts database."
         else:
-            reasoning += f" Not flagged as related party — contacts.related_party = False."
+            reasoning += f" Not flagged as related party - contacts.related_party = False."
     else:
         # Counterparty not in contacts
         related_party_status = "not_related"

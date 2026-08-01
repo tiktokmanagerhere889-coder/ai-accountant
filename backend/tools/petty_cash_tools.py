@@ -53,9 +53,9 @@ def manage_petty_cash(input: ManagePettyCashInput, db: Session) -> ManagePettyCa
         needs_replenishment = new_balance < threshold
 
         if new_balance < Decimal("0.00"):
-            message = "Balance is now negative — replenish immediately"
+            message = "Balance is now negative - replenish immediately"
         elif needs_replenishment:
-            message = "Replenishment recommended — balance below threshold"
+            message = "Replenishment recommended - balance below threshold"
 
         txn_id = _generate_transaction_id(db)
         txn = PettyCashTransaction(
@@ -98,7 +98,7 @@ def manage_petty_cash(input: ManagePettyCashInput, db: Session) -> ManagePettyCa
 
     elif action == "check_replenishment":
         needs_replenishment = fund.current_balance < threshold
-        message = "Replenishment recommended — balance below threshold" if needs_replenishment else "Balance is sufficient"
+        message = "Replenishment recommended - balance below threshold" if needs_replenishment else "Balance is sufficient"
 
     else:
         raise ValueError(f"Unknown action: {action}")

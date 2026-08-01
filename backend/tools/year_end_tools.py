@@ -47,7 +47,7 @@ def _get_prefix(code: str) -> str:
 
 
 def _is_cash_account(account: str, db: Session) -> bool:
-    """Check if an account is a cash/bank account — resolved from the user's chart."""
+    """Check if an account is a cash/bank account - resolved from the user's chart."""
     name = account.lower()
     # Safety-net name match (works even before chart populated)
     if any(k in name for k in ("cash", "bank")):
@@ -60,7 +60,7 @@ def _is_cash_account(account: str, db: Session) -> bool:
 
 
 def _is_revenue_account(account: str, db: Session) -> bool:
-    """Check if an account is a revenue account — resolved from the user's chart."""
+    """Check if an account is a revenue account - resolved from the user's chart."""
     name = account.lower()
     if any(k in name for k in ("revenue", "sales")):
         return True
@@ -72,7 +72,7 @@ def _is_revenue_account(account: str, db: Session) -> bool:
 
 
 def _is_expense_account(account: str, db: Session) -> bool:
-    """Check if an account is an expense account — resolved from the user's chart."""
+    """Check if an account is an expense account - resolved from the user's chart."""
     name = account.lower()
     if any(k in name for k in ("expense", "cost of goods", "cogs")):
         return True
@@ -123,7 +123,7 @@ def _aggregate_entries(db: Session, from_date: date, to_date: date) -> list:
 
 
 # ---------------------------------------------------------------------------
-# Tool 1 – Trial Balance
+# Tool 1 - Trial Balance
 # ---------------------------------------------------------------------------
 
 def generate_trial_balance(
@@ -189,7 +189,7 @@ def generate_trial_balance(
 
 
 # ---------------------------------------------------------------------------
-# Tool 2 – Profit & Loss
+# Tool 2 - Profit & Loss
 # ---------------------------------------------------------------------------
 
 def generate_profit_loss(
@@ -248,7 +248,7 @@ def generate_profit_loss(
 
 
 # ---------------------------------------------------------------------------
-# Tool 3 – Balance Sheet
+# Tool 3 - Balance Sheet
 # ---------------------------------------------------------------------------
 
 def generate_balance_sheet(
@@ -373,7 +373,7 @@ def generate_balance_sheet(
 
 
 # ---------------------------------------------------------------------------
-# Tool 4 – Cash Flow Statement
+# Tool 4 - Cash Flow Statement
 # ---------------------------------------------------------------------------
 
 def generate_cash_flow_statement(
@@ -416,7 +416,7 @@ def generate_cash_flow_statement(
         c_code, c_name = _split_account(entry.credit_account)
         desc = entry.description or ""
 
-        # Determine cash impact — accounts resolved from the user's chart
+        # Determine cash impact - accounts resolved from the user's chart
         cash_on_debit = _is_cash_account(entry.debit_account, db)
         cash_on_credit = _is_cash_account(entry.credit_account, db)
 
@@ -485,7 +485,7 @@ def generate_cash_flow_statement(
 
 
 # ---------------------------------------------------------------------------
-# Tool 5 – Transfer Retained Earnings
+# Tool 5 - Transfer Retained Earnings
 # ---------------------------------------------------------------------------
 
 def transfer_retained_earnings(
@@ -562,7 +562,7 @@ def transfer_retained_earnings(
 
 
 # ---------------------------------------------------------------------------
-# Tool 6 – Carry Forward Balances
+# Tool 6 - Carry Forward Balances
 # ---------------------------------------------------------------------------
 
 def carry_forward_balances(
@@ -651,7 +651,7 @@ def carry_forward_balances(
 
 
 # ---------------------------------------------------------------------------
-# Tool 7 – Draft Notes to Financials
+# Tool 7 - Draft Notes to Financials
 # ---------------------------------------------------------------------------
 
 def draft_notes_to_financials(
@@ -756,14 +756,14 @@ def draft_notes_to_financials(
 
 
 # ---------------------------------------------------------------------------
-# Tool 8 – Close Fiscal Year (requires approval)
+# Tool 8 - Close Fiscal Year (requires approval)
 # ---------------------------------------------------------------------------
 
 def close_fiscal_year(
     input: CloseFiscalYearInput,
     db: Session,
 ) -> CloseFiscalYearOutput:
-    """Close a fiscal year — irreversible.
+    """Close a fiscal year - irreversible.
 
     Requires confirm=True. Prevents double-close by checking fiscal_year_close table.
     Creates closing journal entries:

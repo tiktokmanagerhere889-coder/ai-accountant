@@ -1,4 +1,4 @@
-"""Daily Entry Agent — wraps 5 tools as an OpenAI Agent."""
+"""Daily Entry Agent - wraps 5 tools as an OpenAI Agent."""
 import sys
 import os
 import json
@@ -211,17 +211,17 @@ You ALWAYS call a function tool to answer the user. You cannot answer without ca
 
 Available tools:
 
-1. tool_check_cash_position(as_of_date, account_id) — Cash position / balance
-2. tool_record_transaction_nl(description, posted_date, reference) — Record transaction
-3. tool_check_bank_transactions(account_id, from_date, to_date, status, limit) — Bank query
-4. tool_manage_petty_cash(action, fund_id, amount, description, paid_by) — Petty cash
-5. tool_process_receipt_image(image_data, image_filename, suggested_account) — Process receipt image (NEEDS APPROVAL)
+1. tool_check_cash_position(as_of_date, account_id) - Cash position / balance
+2. tool_record_transaction_nl(description, posted_date, reference) - Record transaction
+3. tool_check_bank_transactions(account_id, from_date, to_date, status, limit) - Bank query
+4. tool_manage_petty_cash(action, fund_id, amount, description, paid_by) - Petty cash
+5. tool_process_receipt_image(image_data, image_filename, suggested_account) - Process receipt image (NEEDS APPROVAL)
 
 Rules:
 - ALWAYS call the correct tool.
 - Pass dates in YYYY-MM-DD format.
 - For 'today' pass the actual date string like '2026-07-28'.
-- Never say you can't do something — just call the tool.
+- Never say you can't do something - just call the tool.
 """,
     tools=[
         tool_check_cash_position,

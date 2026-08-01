@@ -1,4 +1,4 @@
-"""Month-End Reporting Agent — wraps 10 tools as an OpenAI Agent."""
+"""Month-End Reporting Agent - wraps 10 tools as an OpenAI Agent."""
 import sys, os, json, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -155,7 +155,7 @@ def tool_reconcile_payroll(from_date: str, to_date: str, employee_name: typing.O
 # -- Tool 6: get_ar_aging_report --
 @function_tool
 def tool_get_ar_aging_report(as_of_date: str = "", customer_contact_id: typing.Optional[str] = None) -> str:
-    """Generate AR aging report — what customers owe us.
+    """Generate AR aging report - what customers owe us.
 
     Args:
         as_of_date: Date in YYYY-MM-DD format.
@@ -176,7 +176,7 @@ def tool_get_ar_aging_report(as_of_date: str = "", customer_contact_id: typing.O
 # -- Tool 7: get_ap_aging_report --
 @function_tool
 def tool_get_ap_aging_report(as_of_date: str = "", vendor_contact_id: typing.Optional[str] = None) -> str:
-    """Generate AP aging report — what we owe vendors.
+    """Generate AP aging report - what we owe vendors.
 
     Args:
         as_of_date: Date in YYYY-MM-DD format.
@@ -274,16 +274,16 @@ MONTH_END_AGENT = Agent(
 You handle all month-end close tasks. You have 10 tools.
 
 Available tools:
-1. tool_review_unpaid_bills — Review unpaid bills/AP items as of a date.
-2. tool_calculate_prepaid_adjustment — Calculate monthly prepaid expense adjustments.
-3. tool_calculate_depreciation — Calculate monthly straight-line depreciation for fixed assets.
-4. tool_calculate_amortization — Calculate monthly amortization for intangible assets.
-5. tool_reconcile_payroll — Reconcile payroll entries against GL salary expense.
-6. tool_get_ar_aging_report — Generate AR aging report (what customers owe).
-7. tool_get_ap_aging_report — Generate AP aging report (what we owe vendors).
-8. tool_analyze_budget_variance — Analyze budget vs actual variance.
-9. tool_get_loan_debt_schedule — Get or compute loan amortisation schedule.
-10. tool_forecast_cash_flow — Forecast future cash flows from historical averages (NEEDS APPROVAL).
+1. tool_review_unpaid_bills - Review unpaid bills/AP items as of a date.
+2. tool_calculate_prepaid_adjustment - Calculate monthly prepaid expense adjustments.
+3. tool_calculate_depreciation - Calculate monthly straight-line depreciation for fixed assets.
+4. tool_calculate_amortization - Calculate monthly amortization for intangible assets.
+5. tool_reconcile_payroll - Reconcile payroll entries against GL salary expense.
+6. tool_get_ar_aging_report - Generate AR aging report (what customers owe).
+7. tool_get_ap_aging_report - Generate AP aging report (what we owe vendors).
+8. tool_analyze_budget_variance - Analyze budget vs actual variance.
+9. tool_get_loan_debt_schedule - Get or compute loan amortisation schedule.
+10. tool_forecast_cash_flow - Forecast future cash flows from historical averages (NEEDS APPROVAL).
 
 Rules:
 - ALWAYS call a tool to answer. Never just talk.

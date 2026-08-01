@@ -1,4 +1,4 @@
-"""check_cash_position — real-time cash position from journal entries."""
+"""check_cash_position - real-time cash position from journal entries."""
 from __future__ import annotations
 
 from decimal import Decimal
@@ -13,7 +13,7 @@ from tools.schemas import CheckCashPositionInput, CheckCashPositionOutput
 
 
 def _is_cash_account(account_code: str, db: Session) -> bool:
-    """Check if an account is a cash/bank account — resolved from the user's chart."""
+    """Check if an account is a cash/bank account - resolved from the user's chart."""
     name = account_code.lower()
     if any(k in name for k in ("cash", "bank")):
         return True
@@ -27,9 +27,9 @@ def check_cash_position(input: CheckCashPositionInput, db: Session) -> CheckCash
     """Real-time cash position aggregated from journal entries.
 
     Queries all posted journal entries up to as_of_date, groups by account,
-    and returns the net position. Uses deterministic DB aggregation — no AI.
+    and returns the net position. Uses deterministic DB aggregation - no AI.
     """
-    # Normalize "ALL" (case-insensitive) to None → consolidated cash view.
+    # Normalize "ALL" (case-insensitive) to None -> consolidated cash view.
     # This lets users type ALL in the account field to see the full cash
     # position instead of the literal account "ALL" not being found.
     account_filter = input.account_id

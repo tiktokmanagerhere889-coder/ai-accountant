@@ -1,4 +1,4 @@
-"""Agent 7 — Tax Tools.
+"""Agent 7 - Tax Tools.
 
 8 tools: calculate_withholding_tax, get_tax_planning_advice,
 calculate_advance_minimum_tax, calculate_eobi_deductions,
@@ -47,7 +47,7 @@ def _rate_or_zero(db: Session, tax_type: str, effective_date: date = None) -> tu
     """Look up a tax rate from the DB. Returns (rate, source_label).
 
     If the rate is not configured in tax_rates, returns (0, 'not_configured')
-    so the caller can surface a clear message — never a silent hardcoded rate.
+    so the caller can surface a clear message - never a silent hardcoded rate.
     """
     record = _get_tax_rate(db, tax_type, effective_date)
     if record is None:
@@ -90,7 +90,7 @@ def calculate_withholding_tax(inp: CalculateWithholdingTaxInput, db: Session) ->
     """Calculate withholding tax (WHT) on a payment amount.
 
     Rate is resolved from tax_rates table by withholding_type (wht_<type>).
-    No hardcoded fallback — if the rate is not configured, a clear error is
+    No hardcoded fallback - if the rate is not configured, a clear error is
     raised instead of silently using a stale/assumed percentage.
     """
     rate, source = _rate_or_zero(db, f"wht_{inp.withholding_type}", inp.transaction_date)
@@ -190,7 +190,7 @@ def calculate_advance_minimum_tax(inp: CalculateAdvanceMinimumTaxInput, db: Sess
     """Calculate advance minimum tax (AMT) on turnover.
 
     Rate is resolved from tax_rates table by business type (amt_<type>).
-    No hardcoded fallback — if the rate is not configured, a clear error is raised.
+    No hardcoded fallback - if the rate is not configured, a clear error is raised.
     """
     rate, basis = _rate_or_zero(db, f"amt_{inp.business_type}")
     if rate == Decimal("0"):
@@ -218,7 +218,7 @@ def calculate_eobi_deductions(inp: CalculateEobiDeductionsInput, db: Session) ->
     """Calculate EOBI (Employees' Old-Age Benefits Institution) deductions.
 
     Employer/employee rates resolved from eobi_rates table. No hardcoded
-    fallback — if no rate is configured, a clear error is raised.
+    fallback - if no rate is configured, a clear error is raised.
     """
     rate_record = _get_eobi_rate(db, inp.employee_category or "standard")
     if rate_record is None:
@@ -306,7 +306,7 @@ def adjust_sales_tax_input_output(inp: AdjustSalesTaxInputOutputInput, db: Sessi
     if net_tax < Decimal("0"):
         refund = abs(net_tax)
         net_tax = Decimal("0")
-        adjustments.append(f"Input tax exceeds output tax — refund scenario: {refund}")
+        adjustments.append(f"Input tax exceeds output tax - refund scenario: {refund}")
 
     summary_parts = [
         f"Period {inp.period}/{inp.fiscal_year}:",
@@ -384,7 +384,7 @@ def flag_tax_exemption_zero_rating(inp: FlagTaxExemptionZeroRatingInput, db: Ses
         elif "export" in (entry.description or "").lower():
             exemption_type = "potential_export"
             confidence = "medium"
-            reasoning = "Description references export — manual verification needed"
+            reasoning = "Description references export - manual verification needed"
         elif "salary" in account_name.lower() or "wage" in account_name.lower():
             exemption_type = "exempt_income"
             confidence = "medium"
@@ -392,7 +392,7 @@ def flag_tax_exemption_zero_rating(inp: FlagTaxExemptionZeroRatingInput, db: Ses
         elif amount < Decimal("1000"):
             exemption_type = "low_value"
             confidence = "low"
-            reasoning = f"Low-value entry ({amount}) — likely not subject to sales tax"
+            reasoning = f"Low-value entry ({amount}) - likely not subject to sales tax"
         else:
             continue
 
@@ -412,7 +412,7 @@ def flag_tax_exemption_zero_rating(inp: FlagTaxExemptionZeroRatingInput, db: Ses
         high_conf = sum(1 for f in flagged if f.confidence == "high")
         med_conf = sum(1 for f in flagged if f.confidence == "medium")
         if high_conf:
-            recommendation_parts.append(f"{high_conf} entries have high confidence — likely qualify.")
+            recommendation_parts.append(f"{high_conf} entries have high confidence - likely qualify.")
         if med_conf:
             recommendation_parts.append(f"{med_conf} entries require manual verification.")
     else:
@@ -438,7 +438,7 @@ def prepare_sales_tax_filing(inp: PrepareSalesTaxFilingInput, db: Session) -> Pr
     if not inp.confirm:
         raise ValueError(
             "Sales tax filing preparation requires confirm=True. "
-            "This prepares the data only — you will submit via FBR portal."
+            "This prepares the data only - you will submit via FBR portal."
         )
 
     filing_id = f"ST-{inp.fiscal_year}-{inp.period:02d}-{uuid.uuid4().hex[:4].upper()}"
@@ -512,7 +512,7 @@ def prepare_income_tax_filing(inp: PrepareIncomeTaxFilingInput, db: Session) -> 
     if not inp.confirm:
         raise ValueError(
             "Income tax filing preparation requires confirm=True. "
-            "This prepares the data only — you will submit via FBR portal."
+            "This prepares the data only - you will submit via FBR portal."
         )
 
     filing_id = f"IT-{inp.fiscal_year}-{uuid.uuid4().hex[:4].upper()}"

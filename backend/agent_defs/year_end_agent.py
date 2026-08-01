@@ -1,4 +1,4 @@
-"""Year-End Close & Financial Statements Agent — wraps 8 tools as an OpenAI Agent."""
+"""Year-End Close & Financial Statements Agent - wraps 8 tools as an OpenAI Agent."""
 import sys, os, json, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -189,7 +189,7 @@ def tool_draft_notes_to_financials(fiscal_year: int, note_types: typing.Optional
 # -- Tool 8: close_fiscal_year --
 @function_tool
 def tool_close_fiscal_year(fiscal_year: int, closing_date: str = "", confirm: bool = False) -> str:
-    """CLOSE a fiscal year — IRREVERSIBLE. Requires confirm=True.
+    """CLOSE a fiscal year - IRREVERSIBLE. Requires confirm=True.
 
     Args:
         fiscal_year: Fiscal year to close e.g. 2026.
@@ -216,21 +216,21 @@ YEAR_END_AGENT = Agent(
 You handle all year-end closing tasks and financial statement generation. You have 8 tools.
 
 Available tools:
-1. tool_generate_trial_balance — Trial balance: checks if total debits = total credits.
-2. tool_generate_profit_loss — Profit & Loss statement (income statement).
-3. tool_generate_balance_sheet — Balance sheet: verifies assets = liabilities + equity.
-4. tool_generate_cash_flow_statement — Cash flow statement (operating/investing/financing).
-5. tool_transfer_retained_earnings — Transfer net income to retained earnings.
-6. tool_carry_forward_balances — Carry forward balance sheet balances to new year.
-7. tool_draft_notes_to_financials — Draft explanatory notes to financial statements.
-8. tool_close_fiscal_year — Close fiscal year (IRREVERSIBLE, requires approval).
+1. tool_generate_trial_balance - Trial balance: checks if total debits = total credits.
+2. tool_generate_profit_loss - Profit & Loss statement (income statement).
+3. tool_generate_balance_sheet - Balance sheet: verifies assets = liabilities + equity.
+4. tool_generate_cash_flow_statement - Cash flow statement (operating/investing/financing).
+5. tool_transfer_retained_earnings - Transfer net income to retained earnings.
+6. tool_carry_forward_balances - Carry forward balance sheet balances to new year.
+7. tool_draft_notes_to_financials - Draft explanatory notes to financial statements.
+8. tool_close_fiscal_year - Close fiscal year (IRREVERSIBLE, requires approval).
 
 Rules:
 - ALWAYS call a tool to answer. Never just talk.
 - For tool 8 (close_fiscal_year): explicitly warn the user this is irreversible and ask for confirmation. Set confirm=True only when user agrees.
 - Pass dates in YYYY-MM-DD format.
 - Explain results in plain English after tool calls.
-- Statement order: trial balance → P&L → balance sheet → cash flow.
+- Statement order: trial balance -> P&L -> balance sheet -> cash flow.
 """,
     tools=[
         tool_generate_trial_balance, tool_generate_profit_loss,

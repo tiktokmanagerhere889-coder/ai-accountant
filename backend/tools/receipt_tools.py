@@ -46,11 +46,11 @@ def _simulate_llm_extraction(image_data: str) -> dict:
     """Simulate Cerebras/Groq LLM vision extraction.
 
     Deterministic based on image_data prefix for testing:
-    - 'NR:' prefix → non-receipt image
-    - 'BL:' prefix → blurry/partial receipt
-    - 'NG:' prefix → negative amount (edge case)
-    - 'ZD:' prefix → zero amount (edge case)
-    - otherwise → normal receipt extraction
+    - 'NR:' prefix -> non-receipt image
+    - 'BL:' prefix -> blurry/partial receipt
+    - 'NG:' prefix -> negative amount (edge case)
+    - 'ZD:' prefix -> zero amount (edge case)
+    - otherwise -> normal receipt extraction
     """
     if image_data.startswith("NR:"):
         return {
@@ -126,7 +126,7 @@ def process_receipt_image(input: ProcessReceiptImageInput, db: Session) -> Proce
     confidence = extraction["confidence"]
     confidence_float = float(confidence)
 
-    # Edge case 1: Non-receipt image — skip amount validation
+    # Edge case 1: Non-receipt image - skip amount validation
     if confidence_float < 0.3:
         status = "unrecognized_image"
         vendor_name = None
@@ -137,7 +137,7 @@ def process_receipt_image(input: ProcessReceiptImageInput, db: Session) -> Proce
         if total_amount <= Decimal("0"):
             raise ValueError("Invalid receipt amount")
 
-        # Edge case 2: Blurry/partial — still valid, just lower confidence
+        # Edge case 2: Blurry/partial - still valid, just lower confidence
         status = "extracted_pending_approval"
         vendor_name = extraction["vendor_name"]
 

@@ -18,10 +18,10 @@ dotenv_path = Path(__file__).resolve().parents[2] / ".env"
 if dotenv_path.exists():
     load_dotenv(dotenv_path, override=True)
 
-# Model configuration — Groq primary (verified against Groq's live model list 2026-07)
+# Model configuration - Groq primary (verified against Groq's live model list 2026-07)
 # primary: llama-3.3-70b-versatile (strong tool calling, free tier)
 # fallback: llama-3.1-8b-instant (fast, reliable)
-# Cerebras: gemma-4-31b (verified against Cerebras /v1/models — 2026-08)
+# Cerebras: gemma-4-31b (verified against Cerebras /v1/models - 2026-08)
 #   previous llama-3.3-70b was 404: not in Cerebras model list.
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_FALLBACK_MODEL = os.environ.get("GROQ_FALLBACK_MODEL", "llama-3.1-8b-instant")
@@ -30,7 +30,7 @@ CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "gemma-4-31b")
 def get_api_key(key_name: str) -> str:
     """Check user_api_keys table first, fall back to env var.
 
-    Safe to call before init_db() — silently falls back to env var if table doesn't exist yet.
+    Safe to call before init_db() - silently falls back to env var if table doesn't exist yet.
     """
     try:
         db = SessionLocal()

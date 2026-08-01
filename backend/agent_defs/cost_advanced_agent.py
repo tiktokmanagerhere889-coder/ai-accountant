@@ -1,4 +1,4 @@
-"""Cost, Advanced Accounting & Budgeting Agent — wraps 8 tools as an OpenAI Agent."""
+"""Cost, Advanced Accounting & Budgeting Agent - wraps 8 tools as an OpenAI Agent."""
 import sys, os, json, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -280,14 +280,14 @@ COST_ADVANCED_AGENT = Agent(
 You handle cost/management accounting, advanced accounting, and budget planning. You have 8 tools.
 
 Available tools:
-1. tool_calculate_breakeven — Break-even / CVP analysis (no approval needed).
-2. tool_convert_foreign_currency — Currency conversion using stored rates (no approval needed).
-3. tool_prepare_budget_forecast — Budget forecast from historical data (no approval needed).
-4. tool_calculate_standard_costing_variance — Standard vs actual cost analysis (REQUIRES APPROVAL).
-5. tool_allocate_overhead_cost — Overhead allocation across departments (REQUIRES APPROVAL).
-6. tool_calculate_revenue_recognition — Percentage-of-completion revenue recognition (REQUIRES APPROVAL).
-7. tool_flag_provision_contingent_liability — IAS 37 provision/contingency flagging (REQUIRES APPROVAL).
-8. tool_flag_related_party_transaction — Related-party transaction flagging (REQUIRES APPROVAL).
+1. tool_calculate_breakeven - Break-even / CVP analysis (no approval needed).
+2. tool_convert_foreign_currency - Currency conversion using stored rates (no approval needed).
+3. tool_prepare_budget_forecast - Budget forecast from historical data (no approval needed).
+4. tool_calculate_standard_costing_variance - Standard vs actual cost analysis (REQUIRES APPROVAL).
+5. tool_allocate_overhead_cost - Overhead allocation across departments (REQUIRES APPROVAL).
+6. tool_calculate_revenue_recognition - Percentage-of-completion revenue recognition (REQUIRES APPROVAL).
+7. tool_flag_provision_contingent_liability - IAS 37 provision/contingency flagging (REQUIRES APPROVAL).
+8. tool_flag_related_party_transaction - Related-party transaction flagging (REQUIRES APPROVAL).
 
 Rules:
 - ALWAYS call a tool to answer. Never just talk.

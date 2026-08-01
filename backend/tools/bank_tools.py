@@ -17,7 +17,7 @@ from tools.schemas import (
 
 
 def check_bank_transactions(input: CheckBankTransactionsInput, db: Session) -> CheckBankTransactionsOutput:
-    """Query bank transactions with optional filters. Deterministic DB query — no AI reasoning."""
+    """Query bank transactions with optional filters. Deterministic DB query - no AI reasoning."""
     from_date = input.from_date
     to_date = input.to_date
     account_id = input.account_id
@@ -118,7 +118,7 @@ def _generate_bank_txn_id(db: Session) -> str:
 def record_bank_transaction(input: RecordBankTransactionInput, db: Session) -> RecordBankTransactionOutput:
     """Record a bank register transaction (bank statement line).
 
-    Saves to bank_transactions table — this is the bank register, separate from
+    Saves to bank_transactions table - this is the bank register, separate from
     journal entries. Bank charges, fees, interest, uncleared cheques all come here.
     """
     import json
@@ -128,7 +128,7 @@ def record_bank_transaction(input: RecordBankTransactionInput, db: Session) -> R
     if input.status not in ("cleared", "pending"):
         raise ValueError("status must be 'cleared' or 'pending'")
 
-    # Ensure bank account exists — if the user typed a new account id, create it
+    # Ensure bank account exists - if the user typed a new account id, create it
     # dynamically (no hardcoded accounts). Account name is derived from the id.
     account = db.execute(
         select(BankAccount).where(BankAccount.account_id == input.account_id)

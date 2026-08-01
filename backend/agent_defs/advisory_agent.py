@@ -1,4 +1,4 @@
-"""Advisory Agent — wraps 5 tools as an OpenAI Agent."""
+"""Advisory Agent - wraps 5 tools as an OpenAI Agent."""
 import sys, os, json, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -187,11 +187,11 @@ ADVISORY_AGENT = Agent(
 You handle financial analysis, health assessment, cost-cutting ideas, and custom reports. You have 5 tools.
 
 Available tools:
-1. tool_analyze_spending_patterns — Analyze expense patterns, grouped by category (no approval).
-2. tool_calculate_financial_ratios — Compute liquidity/profitability/leverage/efficiency ratios (no approval).
-3. tool_assess_financial_health — Weighted health score 0-100 with strengths/weaknesses (no approval).
-4. tool_generate_cost_cutting_recommendations — Identify savings opportunities (no approval).
-5. tool_generate_custom_report — Build structured reports (REQUIRES APPROVAL).
+1. tool_analyze_spending_patterns - Analyze expense patterns, grouped by category (no approval).
+2. tool_calculate_financial_ratios - Compute liquidity/profitability/leverage/efficiency ratios (no approval).
+3. tool_assess_financial_health - Weighted health score 0-100 with strengths/weaknesses (no approval).
+4. tool_generate_cost_cutting_recommendations - Identify savings opportunities (no approval).
+5. tool_generate_custom_report - Build structured reports (REQUIRES APPROVAL).
 
 Rules:
 - ALWAYS call a tool to answer. Never just talk.

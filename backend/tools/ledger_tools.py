@@ -31,7 +31,7 @@ from tools.schemas import (
 
 
 # ---------------------------------------------------------------------------
-# Helper – infer account type from numeric account code prefix
+# Helper - infer account type from numeric account code prefix
 # ---------------------------------------------------------------------------
 
 def _infer_account_type(account_code: str) -> str:
@@ -63,7 +63,7 @@ def _split_account(value: str):
 
 
 # ---------------------------------------------------------------------------
-# Tool 1 – Create Journal Entry
+# Tool 1 - Create Journal Entry
 # ---------------------------------------------------------------------------
 
 def create_journal_entry(input: CreateJournalEntryInput, db: Session) -> CreateJournalEntryOutput:
@@ -146,7 +146,7 @@ def create_journal_entry(input: CreateJournalEntryInput, db: Session) -> CreateJ
 
 
 # ---------------------------------------------------------------------------
-# Tool 2 – Get General Ledger
+# Tool 2 - Get General Ledger
 # ---------------------------------------------------------------------------
 
 def get_general_ledger(input: GetGeneralLedgerInput, db: Session) -> GetGeneralLedgerOutput:
@@ -233,7 +233,7 @@ def get_general_ledger(input: GetGeneralLedgerInput, db: Session) -> GetGeneralL
 
 
 # ---------------------------------------------------------------------------
-# Tool 3 – Suggest Chart of Accounts
+# Tool 3 - Suggest Chart of Accounts
 # ---------------------------------------------------------------------------
 
 # Standard charts of accounts by business type
@@ -456,7 +456,7 @@ def suggest_chart_of_accounts(input: SuggestChartOfAccountsInput, db: Optional[S
 
 
 # ---------------------------------------------------------------------------
-# Tool 4 – Get AP Subledger
+# Tool 4 - Get AP Subledger
 # ---------------------------------------------------------------------------
 
 def get_ap_subledger(
@@ -520,7 +520,7 @@ def get_ap_subledger(
 
 
 # ---------------------------------------------------------------------------
-# Tool 5 – Get AR Subledger
+# Tool 5 - Get AR Subledger
 # ---------------------------------------------------------------------------
 
 def get_ar_subledger(
@@ -583,7 +583,7 @@ def get_ar_subledger(
 
 
 # ---------------------------------------------------------------------------
-# Tool 6 – Get Payroll Ledger
+# Tool 6 - Get Payroll Ledger
 # ---------------------------------------------------------------------------
 
 def get_payroll_ledger(

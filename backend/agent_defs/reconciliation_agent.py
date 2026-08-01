@@ -1,4 +1,4 @@
-"""Reconciliation & Banking Agent — wraps 7 tools as an OpenAI Agent."""
+"""Reconciliation & Banking Agent - wraps 7 tools as an OpenAI Agent."""
 import sys, os, json, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -42,7 +42,7 @@ def tool_run_bank_reconciliation(
     bank_account_id: str, statement_date: str,
     from_date: str, to_date: str,
 ) -> str:
-    """Run bank reconciliation — match bank statement lines against journal entries. Returns suggested matches requiring approval.
+    """Run bank reconciliation - match bank statement lines against journal entries. Returns suggested matches requiring approval.
 
     Args:
         bank_account_id: Bank account ID e.g. 'BA-001'.
@@ -262,7 +262,7 @@ def tool_reconcile_bank_charges(
     bank_account_id: str, from_date: str, to_date: str,
     charge_type: typing.Optional[str] = None,
 ) -> str:
-    """Reconcile bank charges/fees against journal entries. No approval needed — purely backend calculation.
+    """Reconcile bank charges/fees against journal entries. No approval needed - purely backend calculation.
 
     Args:
         bank_account_id: Bank account ID.
@@ -294,13 +294,13 @@ RECONCILIATION_AGENT = Agent(
 You handle bank reconciliation, accruals, vendor/customer statements, cheques, LCs, and bank charges. You have 7 tools.
 
 Available tools:
-1. tool_run_bank_reconciliation — Match bank transactions against journal entries (NEEDS APPROVAL).
-2. tool_post_accrual_entry — Suggest month-end accrual entry (NEEDS APPROVAL).
-3. tool_reconcile_vendor_statement — Match vendor statement against AP records (NEEDS APPROVAL).
-4. tool_reconcile_customer_statement — Match customer statement against AR records (NEEDS APPROVAL).
-5. tool_track_cheque_clearing — Track cheque: issue, clear, bounce, reconcile, status.
-6. tool_track_lc_bank_guarantee — Track LC/BG: issue, amend, expire, close, status (NEEDS APPROVAL).
-7. tool_reconcile_bank_charges — Reconcile bank fees/charges against ledger entries.
+1. tool_run_bank_reconciliation - Match bank transactions against journal entries (NEEDS APPROVAL).
+2. tool_post_accrual_entry - Suggest month-end accrual entry (NEEDS APPROVAL).
+3. tool_reconcile_vendor_statement - Match vendor statement against AP records (NEEDS APPROVAL).
+4. tool_reconcile_customer_statement - Match customer statement against AR records (NEEDS APPROVAL).
+5. tool_track_cheque_clearing - Track cheque: issue, clear, bounce, reconcile, status.
+6. tool_track_lc_bank_guarantee - Track LC/BG: issue, amend, expire, close, status (NEEDS APPROVAL).
+7. tool_reconcile_bank_charges - Reconcile bank fees/charges against ledger entries.
 
 Rules:
 - Call the right tool based on the user's request.

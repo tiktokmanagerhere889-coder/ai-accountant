@@ -1,4 +1,4 @@
-"""Agent 10 — System Admin Tools.
+"""Agent 10 - System Admin Tools.
 
 4 tools: check_system_status, get_usage_statistics,
 manage_system_preferences, schedule_system_task.
@@ -196,14 +196,14 @@ def get_usage_statistics(inp: GetUsageStatisticsInput, db: Session) -> GetUsageS
     # Recommendations
     recommendations = []
     if total == 0:
-        recommendations.append("No usage data recorded for this period — logs may be empty.")
+        recommendations.append("No usage data recorded for this period - logs may be empty.")
     if total > 0 and failures / total > 0.1:
-        recommendations.append("High failure rate detected — review system configuration.")
+        recommendations.append("High failure rate detected - review system configuration.")
     if not breakdown:
         breakdown = []
     if not recommendations:
         healthy_pct = _round(Decimal(str(successes)) / Decimal(str(total)) * 100) if total > 0 else Decimal("0")
-        recommendations.append(f"System healthy — {healthy_pct}% success rate across {total} operations.")
+        recommendations.append(f"System healthy - {healthy_pct}% success rate across {total} operations.")
 
     avg_latency = Decimal("0")
     summary = f"Usage summary: {total} operations, {successes} successes, {failures} failures."
@@ -317,11 +317,11 @@ def manage_system_preferences(inp: ManageSystemPreferencesInput, db: Session) ->
                 db.add(SystemConfig(
                     config_key=key,
                     config_value=str(value),
-                    description="Newly created — verify",
+                    description="Newly created - verify",
                     updated_at=today,
                 ))
                 changed.append(key)
-                warnings.append(f"'{key}' is new — please verify")
+                warnings.append(f"'{key}' is new - please verify")
 
         db.commit()
 
@@ -348,7 +348,7 @@ def manage_system_preferences(inp: ManageSystemPreferencesInput, db: Session) ->
 
         entry = db.query(SystemConfig).filter(SystemConfig.config_key == inp.setting_key).first()
         if not entry:
-            raise ValueError(f"Setting '{inp.setting_key}' not found — cannot reset")
+            raise ValueError(f"Setting '{inp.setting_key}' not found - cannot reset")
 
         db.delete(entry)
         db.commit()
@@ -370,7 +370,7 @@ def schedule_system_task(inp: ScheduleSystemTaskInput, db: Session) -> ScheduleS
     """Schedule a system maintenance task (backup, export, maintenance, cleanup).
 
     This is a bonus AI-assisted scheduling tool beyond the research paper's baseline design
-    — the paper's own required 'data_backup_scheduling' feature is separately
+    - the paper's own required 'data_backup_scheduling' feature is separately
     implemented as a non-AI FastAPI endpoint (see Direct-Backend Features section).
     """
     task_id = f"TASK-{uuid.uuid4().hex[:8].upper()}"
@@ -397,7 +397,7 @@ def schedule_system_task(inp: ScheduleSystemTaskInput, db: Session) -> ScheduleS
     type_details = {
         "backup": "Full database backup",
         "export_data": f"Data export ({params.get('scope', 'all')})",
-        "maintenance": "System maintenance — expected brief downtime",
+        "maintenance": "System maintenance - expected brief downtime",
         "cleanup": f"Cleanup ({params.get('scope', 'old backups and temp data')})",
     }
 

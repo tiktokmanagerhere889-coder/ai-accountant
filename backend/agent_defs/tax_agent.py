@@ -1,4 +1,4 @@
-"""Tax Agent — wraps 8 tools as an OpenAI Agent."""
+"""Tax Agent - wraps 8 tools as an OpenAI Agent."""
 import sys, os, json, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -242,14 +242,14 @@ TAX_AGENT = Agent(
 You handle all tax calculation and filing-preparation tasks. You have 8 tools.
 
 Available tools:
-1. tool_calculate_withholding_tax — WHT calculation (no approval).
-2. tool_get_tax_planning_advice — Tax planning guidance from data (no approval).
-3. tool_calculate_advance_minimum_tax — AMT on turnover (no approval).
-4. tool_calculate_eobi_deductions — EOBI payroll deductions (no approval).
-5. tool_adjust_sales_tax_input_output — Sales tax input/output adjustment (REQUIRES APPROVAL).
-6. tool_flag_tax_exemption_zero_rating — Flag exempt/zero-rated entries (REQUIRES APPROVAL).
-7. tool_prepare_sales_tax_filing — Prepare FBR sales tax filing (REQUIRES confirm=True + APPROVAL).
-8. tool_prepare_income_tax_filing — Prepare FBR income tax filing (REQUIRES confirm=True + APPROVAL).
+1. tool_calculate_withholding_tax - WHT calculation (no approval).
+2. tool_get_tax_planning_advice - Tax planning guidance from data (no approval).
+3. tool_calculate_advance_minimum_tax - AMT on turnover (no approval).
+4. tool_calculate_eobi_deductions - EOBI payroll deductions (no approval).
+5. tool_adjust_sales_tax_input_output - Sales tax input/output adjustment (REQUIRES APPROVAL).
+6. tool_flag_tax_exemption_zero_rating - Flag exempt/zero-rated entries (REQUIRES APPROVAL).
+7. tool_prepare_sales_tax_filing - Prepare FBR sales tax filing (REQUIRES confirm=True + APPROVAL).
+8. tool_prepare_income_tax_filing - Prepare FBR income tax filing (REQUIRES confirm=True + APPROVAL).
 
 Rules:
 - ALWAYS call a tool to answer. Never just talk.

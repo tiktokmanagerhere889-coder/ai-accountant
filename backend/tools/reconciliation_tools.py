@@ -525,7 +525,7 @@ def track_cheque_clearing(
 
         warning = None
         if amount > Decimal("1000000.00"):
-            warning = "High-value cheque — amount exceeds 1M"
+            warning = "High-value cheque - amount exceeds 1M"
 
         cheque = ChequeRegistry(
             cheque_id=cheque_id,
@@ -662,7 +662,7 @@ def track_cheque_clearing(
             age = date.today() - cheque.issue_date
             if age > timedelta(days=180):
                 stale_warning = (
-                    f"Stale cheque — issued {age.days} days ago, not cleared"
+                    f"Stale cheque - issued {age.days} days ago, not cleared"
                 )
         all_warnings = [w for w in [warning, stale_warning] if w]
         combined_warning = "; ".join(all_warnings) if all_warnings else None

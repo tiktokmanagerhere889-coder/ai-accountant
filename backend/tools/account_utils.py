@@ -1,6 +1,6 @@
 """Shared account-classification helpers.
 
-Classification is resolved from the `chart_of_accounts` table at call time —
+Classification is resolved from the `chart_of_accounts` table at call time -
 the user's own chart is the single source of truth. No numeric prefixes or
 assumed names are hardcoded. Each filter first matches accounts whose
 `account_type` in the chart matches the category (e.g. "revenue"/"expense"),
@@ -52,7 +52,7 @@ def _classify_filter_clause(account_column, db: Session, account_types: list[str
 def revenue_filter_clause(account_column, db: Session, prefixes: Optional[list[str]] = None):
     """Match revenue accounts: chart account_type='revenue', or clear name match.
 
-    "sales" alone is intentionally NOT a keyword — "Cost of Sales" is an expense
+    "sales" alone is intentionally NOT a keyword - "Cost of Sales" is an expense
     account and would be misclassified. Only "revenue" / "income" are used as
     name fallbacks.
     """

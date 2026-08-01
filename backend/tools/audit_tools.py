@@ -1,4 +1,4 @@
-"""Agent 8 — Audit & Regulatory Tools.
+"""Agent 8 - Audit & Regulatory Tools.
 
 4 tools: detect_anomaly_transactions, get_compliance_deadlines,
 support_internal_audit, maintain_statutory_registers.
@@ -98,7 +98,7 @@ def detect_anomaly_transactions(inp: DetectAnomalyTransactionsInput, db: Session
             if e.posted_date.weekday() >= 5:  # Saturday=5, Sunday=6
                 _add_anomaly(
                     e, "weekend_posting", "high",
-                    f"Posted on {e.posted_date.strftime('%A')} ({e.posted_date.isoformat()}) — unusual activity",
+                    f"Posted on {e.posted_date.strftime('%A')} ({e.posted_date.isoformat()}) - unusual activity",
                     "Review weekend transactions for validity"
                 )
 
@@ -132,7 +132,7 @@ def detect_anomaly_transactions(inp: DetectAnomalyTransactionsInput, db: Session
             elif credit_prefix in _EXPENSE_PREFIXES and debit_prefix not in _EXPENSE_PREFIXES:
                 _add_anomaly(
                     e, "unusual_account", "medium",
-                    f"Credit to expense account {e.credit_account} — unusual direction",
+                    f"Credit to expense account {e.credit_account} - unusual direction",
                     "Verify entry direction is correct"
                 )
 
@@ -185,9 +185,9 @@ def get_compliance_deadlines(inp: GetComplianceDeadlinesInput, db: Session) -> G
     if not items:
         summary = "No compliance deadlines configured. Add deadlines to track filing due dates."
     elif overdue and not upcoming:
-        summary = f"{len(overdue)} deadline(s) overdue — immediate attention needed."
+        summary = f"{len(overdue)} deadline(s) overdue - immediate attention needed."
     elif not overdue and not upcoming:
-        summary = "All compliance deadlines completed — up to date."
+        summary = "All compliance deadlines completed - up to date."
     else:
         parts = []
         if overdue:
@@ -208,7 +208,7 @@ def support_internal_audit(inp: SupportInternalAuditInput, db: Session) -> Suppo
     """Run internal audit scan on journal entries.
 
     Flags 5 patterns: missing references, weekend postings, round amounts,
-    unusually large entries (3σ), and infrequent-account activity.
+    unusually large entries (3sigma), and infrequent-account activity.
     Results persisted to flagged_entries table.
     """
     audit_id = f"AUD-{uuid.uuid4().hex[:8].upper()}"
@@ -269,11 +269,11 @@ def support_internal_audit(inp: SupportInternalAuditInput, db: Session) -> Suppo
 
         # Pattern 3: Round amount (ending in 000)
         if amount > 0 and amount % 1000 == 0 and amount >= 100000:
-            severities.append(("round_amount", "medium", f"Round amount {amount} — possible round-tripping"))
+            severities.append(("round_amount", "medium", f"Round amount {amount} - possible round-tripping"))
 
         # Pattern 4: Unusually large (3 sigma)
         if amount > threshold_3sigma and threshold_3sigma > 0:
-            severities.append(("large_amount", "high", f"Amount {amount} exceeds 3σ threshold ({_round(Decimal(str(threshold_3sigma)))})"))
+            severities.append(("large_amount", "high", f"Amount {amount} exceeds 3sigma threshold ({_round(Decimal(str(threshold_3sigma)))})"))
 
         # Pattern 5: Infrequent account
         for acc in [e.debit_account, e.credit_account]:

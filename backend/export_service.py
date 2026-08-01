@@ -1,4 +1,4 @@
-"""Export service — builds XLSX (styled) and CSV exports per agent / all agents.
+"""Export service - builds XLSX (styled) and CSV exports per agent / all agents.
 
 Structure per sheet (xelplus-style clean design, matching scripts/generate_demo_xlsx.py):
 - Title band (dark fill, white bold text)
@@ -57,7 +57,7 @@ from db.models import (
 )
 
 # ---------------------------------------------------------------------------
-# palette (CA professional, not garish) — copied from generate_demo_xlsx.py
+# palette (CA professional, not garish) - copied from generate_demo_xlsx.py
 # ---------------------------------------------------------------------------
 NAVY = "1F3864"   # title band
 BLUE = "2E75B6"   # section header

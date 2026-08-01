@@ -97,7 +97,7 @@ def _categorize_description(description: str, db: Session) -> str:
                 if category in acc.account_name.lower():
                     return acc.account_code
 
-        # 3. Derive the account from the user's own wording — this preserves
+        # 3. Derive the account from the user's own wording - this preserves
         #    "home rent" / "laptop rent" as distinct sub-accounts instead of
         #    forcing everything into "Office Rent". Code prefix from the chart
         #    account for the category if one exists, else the keyword map.
@@ -137,7 +137,7 @@ def _check_duplicate(description: str, posted_date: date, amount: Decimal, db: S
         )
     ).scalars().all()
     for e in existing:
-        # Fuzzy match — same first 20 chars of description
+        # Fuzzy match - same first 20 chars of description
         if e.description[:20] == description[:20]:
             return e
     return None
@@ -153,7 +153,7 @@ def record_transaction_nl(input: RecordTransactionNLInput, db: Session) -> Recor
     if amount is None or amount <= Decimal("0.00"):
         raise ValueError("No valid amount found in description")
 
-    # Step 2: Categorize the expense — explicit override wins, else dynamic
+    # Step 2: Categorize the expense - explicit override wins, else dynamic
     if input.debit_account:
         debit_account = input.debit_account
     else:

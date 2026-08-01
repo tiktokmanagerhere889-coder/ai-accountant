@@ -1,4 +1,4 @@
-"""Agent 9 — Advisory Tools.
+"""Agent 9 - Advisory Tools.
 
 5 tools: analyze_spending_patterns, calculate_financial_ratios,
 assess_financial_health, generate_cost_cutting_recommendations,
@@ -218,7 +218,7 @@ def calculate_financial_ratios(inp: CalculateFinancialRatiosInput, db: Session) 
             cr_interp = "Above 1.0 indicates sufficient short-term assets to cover liabilities." if cr >= Decimal("1") else "Below 1.0 suggests potential liquidity concerns."
         else:
             cr = Decimal("0")
-            cr_interp = "No liabilities recorded — unable to compute ratio."
+            cr_interp = "No liabilities recorded - unable to compute ratio."
         ratios.append(RatioResult(name="Current Ratio", value=str(cr), benchmark="> 1.0", interpretation=cr_interp, category="liquidity"))
 
         # Quick ratio (assumes ~50% of assets are liquid for approximation)
@@ -235,7 +235,7 @@ def calculate_financial_ratios(inp: CalculateFinancialRatiosInput, db: Session) 
     if "profitability" in requested:
         if total_revenue > 0:
             npm = _round(net_income / total_revenue * 100)
-            npm_interp = "Healthy profit margin." if npm >= Decimal("10") else "Thin profit margin — consider cost optimization." if npm >= Decimal("0") else "Negative profit margin — company is operating at a loss."
+            npm_interp = "Healthy profit margin." if npm >= Decimal("10") else "Thin profit margin - consider cost optimization." if npm >= Decimal("0") else "Negative profit margin - company is operating at a loss."
         else:
             npm = Decimal("0")
             npm_interp = "No revenue recorded."
@@ -269,10 +269,10 @@ def calculate_financial_ratios(inp: CalculateFinancialRatiosInput, db: Session) 
     if "leverage" in requested:
         if total_equity > 0:
             de = _round(total_liabilities / total_equity)
-            de_interp = "Low leverage — conservative capital structure." if de <= Decimal("1") else "Moderate leverage." if de <= Decimal("2") else "High leverage — increased financial risk."
+            de_interp = "Low leverage - conservative capital structure." if de <= Decimal("1") else "Moderate leverage." if de <= Decimal("2") else "High leverage - increased financial risk."
         else:
             de = Decimal("0")
-            de_interp = "No equity (negative or zero) — unable to compute."
+            de_interp = "No equity (negative or zero) - unable to compute."
         ratios.append(RatioResult(name="Debt-to-Equity", value=str(de), benchmark="< 1.0", interpretation=de_interp, category="leverage"))
 
         if total_assets > 0:
@@ -366,10 +366,10 @@ def assess_financial_health(inp: AssessFinancialHealthInput, db: Session) -> Ass
             strengths.append(f"Moderate net profit margin of {npm:.1f}%")
         elif npm >= 0:
             profit_score = 10
-            weaknesses.append(f"Thin net profit margin of {npm:.1f}% — monitor costs")
+            weaknesses.append(f"Thin net profit margin of {npm:.1f}% - monitor costs")
         else:
             profit_score = 0
-            weaknesses.append(f"Negative net profit margin of {npm:.1f}% — operating at a loss")
+            weaknesses.append(f"Negative net profit margin of {npm:.1f}% - operating at a loss")
             recommendations.append("Review cost structure and pricing strategy to return to profitability")
         metrics.append(MetricRating(name="Net Profit Margin", value=f"{npm:.1f}%", rating="strong" if npm >= 10 else "moderate" if npm >= 5 else "weak" if npm >= 0 else "critical"))
     else:
@@ -384,10 +384,10 @@ def assess_financial_health(inp: AssessFinancialHealthInput, db: Session) -> Ass
             strengths.append(f"Healthy current ratio of {cr:.1f}")
         elif cr >= 1.0:
             liq_score = 15
-            weaknesses.append(f"Adequate current ratio of {cr:.1f} — could be stronger")
+            weaknesses.append(f"Adequate current ratio of {cr:.1f} - could be stronger")
         else:
             liq_score = 5
-            weaknesses.append(f"Weak current ratio of {cr:.1f} — potential liquidity concerns")
+            weaknesses.append(f"Weak current ratio of {cr:.1f} - potential liquidity concerns")
             recommendations.append("Improve working capital by reducing short-term liabilities or increasing current assets")
         metrics.append(MetricRating(name="Current Ratio", value=f"{cr:.1f}", rating="strong" if cr >= 1.5 else "moderate" if cr >= 1.0 else "weak"))
     else:
@@ -400,13 +400,13 @@ def assess_financial_health(inp: AssessFinancialHealthInput, db: Session) -> Ass
         de = float(total_liabilities / total_equity)
         if de <= 1.0:
             lev_score = 20
-            strengths.append(f"Low debt-to-equity of {de:.1f} — conservative financing")
+            strengths.append(f"Low debt-to-equity of {de:.1f} - conservative financing")
         elif de <= 2.0:
             lev_score = 10
             weaknesses.append(f"Moderate debt-to-equity of {de:.1f}")
         else:
             lev_score = 0
-            weaknesses.append(f"High debt-to-equity of {de:.1f} — elevated financial risk")
+            weaknesses.append(f"High debt-to-equity of {de:.1f} - elevated financial risk")
             recommendations.append("Develop a debt reduction plan to lower leverage")
         metrics.append(MetricRating(name="Debt-to-Equity", value=f"{de:.1f}", rating="strong" if de <= 1.0 else "moderate" if de <= 2.0 else "weak"))
     else:
@@ -422,10 +422,10 @@ def assess_financial_health(inp: AssessFinancialHealthInput, db: Session) -> Ass
             strengths.append(f"Strong expense control at {er:.1f}% expense ratio")
         elif er <= 90:
             eff_score = 10
-            weaknesses.append(f"Expense ratio of {er:.1f}% — room for improvement")
+            weaknesses.append(f"Expense ratio of {er:.1f}% - room for improvement")
         else:
             eff_score = 5
-            weaknesses.append(f"High expense ratio of {er:.1f}% — costs need attention")
+            weaknesses.append(f"High expense ratio of {er:.1f}% - costs need attention")
             recommendations.append("Implement cost control measures to reduce expense ratio")
         metrics.append(MetricRating(name="Expense Ratio", value=f"{er:.1f}%", rating="strong" if er <= 80 else "moderate" if er <= 90 else "weak"))
     else:
@@ -440,7 +440,7 @@ def assess_financial_health(inp: AssessFinancialHealthInput, db: Session) -> Ass
             variance = float(abs(total_expenses - total_budget) / total_budget * 100)
             if variance <= 5:
                 bud_score = 10
-                strengths.append(f"Spending within 5% of budget — good adherence")
+                strengths.append(f"Spending within 5% of budget - good adherence")
             elif variance <= 10:
                 bud_score = 5
                 weaknesses.append(f"Spending deviates {variance:.1f}% from budget")
@@ -545,7 +545,7 @@ def generate_cost_cutting_recommendations(inp: GenerateCostCuttingInput, db: Ses
                 continue
 
             suggestions = {
-                "6": "Review operational expenses — negotiate vendor contracts, reduce discretionary spending on supplies and travel.",
+                "6": "Review operational expenses - negotiate vendor contracts, reduce discretionary spending on supplies and travel.",
                 "8": "Audit other expenses for one-off or non-recurring items that can be eliminated or reduced.",
             }
             priority = "high" if pct > 20 else "medium" if pct > 10 else "low"
@@ -564,7 +564,7 @@ def generate_cost_cutting_recommendations(inp: GenerateCostCuttingInput, db: Ses
     total_savings = sum(r.potential_savings for r in recommendations)
 
     if not recommendations:
-        summary = f"Total expenses: {_round(Decimal(str(total_expenses)))}. No cost-cutting opportunities identified — expenses are primarily essential (COGS)."
+        summary = f"Total expenses: {_round(Decimal(str(total_expenses)))}. No cost-cutting opportunities identified - expenses are primarily essential (COGS)."
     else:
         summary = f"Identified {len(recommendations)} cost-cutting opportunities with estimated total savings of {_round(total_savings)} out of {_round(Decimal(str(total_expenses)))} total expenses."
 
@@ -664,7 +664,7 @@ def generate_custom_report(inp: GenerateCustomReportInput, db: Session) -> Gener
 
             sections.append(ReportSection(
                 title=f"Comparative: Period {inp.period_from} vs Period {inp.period_to}",
-                content=f"Revenue: {rev_a} → {rev_b} ({rev_change}% change). Expenses: {exp_a} → {exp_b} ({exp_change}% change).",
+                content=f"Revenue: {rev_a} -> {rev_b} ({rev_change}% change). Expenses: {exp_a} -> {exp_b} ({exp_change}% change).",
                 data={
                     "revenue_a": str(rev_a), "revenue_b": str(rev_b), "revenue_change_pct": str(rev_change),
                     "expenses_a": str(exp_a), "expenses_b": str(exp_b), "expenses_change_pct": str(exp_change),
