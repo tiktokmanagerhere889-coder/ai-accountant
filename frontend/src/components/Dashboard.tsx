@@ -13,6 +13,7 @@ interface DashboardProps {
 export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardProps) {
   const [cashBalance, setCashBalance] = useState<string>("Calculating...");
   const [transactions, setTransactions] = useState<any[]>([]);
+  const [healthScore, setHealthScore] = useState<number | null>(null);
   const [auditStats, setAuditStats] = useState<{ total: number; resolved: number; open: number }>({
     total: 0,
     resolved: 0,
@@ -29,32 +30,50 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
   const fetchDashboardStats = async () => {
     setAuditLoading(true);
     try {
-      // 1. Fetch cash position (Uses backend checker)
-      const cashRes = await axios.post(`${apiBase}/chat`, {
-        message: "Run the tool check_cash_position with as_of_date: '2026-07-29'"
+      // 1. Fetch cash position via DIRECT tool (no LLM — reliable)
+      const cashRes = await axios.post(`${apiBase}/tools/execute`, {
+        tool_name: "check_cash_position",
+        params: { as_of_date: "2026-08-01", account_id: "ALL" },
       }, { timeout: 30000 });
-      // Extract numeric balance from response via simple regex search
-      const numMatch = cashRes.data.response.match(/closing_balance":\s*"?([\d\.]+)/);
-      if (numMatch) {
-        setCashBalance(parseFloat(numMatch[1]).toLocaleString("en-US", { minimumFractionDigits: 2 }));
+      const cashData = cashRes.data.result;
+      if (cashData && typeof cashData.closing_balance !== "undefined") {
+        setCashBalance(Number(cashData.closing_balance).toLocaleString("en-US", { minimumFractionDigits: 2 }));
       } else {
         setCashBalance("Unavailable");
       }
 
-      // 2. Fetch recent ledger entries
-      const ledgerRes = await axios.post(`${apiBase}/chat`, {
-        message: "Run the tool get_general_ledger with from_date: '2026-07-01', to_date: '2026-07-29'"
-      }, { timeout: 30000 });
-
-      // Basic parsing of general ledger details
-      const entriesMatch = ledgerRes.data.response.match(/entry_id":\s*"?([^"\s,]+)/g);
-      if (entriesMatch) {
-          setTransactions([]);
-      } else {
-        setTransactions([]);
+      // 2. Fetch financial health score via DIRECT tool (replaces hardcoded 92%)
+      try {
+        const healthRes = await axios.post(`${apiBase}/tools/execute`, {
+          tool_name: "assess_financial_health",
+          params: { fiscal_year: 2026 },
+        }, { timeout: 30000 });
+        const score = healthRes.data.result?.score;
+        if (typeof score === "number") {
+          setHealthScore(score);
+        } else {
+          setHealthScore(null);
+        }
+      } catch {
+        setHealthScore(null);
       }
 
-      // 3. Fetch audit logs count
+      // 3. Fetch recent ledger entries via DIRECT tool
+      const ledgerRes = await axios.post(`${apiBase}/tools/execute`, {
+        tool_name: "get_general_ledger",
+        params: { from_date: "2026-07-01", to_date: "2026-08-31" },
+      }, { timeout: 30000 });
+      const accounts = ledgerRes.data.result?.accounts || [];
+      const txs = accounts.map((a: any) => ({
+        id: a.account_code,
+        desc: a.account_name,
+        amount: Math.abs(Number(a.closing_balance || 0)).toLocaleString("en-US", { minimumFractionDigits: 2 }),
+        type: Number(a.closing_balance) > 0 ? "debit" : "credit",
+        account: `${a.account_code}-${a.account_name}`,
+      }));
+      setTransactions(txs);
+
+      // 4. Fetch audit logs count
       const logsRes = await axios.get(`${apiBase}/audit-trail`, { timeout: 30000 });
       setAuditStats({
         total: logsRes.data.length,
@@ -64,8 +83,8 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
       setAuditLoading(false);
     } catch (err) {
       console.error("Dashboard statistics retrieval failed:", err);
-      // Soft fallbacks so dashboard renders cleanly
       setCashBalance("Unavailable");
+      setHealthScore(null);
       setAuditLoading(false);
     }
   };
@@ -133,7 +152,11 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
             <Percent className="w-5 h-5 text-emerald-500" />
           </div>
           <div className="text-2xl font-semibold font-mono text-gray-900 dark:text-gray-100">
-            92% <span className="text-xs font-normal text-gray-500">Financial Health</span>
+            {healthScore !== null ? (
+              <>{healthScore}% <span className="text-xs font-normal text-gray-500">Financial Health</span></>
+            ) : (
+              <span className="text-sm font-normal text-gray-500">Not calculated</span>
+            )}
           </div>
           <button
             onClick={() => onSelectAgent("advisory")}
