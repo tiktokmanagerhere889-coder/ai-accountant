@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 
 from dotenv import load_dotenv
+from openai import AsyncOpenAI
 from agents.models.openai_provider import OpenAIProvider
 from db.database import SessionLocal
 from db.models import UserApiKey as DBUserApiKey
@@ -47,10 +48,20 @@ def create_cerebras_provider() -> OpenAIProvider:
 
     Base URL: https://api.cerebras.ai/v1
     Uses Chat Completions API (not Responses API).
+
+    Fail-fast: the underlying AsyncOpenAI client uses max_retries=0 so a 429
+    or 5xx surfaces immediately instead of triggering SDK backoff retries
+    (4s/7s/10s) that pile up inside the frontend's 30s timeout. Provider
+    fallback in the orchestrator handles the failure instead.
     """
-    return OpenAIProvider(
-        base_url="https://api.cerebras.ai/v1",
+    client = AsyncOpenAI(
         api_key=get_api_key("CEREBRAS_API_KEY"),
+        base_url="https://api.cerebras.ai/v1",
+        max_retries=0,
+        timeout=30.0,
+    )
+    return OpenAIProvider(
+        openai_client=client,
         use_responses=False,
     )
 
@@ -60,9 +71,15 @@ def create_groq_provider() -> OpenAIProvider:
 
     Base URL: https://api.groq.com/openai/v1
     Uses Chat Completions API (not Responses API).
+    Same fail-fast client as Cerebras: max_retries=0, 30s timeout.
     """
-    return OpenAIProvider(
-        base_url="https://api.groq.com/openai/v1",
+    client = AsyncOpenAI(
         api_key=get_api_key("GROQ_API_KEY"),
+        base_url="https://api.groq.com/openai/v1",
+        max_retries=0,
+        timeout=30.0,
+    )
+    return OpenAIProvider(
+        openai_client=client,
         use_responses=False,
     )

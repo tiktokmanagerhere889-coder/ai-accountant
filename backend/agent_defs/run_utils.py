@@ -35,7 +35,7 @@ SKIP_PROVIDER_PATTERNS = [
 async def run_with_retry(
     run_fn: typing.Callable[[str], typing.Awaitable[str]],
     user_request: str,
-    max_retries: int = 2,
+    max_retries: int = 1,
 ) -> str:
     """Run a specialist agent function with automatic retry.
 
@@ -46,7 +46,9 @@ async def run_with_retry(
     Args:
         run_fn: The agent's async run function (e.g., run_cost_advanced_agent)
         user_request: The user's request string
-        max_retries: Max retry attempts (default 2; total attempts = 1 + max_retries)
+        max_retries: Max retry attempts (default 1; total attempts = 1 + max_retries).
+            Capped at 1 to avoid multiplying the provider fallback chain
+            (each attempt already tries Groq -> Groq fallback -> Cerebras).
 
     Returns:
         The first valid output, or the last attempt's output if all fail
