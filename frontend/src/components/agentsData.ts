@@ -336,7 +336,8 @@ export const AGENTS_DATA: AgentDef[] = [
         aiOnly: false,
         inputs: [
           { name: "asset_id", type: "text", placeholder: "Asset ID", required: true },
-          { name: "period_date", type: "date", placeholder: "Period Date", required: true }
+          { name: "period_date", type: "date", placeholder: "Period Date", required: true },
+          { name: "depreciation_rate", type: "number", placeholder: "Annual Rate % (e.g. 15)", required: false }
         ]
       },
       {
@@ -715,7 +716,7 @@ export const AGENTS_DATA: AgentDef[] = [
         inputs: [
           { name: "from_date", type: "date", placeholder: "From Date", required: true },
           { name: "to_date", type: "date", placeholder: "To Date", required: true },
-          { name: "anomaly_types", type: "text", placeholder: "round_amount,weekend_posting", required: false }
+          { name: "anomaly_types", type: "text", placeholder: "round_amount,weekend_posting,duplicate_amount,unusual_account,high_frequency", required: false }
         ]
       },
       {

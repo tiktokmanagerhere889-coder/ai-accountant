@@ -236,7 +236,7 @@ def test_all_tools():
         if params is None:
             results["skipped"].append(tool_name); continue
         try:
-            resp = client.post("/tools/execute", json={"tool_name":tool_name,"params":params})
+            resp = client.post("/tools/execute", json={"tool_name":tool_name,"params":params,"bypass_approval":True})
             data = resp.json()
             if resp.status_code == 200 and data.get("success"):
                 results["passed"].append(tool_name)

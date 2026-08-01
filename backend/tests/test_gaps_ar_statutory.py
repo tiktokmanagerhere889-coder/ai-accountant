@@ -93,7 +93,7 @@ def test_reconcile_customer():
     r = client.post("/tools/execute", json={"tool_name":"reconcile_customer_statement","params":{
         "customer_contact_id":"CONT-002","statement_date":"2026-07-31",
         "from_date":"2026-01-01","to_date":"2026-12-31","statement_lines":statement_lines
-    }})
+    },"bypass_approval":True})
     d = r.json()
     if not d.get("success"):
         print(f"  FAIL: {d.get('error')}")
@@ -120,7 +120,7 @@ def test_statutory_add():
     r = client.post("/tools/execute", json={"tool_name":"maintain_statutory_registers","params":{
         "action":"add","register_type":"directors","entry_date":"2026-07-15",
         "description":"Appointed Hassan Khan as Director","reference_number":"REG-DIR-2026-001","amount":"0"
-    }})
+    },"bypass_approval":True})
     d = r.json()
     if not d.get("success"):
         print(f"  ADD FAILED: {d.get('error')}")
@@ -133,7 +133,7 @@ def test_statutory_add():
     # VIEW it back
     r = client.post("/tools/execute", json={"tool_name":"maintain_statutory_registers","params":{
         "action":"view","register_type":"directors","entry_date":"2026-07-15","description":"view"
-    }})
+    },"bypass_approval":True})
     d = r.json()
     if not d.get("success"):
         print(f"  VIEW FAILED: {d.get('error')}")

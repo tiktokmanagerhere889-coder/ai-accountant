@@ -43,7 +43,7 @@ def _get_account_prefix(account: str) -> str:
 def detect_anomaly_transactions(inp: DetectAnomalyTransactionsInput, db: Session) -> DetectAnomalyTransactionsOutput:
     """Run pattern-based anomaly detection on journal entries.
 
-    Four detectors: round_amount, weekend_posting, duplicate_amount, unusual_account.
+    Five detectors: round_amount, weekend_posting, duplicate_amount, unusual_account, high_frequency.
     """
     # Base query
     query = db.query(JournalEntry).filter(
@@ -58,8 +58,14 @@ def detect_anomaly_transactions(inp: DetectAnomalyTransactionsInput, db: Session
 
     entries = query.all()
 
+    # Precompute debit-account frequency per posted date for the high_frequency detector
+    frequency_counts: dict[tuple[date, str], int] = {}
+    for e in entries:
+        key = (e.posted_date, e.debit_account)
+        frequency_counts[key] = frequency_counts.get(key, 0) + 1
+
     # Determine which detectors to run
-    requested_types = set(inp.anomaly_types) if inp.anomaly_types else {"round_amount", "weekend_posting", "duplicate_amount", "unusual_account"}
+    requested_types = set(inp.anomaly_types) if inp.anomaly_types else {"round_amount", "weekend_posting", "duplicate_amount", "unusual_account", "high_frequency"}
 
     anomalies: list[AnomalyEntry] = []
     seen = set()  # (entry_id, anomaly_type) dedup
@@ -134,6 +140,17 @@ def detect_anomaly_transactions(inp: DetectAnomalyTransactionsInput, db: Session
                     e, "unusual_account", "medium",
                     f"Credit to expense account {e.credit_account} - unusual direction",
                     "Verify entry direction is correct"
+                )
+
+        # 5. High frequency detector
+        if "high_frequency" in requested_types:
+            count = frequency_counts.get((e.posted_date, e.debit_account), 0)
+            if count > 3:
+                confidence = "high" if count >= 7 else "medium"
+                _add_anomaly(
+                    e, "high_frequency", confidence,
+                    f"Account {e.debit_account} has {count} transactions on {e.posted_date} - unusually high frequency",
+                    "Review the high volume of transactions to this account"
                 )
 
     total_amount = sum(a.amount for a in anomalies)

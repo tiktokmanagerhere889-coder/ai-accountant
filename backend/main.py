@@ -20,6 +20,15 @@ from db.seed_and_migrate import run_migrations
 from agent_defs.orchestrator import run_orchestrator
 from tool_registry import execute_tool, list_all_tools, get_tool_info
 from export_service import build_xlsx, build_csv
+from approval_service import (
+    APPROVAL_REQUIRED_TOOLS,
+    approve_or_execute,
+    list_approval_history,
+    list_pending_approvals,
+    queue_for_approval,
+    reject_approval,
+    serialize_approval,
+)
 
 # Setup Logging
 logging.basicConfig(level=logging.INFO)
@@ -308,12 +317,31 @@ async def chat(request: ChatRequest):
 class ToolExecuteRequest(BaseModel):
     tool_name: str = Field(..., description="Tool name from the registry")
     params: dict = Field(default_factory=dict, description="Tool parameters as key-value pairs")
+    needs_approval: Optional[bool] = Field(
+        default=False,
+        description="Queue the tool for human approval instead of executing it directly",
+    )
+    bypass_approval: Optional[bool] = Field(
+        default=False,
+        description="Execute immediately even if the tool normally requires approval",
+    )
 
 
 class ToolExecuteResponse(BaseModel):
     success: bool
     result: Optional[Any] = None
     error: Optional[str] = None
+
+
+class ApprovalApproveRequest(BaseModel):
+    edited_params: Optional[dict] = Field(
+        default=None,
+        description="Edited tool parameters to use during execution (optional)",
+    )
+
+
+class ApprovalRejectRequest(BaseModel):
+    reason: Optional[str] = Field(default=None, description="Reason for rejection")
 
 
 @app.get("/tools/list")
@@ -323,18 +351,91 @@ def list_tools_endpoint():
 
 
 @app.post("/tools/execute", response_model=ToolExecuteResponse)
-def execute_tool_direct(request: ToolExecuteRequest):
+def execute_tool_direct(request: ToolExecuteRequest, db: Session = Depends(get_db)):
     """Execute a tool directly without going through the LLM orchestrator.
 
-    Tools with ai_only=True will still execute but may produce lower-quality
-    output without AI interpretation.
+    Tools requiring approval (needs_approval flag or in APPROVAL_REQUIRED_TOOLS)
+    are queued in the approval queue instead of executing immediately. The
+    returned result contains queued=true and the approval_id.
     """
+    requires_approval = not request.bypass_approval and (
+        request.needs_approval or request.tool_name in APPROVAL_REQUIRED_TOOLS
+    )
+    if requires_approval:
+        entry = queue_for_approval(
+            request.tool_name,
+            request.params,
+            db,
+            submitted_by="direct-mode",
+        )
+        return ToolExecuteResponse(
+            success=True,
+            result={
+                "queued": True,
+                "approval_id": entry.approval_id,
+                "tool_name": entry.tool_name,
+                "status": "pending_approval",
+                "message": f"Queued for approval: {entry.approval_id}",
+            },
+        )
     try:
         result = execute_tool(request.tool_name, request.params)
         return ToolExecuteResponse(success=True, result=result)
     except Exception as e:
         logger.error(f"Tool execution error ({request.tool_name}): {e}")
         return ToolExecuteResponse(success=False, error=str(e))
+
+
+# Approval queue endpoints (queue -> view -> edit -> approve/reject -> execute)
+
+@app.get("/approvals/pending")
+def get_pending_approvals(db: Session = Depends(get_db)):
+    """List all pending approval requests."""
+    return {"approvals": [serialize_approval(a) for a in list_pending_approvals(db)]}
+
+
+@app.get("/approvals/history")
+def get_approval_history(
+    limit: int = Query(default=50, le=200),
+    db: Session = Depends(get_db),
+):
+    """List resolved approvals (approved/edited/rejected), newest first."""
+    return {"approvals": [serialize_approval(a) for a in list_approval_history(db, limit=limit)]}
+
+
+@app.post("/approvals/{approval_id}/approve")
+def approve_pending_approval(
+    approval_id: str,
+    payload: ApprovalApproveRequest,
+    db: Session = Depends(get_db),
+):
+    """Approve a queued tool call, optionally with edited params. Executes the tool."""
+    try:
+        entry, result = approve_or_execute(approval_id, db, payload.edited_params)
+    except ValueError as e:
+        msg = str(e)
+        status_code = 404 if "not found" in msg else 400
+        raise HTTPException(status_code=status_code, detail=msg)
+    except Exception as e:
+        logger.error(f"Approval execution error ({approval_id}): {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    return {"approval": serialize_approval(entry), "result": result}
+
+
+@app.post("/approvals/{approval_id}/reject")
+def reject_pending_approval(
+    approval_id: str,
+    payload: ApprovalRejectRequest,
+    db: Session = Depends(get_db),
+):
+    """Reject a queued tool call with an optional reason."""
+    try:
+        entry = reject_approval(approval_id, db, payload.reason)
+    except ValueError as e:
+        msg = str(e)
+        status_code = 404 if "not found" in msg else 400
+        raise HTTPException(status_code=status_code, detail=msg)
+    return {"approval": serialize_approval(entry)}
 
 
 # Data Export (per agent / all agents)

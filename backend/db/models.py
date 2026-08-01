@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
@@ -485,4 +485,20 @@ class UserRole(Base):
     role_id = Column(String, nullable=False, unique=True, index=True)
     role_name = Column(String, nullable=False, unique=True, index=True)
     permissions = Column(Text, nullable=False)  # JSON-serialized list of permissions
+
+
+class ApprovalQueue(Base):
+    __tablename__ = "approval_queue"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    approval_id = Column(String, nullable=False, unique=True, index=True)
+    tool_name = Column(String, nullable=False)
+    params = Column(Text, nullable=False)  # JSON string of the params
+    submitted_by = Column(String, nullable=True)
+    status = Column(String, default="pending")  # pending/approved/rejected/edited
+    created_at = Column(DateTime, default=datetime.utcnow)
+    resolved_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(String, nullable=True)
+    edited_params = Column(Text, nullable=True)  # JSON string of edited params
+    result = Column(Text, nullable=True)  # JSON string of the execution result
 

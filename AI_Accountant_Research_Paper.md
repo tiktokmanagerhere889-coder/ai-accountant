@@ -50,7 +50,7 @@ accounting assistant with a human approval step for sensitive actions.
 The tasks below are grouped into fourteen categories, covering daily operations, bookkeeping and
 ledgers, month-end close, year-end close, financial statements, cost accounting, advanced accounting
 topics, banking instruments, tax management, audit, regulatory compliance, budgeting, system-level
-administration, and advisory work. Sixty-seven tasks were identified as achievable within the scope of
+administration, and advisory work. Sixty-eight tasks were identified as achievable within the scope of
 this project, and each one is mapped below to the way it will actually be automated. Rows belonging to
 the same category are grouped together for easier reading.
 
@@ -63,9 +63,9 @@ judgement. Not automatable means the task depends on a physical action, such as 
 software cannot do.
 
 The Build Tier column marks whether a task is part of the twelve Core Build features, which get the full
-conversational AI treatment end to end, or the remaining fifty-five Simplified Build features, which are
+conversational AI treatment end to end, or the remaining fifty-six Simplified Build features, which are
 still functional and connected to real data but rely more on backend logic than on open-ended AI
-reasoning. This split was made because building sixty-seven features to the same depth was not realistic
+reasoning. This split was made because building sixty-eight features to the same depth was not realistic
 in the time available, so the features that best demonstrate the AI agent, and the ones the assignment
 explicitly asks for, were prioritized for full depth.
 
@@ -73,9 +73,9 @@ Category | Task | Automation Approach | Build Tier | Note
 ---------|------|--------------------|-----------|----- 
 Daily Operations | Cash position check | Backend calculation | Simplified | Live balance pulled from the database and shown in plain language; no reasoning needed.
 Daily Operations | Transaction recording via natural language | AI agent | Core | The user types the entry in plain English, the agent parses it and stores it correctly.
-Daily Operations | Invoice and receipt collection and organizing | AI-assisted, human confirms | Simplified | If a photo is uploaded the agent can read the amount and vendor, but filing the physical paper is still a human task.
+Daily Operations | Invoice and receipt collection and organizing | AI-assisted, human confirms | Simplified | If a photo is uploaded the agent can read the amount and vendor (implemented as `process_receipt_image`), but filing the physical paper is still a human task.
 Daily Operations | Bank transaction checking | Backend calculation | Simplified | Straightforward query against stored bank data.
-Daily Operations | Bank register entry | Backend calculation | Core | Records a bank statement line (charges, fees, interest) separately from journal entries; supports custom fields per transaction and auto-creates the bank account if it is new.
+Daily Operations | Bank register entry | Backend calculation | Core | Records a bank statement line (charges, fees, interest) separately from journal entries (implemented as `record_bank_transaction`); supports custom fields per transaction and auto-creates the bank account if it is new.
 Daily Operations | Petty cash management | AI agent | Simplified | Small cash entries and replenishment reminders through natural language.
 Bookkeeping and Ledgers | Journal entries | AI agent | Core | The agent converts a plain-language transaction into the correct debit and credit entry using fixed accounting rules.
 Bookkeeping and Ledgers | General ledger maintenance | Backend calculation | Simplified | Pure aggregation of journal entries, no AI judgement involved.
@@ -83,11 +83,10 @@ Bookkeeping and Ledgers | Chart of accounts setup | AI-assisted, human confirms 
 Bookkeeping and Ledgers | Accounts payable sub-ledger | Backend calculation | Simplified | A database view with an AI question-answer layer on top.
 Bookkeeping and Ledgers | Accounts receivable sub-ledger | Backend calculation | Simplified | Same as above, receivable side.
 Bookkeeping and Ledgers | Payroll ledger | Backend calculation | Simplified | Salary minus deductions, a fixed formula.
-Bookkeeping and Ledgers | Fixed assets ledger | AI-assisted, human confirms | Simplified | The agent can categorize a newly added asset, the record itself is a plain database entry.
-Bookkeeping and Ledgers | Vendor master data management | AI agent | Core | Adding a new vendor by typing a sentence is one of the clearest natural-language use cases.
-Bookkeeping and Ledgers | Customer master data management | AI agent | Simplified | Same natural-language pattern as vendor data; grouped with it as one Core feature in the implementation, tracked here as Simplified since the customer side reuses the same tool.
+Bookkeeping and Ledgers | Fixed assets ledger | AI-assisted, human confirms | Simplified | The agent can categorize a newly added asset (implemented as `categorize_fixed_asset`), the record itself is a plain database entry.
+Bookkeeping and Ledgers | Vendor and customer master data management | AI agent | Core | Adding a vendor or customer by typing a sentence is one of the clearest natural-language use cases; a single `manage_contact` tool handles both, selected by a `contact_type` parameter, so the two sides are one Core feature.
 Month-End Close | Unpaid bills review | AI agent | Simplified | The agent queries the database and returns a clear list.
-Month-End Close | Bank reconciliation | AI-assisted, human confirms | Core | The agent attempts to match bank lines with internal records; anything uncertain goes to a review queue for approval.
+Month-End Close | Bank reconciliation | AI-assisted, human confirms | Core | The agent attempts to match bank lines with internal records (implemented as `run_bank_reconciliation`); anything uncertain goes to a review queue for approval. The related cheque clearing, letter of credit and bank guarantee, and bank charges tools are listed under Banking Instruments below.
 Month-End Close | Accrual entries | AI-assisted, human confirms | Simplified | The agent suggests an accrual based on past patterns, the accountant approves before it posts.
 Month-End Close | Prepaid expense adjustment | Backend calculation | Simplified | A simple division of an advance payment across months.
 Month-End Close | Depreciation calculation | Backend calculation | Simplified | A fixed formula, no reasoning required.
@@ -95,51 +94,53 @@ Month-End Close | Amortization calculation | Backend calculation | Simplified | 
 Month-End Close | Payroll reconciliation | Backend calculation | Simplified | Matching payroll records against the general ledger.
 Month-End Close | Accounts receivable aging report | Backend calculation | Simplified | A grouped query by how overdue each invoice is.
 Month-End Close | Accounts payable aging report | Backend calculation | Simplified | Same idea, for vendor bills.
-Month-End Close | Variance analysis, budget versus actual | AI agent | Simplified | The agent compares the two numbers and explains the likely reason in plain language.
+Month-End Close | Variance analysis, budget versus actual | AI agent | Simplified | The agent compares the two numbers (implemented as `analyze_budget_variance`) and explains the likely reason in plain language.
 Month-End Close | Loan and debt schedule tracking | Backend calculation | Simplified | An amortization schedule split into principal and interest.
 Month-End Close | Cash flow forecasting | AI-assisted, human confirms | Simplified | The agent projects near-term cash needs from historical data, the owner treats it as a guide, not a guarantee.
 Month-End Close | Vendor statement reconciliation | AI-assisted, human confirms | Simplified | The agent compares a vendor statement against internal records and flags differences.
 Month-End Close | Customer statement reconciliation | AI-assisted, human confirms | Simplified | Same idea, on the receivable side.
-Year-End Close | Year-end closing entries | AI-assisted, human confirms | Simplified | This action is irreversible, so a human must click to confirm before books are closed.
-Year-End Close | Retained earnings transfer | Backend calculation | Simplified | A one-line formula, no reasoning needed.
-Year-End Close | Opening and closing balance carry-forward | Backend calculation | Simplified | System logic, not an AI decision.
-Year-End Close | Notes to financial statements | AI agent | Simplified | The agent can draft the explanatory note from the data, the accountant reviews the wording before it is finalized.
+Year-End Close | Year-end closing entries | AI-assisted, human confirms | Simplified | This action is irreversible, so a human must click to confirm before books are closed (implemented as `close_fiscal_year`).
+Year-End Close | Retained earnings transfer | Backend calculation | Simplified | A one-line formula (implemented as `transfer_retained_earnings`), no reasoning needed.
+Year-End Close | Opening and closing balance carry-forward | Backend calculation | Simplified | System logic (implemented as `carry_forward_balances`), not an AI decision.
+Year-End Close | Notes to financial statements | AI agent | Simplified | The agent can draft the explanatory note from the data (implemented as `draft_notes_to_financials`), the accountant reviews the wording before it is finalized.
 Financial Statements | Trial balance | Backend calculation, AI reviews | Core | Debits must equal credits; the agent flags it if they do not.
 Financial Statements | Profit and loss statement | Backend calculation, AI reviews | Core | Revenue minus expenses, the agent explains the result in plain language.
 Financial Statements | Balance sheet | Backend calculation, AI reviews | Core | Assets must equal liabilities plus equity; the agent checks this and flags mismatches.
 Financial Statements | Cash flow statement | Backend calculation, AI reviews | Core | Sum of operating, investing and financing activity, explained by the agent.
 Cost and Management Accounting | Standard costing and variance analysis | AI-assisted, human confirms | Simplified | The owner supplies the standard cost figure, the agent calculates and explains the gap.
 Cost and Management Accounting | Cost allocation and overhead apportionment | AI-assisted, human confirms | Simplified | The owner defines the allocation basis, such as per square foot, the agent runs the calculation.
-Cost and Management Accounting | Break-even and cost-volume-profit analysis | AI agent | Simplified | A formula plus a plain-language explanation.
-Advanced Accounting Topics | Revenue recognition, percentage of completion | AI-assisted, human confirms | Simplified | The owner provides the completion percentage for a contract, the agent runs the calculation.
+Cost and Management Accounting | Break-even and cost-volume-profit analysis | AI agent | Simplified | A formula (implemented as `calculate_breakeven`) plus a plain-language explanation.
+Advanced Accounting Topics | Revenue recognition, percentage of completion | AI-assisted, human confirms | Simplified | The owner provides the completion percentage for a contract, the agent runs the calculation (implemented as `calculate_revenue_recognition`).
 Advanced Accounting Topics | Provisions and contingent liabilities | AI-assisted, human confirms | Simplified | This involves legal judgement, so the agent can only flag a possible provision, never decide it alone.
-Advanced Accounting Topics | Foreign currency transaction handling | Backend calculation | Simplified | A live exchange-rate lookup feeds a fixed conversion formula.
+Advanced Accounting Topics | Foreign currency transaction handling | Backend calculation | Simplified | A live exchange-rate lookup feeds a fixed conversion formula (implemented as `convert_foreign_currency`).
 Advanced Accounting Topics | Related party transaction flagging | AI-assisted, human confirms | Simplified | The agent flags a transaction that looks connected to an insider, the accountant decides on disclosure.
-Banking Instruments | Cheque issuance and clearing tracking | AI agent | Simplified | Tracked through short natural-language updates.
-Banking Instruments | Letter of credit and bank guarantee tracking | AI-assisted, human confirms | Simplified | Tracking can be automated, but issuing the instrument itself is a bank and legal process.
-Banking Instruments | Bank charges reconciliation | Backend calculation | Simplified | Matching bank fee lines against the ledger.
+Banking Instruments | Cheque issuance and clearing tracking | AI agent | Simplified | Tracked through short natural-language updates (implemented as `track_cheque_clearing`).
+Banking Instruments | Letter of credit and bank guarantee tracking | AI-assisted, human confirms | Simplified | Tracking can be automated, but issuing the instrument itself is a bank and legal process (implemented as `track_lc_bank_guarantee`).
+Banking Instruments | Bank charges reconciliation | Backend calculation | Simplified | Matching bank fee lines against the ledger (implemented as `reconcile_bank_charges`).
 Tax Management | Sales tax filing preparation | AI-assisted, human confirms | Simplified | The agent prepares the numbers, a human still submits through the FBR portal since that requires personal credentials.
 Tax Management | Income tax filing preparation | AI-assisted, human confirms | Simplified | Same reasoning as sales tax.
 Tax Management | Withholding tax calculation | Backend calculation | Simplified | Rule-based but fixed once the rate table is entered.
-Tax Management | Tax planning advisory | AI agent | Simplified | A natural fit for conversational guidance based on the stored data.
+Tax Management | Tax planning advisory | AI agent | Simplified | A natural fit for conversational guidance (implemented as `get_tax_planning_advice`) based on the stored data.
 Tax Management | Sales tax input and output adjustment | AI-assisted, human confirms | Simplified | The calculation is automated, the refund claim itself is filed by a person.
-Tax Management | Advance tax and minimum or super tax computation | Backend calculation | Simplified | The rules are complex but still deterministic once coded.
-Tax Management | Sales tax exemption and zero-rating documentation | AI-assisted, human confirms | Simplified | The agent flags which sales may qualify, a person confirms before applying it.
+Tax Management | Advance tax and minimum or super tax computation | Backend calculation | Simplified | The rules are complex but still deterministic once coded (implemented as `calculate_advance_minimum_tax`).
+Tax Management | Sales tax exemption and zero-rating documentation | AI-assisted, human confirms | Simplified | The agent flags which sales may qualify (implemented as `flag_tax_exemption_zero_rating`), a person confirms before applying it.
 Tax Management | EOBI and statutory payroll deductions | Backend calculation | Simplified | Fixed percentage deductions once the rates are entered.
-Audit | Internal audit support | AI-assisted, human confirms | Simplified | The agent flags unusual entries, final judgement stays with the accountant.
-Audit | Anomaly and fraud detection | AI agent | Core | Pattern-based flagging of transactions that look out of place, explained in plain language.
-Audit | Audit trail and change log | Backend feature, not AI | Simplified | Timestamp and user-id logging is a database design choice, not a reasoning task.
-Audit | Statutory register data maintenance | AI-assisted, human confirms | Simplified | Data is kept up to date automatically, legal accuracy is checked by a person.
-Regulatory Compliance | Compliance calendar and filing reminders | AI agent | Core | The agent tracks due dates and reminds the owner ahead of time.
-Budgeting | Budget preparation and forecasting | AI agent | Simplified | The agent drafts a budget from historical spending, the owner adjusts it.
-System and Administration | Multi-user roles and permissions | Backend feature, not AI | Simplified | Access control is a standard application feature.
-System and Administration | Data backup and retention scheduling | Backend feature, not AI | Simplified | A scheduled script, not something that needs language understanding.
-System and Administration | System health monitoring and usage analytics | AI agent | Simplified | System Admin agent (bonus) checks DB health, agent module status, and usage statistics through natural language.
-Advisory and Analysis | Spending pattern analysis | AI agent | Core | A direct match to the kind of question the assistant is meant to answer, such as spending on utilities in a given month.
-Advisory and Analysis | Financial health assessment | AI agent | Simplified | Combines several ratios and trends into a plain-language summary.
-Advisory and Analysis | Cost-cutting recommendations | AI agent | Simplified | Suggestions generated from spending patterns already in the system.
-Advisory and Analysis | Custom management reporting | AI-assisted, human confirms | Simplified | The owner asks for a custom view in plain language, the agent builds the query.
-Advisory and Analysis | Financial ratio analysis | AI agent | Core | Standard ratios calculated and explained in plain language.
+Audit | Internal audit support | AI-assisted, human confirms | Simplified | The agent flags unusual entries (implemented as `support_internal_audit`), final judgement stays with the accountant.
+Audit | Anomaly and fraud detection | AI agent | Core | Pattern-based flagging of transactions that look out of place (implemented as `detect_anomaly_transactions`), explained in plain language.
+Audit | Audit trail and change log | Backend feature, not an agent tool | Simplified | Timestamp and user-id logging is a database design choice, not a reasoning task, and is exposed through the `/audit-trail` REST endpoints rather than as a registered agent tool.
+Audit | Statutory register data maintenance | AI-assisted, human confirms | Simplified | Data is kept up to date automatically (implemented as `maintain_statutory_registers`), legal accuracy is checked by a person.
+Regulatory Compliance | Compliance calendar and filing reminders | AI agent | Core | The agent tracks due dates and reminds the owner ahead of time (implemented as `get_compliance_deadlines`).
+Budgeting | Budget preparation and forecasting | AI agent | Simplified | The agent drafts a budget from historical spending (implemented as `prepare_budget_forecast`), the owner adjusts it.
+System and Administration | Multi-user roles and permissions | Backend feature, not an agent tool | Simplified | Access control is a standard application feature, exposed through the `/roles` REST endpoints rather than as a registered agent tool.
+System and Administration | Data backup and retention scheduling | Backend feature, not an agent tool | Simplified | A scheduled backend operation, exposed through the `/backup` REST endpoints; the System Admin agent additionally exposes a bonus `schedule_system_task` tool for scheduling backup, export, and maintenance tasks through natural language.
+System and Administration | System health monitoring and usage analytics | AI agent | Simplified | System Admin agent (bonus) checks DB health, agent module status, and usage statistics through natural language (`check_system_status` and `get_usage_statistics`), and manages system configuration through `manage_system_preferences`.
+Advisory and Analysis | Spending pattern analysis | AI agent | Core | A direct match to the kind of question the assistant is meant to answer (implemented as `analyze_spending_patterns`), such as spending on utilities in a given month.
+Advisory and Analysis | Financial health assessment | AI agent | Simplified | Combines several ratios and trends (implemented as `assess_financial_health`) into a plain-language summary.
+Advisory and Analysis | Cost-cutting recommendations | AI agent | Simplified | Suggestions generated from spending patterns already in the system (implemented as `generate_cost_cutting_recommendations`).
+Advisory and Analysis | Custom management reporting | AI-assisted, human confirms | Simplified | The owner asks for a custom view in plain language, the agent builds the query (implemented as `generate_custom_report`).
+Advisory and Analysis | Financial ratio analysis | AI agent | Core | Standard ratios calculated and explained in plain language (implemented as `calculate_financial_ratios`).
+
+Note: Of the sixty-eight rows in this table, three are backend features rather than registered agent tools. Audit trail and change log is exposed through the `/audit-trail` REST endpoints, multi-user roles and permissions through the `/roles` REST endpoints, and data backup and retention scheduling through the `/backup` REST endpoints. Each remaining row corresponds to one or more registered agent tools; the backend registry holds sixty-eight registered tools in total, including two bonus System Admin tools, `manage_system_preferences` and `schedule_system_task`, that are covered by the System and Administration rows.
 
 3.1 Features Planned for a Later Version
 
@@ -253,7 +254,7 @@ Containerization | Docker and docker-compose, so the whole stack runs locally wi
 
 7. Feature List for Implementation
 
-Based on the research above, sixty-seven features are planned for this version of the project, split into
+Based on the research above, sixty-eight features are planned for this version of the project, split into
 two build tiers. The twelve Core Build features get the complete conversational treatment, where the
 agent understands the request, calls the right tool, and explains the outcome. These twelve were chosen
 because they line up directly with what the assignment describes as the heart of the project, and
@@ -273,13 +274,13 @@ producing a report and answering a question about the data.
 11. Calculating and explaining financial ratios
 12. Tracking compliance deadlines and sending reminders
 
-The remaining fifty-five Simplified Build features, listed in full in section 3, are still connected to real data
+The remaining fifty-six Simplified Build features, listed in full in section 3, are still connected to real data
 in PostgreSQL and still work correctly, but rely more on straightforward backend logic and less on
 open-ended language understanding. Three further features, lease accounting, investments accounting,
 and consolidation accounting, are documented as a future roadmap rather than built now, for the
 reasons explained in section 3.1.
 
-In addition to the sixty-seven agent-powered features, three features are implemented directly in the
+In addition to the sixty-five agent-executable tools, three features are implemented directly in the
 backend without any AI involvement: audit trail and change log, multi-user roles and permissions, and
 data backup and retention scheduling. These three are standard application features that do not benefit
 from language understanding, and are exposed through their own REST endpoints rather than through
@@ -292,7 +293,7 @@ useful for the parts of accounting that involve understanding a request in plain
 calculating data, and explaining a result, but it should not be trusted to make final decisions on anything
 irreversible, legally sensitive, or dependent on professional judgement. The project is built around that
 boundary, using an AI agent for natural-language entry and explanation, ordinary backend code for every
-calculation, and a human approval step wherever the outcome matters. Twenty-four of the sixty-seven
+calculation, and a human approval step wherever the outcome matters. Twenty-four of the sixty-eight
 tools require explicit human approval before any data is written, covering all irreversible, legally
 sensitive, or judgement-heavy actions. The free-tier model and framework choices made here, Groq as
 the primary model provider with Cerebras as a fallback, and the OpenAI Agents SDK for orchestration,

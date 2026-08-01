@@ -703,10 +703,12 @@ def calculate_depreciation(
     input: CalculateDepreciationInput,
     db: Session,
 ) -> CalculateDepreciationOutput:
-    """Calculate monthly straight-line depreciation for fixed assets.
-    For each active asset: monthly_dep = (cost - residual) / useful_life / 12.
-    Accumulated depreciation summed from existing schedule; if first run
-    for the period, writes a DepreciationSchedule row.
+    """Calculate monthly depreciation for fixed assets.
+    Straight-line by default: monthly_dep = (cost - residual) / useful_life / 12.
+    If depreciation_rate (annual %) is provided, uses rate-based method instead:
+    monthly_dep = (cost * rate / 100) / 12. Residual value is ignored for
+    rate-based calculation. Accumulated depreciation summed from existing
+    schedule; if first run for the period, writes a DepreciationSchedule row.
     """
     query = db.query(FixedAsset).filter(FixedAsset.status.in_(["approved", "active"]))
     if input.asset_id is not None:
@@ -716,13 +718,19 @@ def calculate_depreciation(
     items: list[DepreciationEntryItem] = []
     total_dep = Decimal("0")
 
+    rate_based = input.depreciation_rate is not None and input.depreciation_rate > 0
+
     for asset in assets:
         cost = asset.purchase_cost
-        residual = asset.residual_value
-        useful_life = asset.useful_life_years
-        if useful_life < 1:
-            useful_life = 1
-        monthly = (cost - residual) / Decimal(str(useful_life)) / Decimal("12")
+        if rate_based:
+            rate = Decimal(str(input.depreciation_rate))
+            monthly = (cost * rate / Decimal("100")) / Decimal("12")
+        else:
+            residual = asset.residual_value
+            useful_life = asset.useful_life_years
+            if useful_life < 1:
+                useful_life = 1
+            monthly = (cost - residual) / Decimal(str(useful_life)) / Decimal("12")
         monthly = monthly.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
         existing = db.query(DepreciationSchedule).filter(
@@ -771,6 +779,8 @@ def calculate_depreciation(
         items=items,
         total_depreciation=total_dep.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP),
         period_date=input.period_date,
+        method="rate_based" if rate_based else "straight_line",
+        depreciation_rate=input.depreciation_rate if rate_based else None,
     )
 
 

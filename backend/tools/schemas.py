@@ -957,12 +957,21 @@ class DepreciationEntryItem(BaseModel):
 class CalculateDepreciationInput(BaseModel):
     asset_id: Optional[str] = Field(default=None, description="Specific asset ID; if None, processes all active")
     period_date: date = Field(default_factory=date.today, description="Period date")
+    depreciation_rate: Optional[Decimal] = Field(
+        default=None,
+        gt=Decimal("0"),
+        description="Optional annual depreciation rate % (e.g., 15 = 15% of cost per year). "
+        "When provided, uses rate-based method: monthly = (cost * rate / 100) / 12 instead of "
+        "straight-line. Residual value is ignored for rate-based calculation.",
+    )
 
 
 class CalculateDepreciationOutput(BaseModel):
     items: list[DepreciationEntryItem]
     total_depreciation: Decimal
     period_date: date
+    method: str = Field(default="straight_line", description="Depreciation method used: 'straight_line' or 'rate_based'")
+    depreciation_rate: Optional[Decimal] = Field(default=None, description="Annual rate % used when method is 'rate_based'")
 
 
 class AmortizationEntryItem(BaseModel):

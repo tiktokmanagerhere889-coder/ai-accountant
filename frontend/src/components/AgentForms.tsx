@@ -6,6 +6,13 @@ import { Play, ShieldAlert, AlertCircle, CheckCircle2, Plus, X } from "lucide-re
 interface AgentFormsProps {
   agent: AgentDef;
   onToolExecuted: (output: any) => void;
+  onQueuedForApproval?: () => void;
+}
+
+interface SuccessState {
+  summary: string;
+  recordId?: string;
+  title?: string;
 }
 
 // Extract a human-friendly summary + record ID from a tool result
@@ -32,12 +39,12 @@ function summarizeResult(result: any): { summary: string; recordId?: string } {
   return { summary, recordId };
 }
 
-export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
+export default function AgentForms({ agent, onToolExecuted, onQueuedForApproval }: AgentFormsProps) {
   const [activeTool, setActiveTool] = useState(agent.tools[0]?.name || "");
   const [formData, setFormData] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ summary: string; recordId?: string } | null>(null);
+  const [success, setSuccess] = useState<SuccessState | null>(null);
   const [output, setOutput] = useState<string | null>(null);
   const [executionMode, setExecutionMode] = useState<"ai" | "direct">("direct");
   // Custom fields for tools that support them (e.g. record_bank_transaction)
@@ -79,6 +86,14 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
           if (value) params[inp.name] = value;
         });
 
+        // List-type fields (e.g. anomaly_types) arrive as comma-separated text;
+        // split into arrays so Pydantic can coerce to Optional[list[str]]
+        Object.entries(params).forEach(([key, value]) => {
+          if (key.endsWith("_types") && typeof value === "string") {
+            params[key] = value.split(",").map((s) => s.trim()).filter(Boolean);
+          }
+        });
+
         // Attach custom fields if any were filled (name + value)
         const filledCustom = customFields.filter((f) => f.name.trim() && f.value.trim());
         if (filledCustom.length) {
@@ -87,10 +102,26 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
           params.custom_fields = cf;
         }
 
+        const needsApproval = !!selectedTool.approval;
+
         const response = await axios.post(`${apiBase}/tools/execute`, {
           tool_name: selectedTool.name,
           params,
+          needs_approval: needsApproval,
         }, { timeout: 30000 });
+
+        // Approval-required tools are queued, not executed immediately
+        if (response.data.result?.queued) {
+          const approvalId = response.data.result.approval_id;
+          setSuccess({
+            title: "Sent for approval",
+            summary: `${selectedTool.name} was queued for approval. Open the Notifications & Approvals panel (bell icon) to review, edit, approve or reject it.`,
+            recordId: approvalId,
+          });
+          setOutput(null);
+          onQueuedForApproval?.();
+          return;
+        }
 
         if (response.data.success) {
           const { summary, recordId } = summarizeResult(response.data.result);
@@ -259,7 +290,7 @@ export default function AgentForms({ agent, onToolExecuted }: AgentFormsProps) {
                 <CheckCircle2 className="w-4 h-4 mt-0.5 flex-shrink-0" />
                 <div className="space-y-0.5">
                   <div className="font-medium">
-                    {selectedTool.name} executed
+                    {success.title || `${selectedTool.name} executed`}
                   </div>
                   <div>{success.summary}</div>
                   {success.recordId && (

@@ -58,7 +58,7 @@ def test_net_income():
     print(f"  2. transfer_retained_earnings  net_income: {re_net}")
 
     # 3. Close fiscal year
-    r = client.post("/tools/execute", json={"tool_name":"close_fiscal_year","params":{"fiscal_year":2026,"closing_date":"2026-06-30","confirm":"yes"}})
+    r = client.post("/tools/execute", json={"tool_name":"close_fiscal_year","params":{"fiscal_year":2026,"closing_date":"2026-06-30","confirm":"yes"},"bypass_approval":True})
     d = r.json()
     cf_net = d["result"].get("net_income_transferred") if d.get("success") else "ERROR"
     print(f"  3. close_fiscal_year      net_income: {cf_net}")

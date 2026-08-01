@@ -10,6 +10,8 @@ import AgentForms from "@/components/AgentForms";
 import DirectFeatures from "@/components/DirectFeatures";
 import SettingsModal from "@/components/SettingsModal";
 import AgentCards, { downloadExport } from "@/components/AgentCards";
+import ApprovalBadge from "@/components/ApprovalBadge";
+import ApprovalsPanel from "@/components/ApprovalsPanel";
 import { AGENTS_DATA } from "@/components/agentsData";
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
@@ -41,6 +43,9 @@ export default function Home() {
   const [dbHealthy, setDbHealthy] = useState(true);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [exportOpen, setExportOpen] = useState(false);
+  const [approvalsOpen, setApprovalsOpen] = useState(false);
+  const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
+  const [approvalRefreshTick, setApprovalRefreshTick] = useState(0);
   const exportRef = useRef<HTMLDivElement | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -59,6 +64,21 @@ export default function Home() {
     const interval = setInterval(checkHealth, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  // Fetch pending approval count on mount, when a tool is queued, and every 10s
+  useEffect(() => {
+    const fetchPendingCount = async () => {
+      try {
+        const response = await axios.get(`${apiBase}/approvals/pending`, { timeout: 15000 });
+        setPendingApprovalCount(response.data.approvals?.length || 0);
+      } catch (err) {
+        // Backend not reachable — keep current count
+      }
+    };
+    fetchPendingCount();
+    const interval = setInterval(fetchPendingCount, 10000);
+    return () => clearInterval(interval);
+  }, [approvalRefreshTick]);
 
   // Theme effect
   useEffect(() => {
@@ -121,6 +141,9 @@ export default function Home() {
           >
             {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
+
+          {/* Notifications / Approvals badge */}
+          <ApprovalBadge count={pendingApprovalCount} onClick={() => setApprovalsOpen(true)} />
 
           {/* Export Dropdown */}
           <div className="relative" ref={exportRef}>
@@ -190,6 +213,10 @@ export default function Home() {
                 // Refresh dashboard statistics on any transaction update
                 setRefreshTrigger((prev) => prev + 1);
               }}
+              onQueuedForApproval={() => {
+                // Refresh the pending approval badge immediately
+                setApprovalRefreshTick((prev) => prev + 1);
+              }}
             />
           )}
         </main>
@@ -200,6 +227,13 @@ export default function Home() {
 
       {/* Settings preferences modal */}
       {settingsOpen && <SettingsModal onClose={() => setSettingsOpen(false)} />}
+
+      {/* Notifications & Approvals panel */}
+      <ApprovalsPanel
+        open={approvalsOpen}
+        onClose={() => setApprovalsOpen(false)}
+        onPendingCountChange={setPendingApprovalCount}
+      />
     </div>
     </ErrorBoundary>
   );
