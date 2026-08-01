@@ -42,11 +42,12 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "record_transaction_nl",
         description: "Parses plain-English transaction and stores it",
         approval: false,
-        aiOnly: true,
+        aiOnly: false,
         inputs: [
-          { name: "description", type: "text", placeholder: "e.g. Paid office rent 50000", required: true },
+          { name: "description", type: "text", placeholder: "e.g. Paid home rent 50000", required: true },
           { name: "posted_date", type: "date", placeholder: "Posting date", required: false },
-          { name: "reference", type: "text", placeholder: "Invoice ref number", required: false }
+          { name: "reference", type: "text", placeholder: "Invoice ref number", required: false },
+          { name: "debit_account", type: "text", placeholder: "Optional: override account (e.g. 6000-Home Rent)", required: false }
         ]
       },
       {

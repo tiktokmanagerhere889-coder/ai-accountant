@@ -273,6 +273,7 @@ class RecordTransactionNLInput(BaseModel):
     description: str = Field(..., min_length=5, max_length=500, description="Plain-English transaction description")
     posted_date: date = Field(default_factory=date.today, description="Transaction date")
     reference: Optional[str] = Field(default=None, description="Optional invoice/receipt reference number")
+    debit_account: Optional[str] = Field(default=None, description="Explicit debit account override (if AI/user decides the category)")
 
 
 class RecordTransactionNLOutput(BaseModel):

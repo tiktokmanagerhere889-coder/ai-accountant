@@ -7,7 +7,7 @@ from decimal import Decimal
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
-from db.models import JournalEntry
+from db.models import JournalEntry, ChartOfAccount
 from tools.schemas import RecordTransactionNLInput, RecordTransactionNLOutput
 
 
@@ -52,12 +52,68 @@ def _parse_amount(description: str) -> Decimal | None:
     return Decimal(amounts[0])
 
 
-def _categorize_description(description: str) -> str:
-    """Map a description to the most likely expense account."""
+def _categorize_description(description: str, db: Session) -> str:
+    """Map a description to the most appropriate expense account.
+
+    Resolution order (dynamic, nothing forced):
+      1. Look up the user's chart_of_accounts for an expense account whose name
+         contains a keyword from the description (e.g. "home" + "rent" -> an
+         account named "Home Rent" if present).
+      2. Fall back to the keyword map.
+      3. Derive the account name from the description itself (e.g. "laptop rent"
+         -> "Laptop Rent"), preferring the user's own wording over a hardcoded
+         "Office Rent".
+    """
     desc_lower = description.lower()
-    for keyword, account in EXPENSE_ACCOUNTS.items():
+
+    # Find the category keyword (rent, salary, utilities, ...) present in description
+    category = None
+    for keyword in EXPENSE_ACCOUNTS:
         if keyword in desc_lower:
-            return account
+            category = keyword
+            break
+
+    if category:
+        descriptor_words = [
+            w for w in desc_lower
+            .replace("paid", "").replace("purchase", "").replace("bought", "").split()
+            if w.isalpha() and len(w) > 2
+            and w not in (category, "the", "with", "for", "and", "cash", "bank")
+        ]
+        chart_accounts = db.query(ChartOfAccount).filter(
+            ChartOfAccount.account_type == "expense"
+        ).all()
+
+        # 1. Descriptor + category exact match in chart (e.g. "Home Rent" exists)
+        for acc in chart_accounts:
+            acc_lower = acc.account_name.lower()
+            if category in acc_lower and any(d in acc_lower for d in descriptor_words):
+                return acc.account_code
+
+        # 2. Category-only chart match ONLY when no descriptor word present
+        #    (e.g. plain "rent" -> the chart's rent account)
+        if not descriptor_words:
+            for acc in chart_accounts:
+                if category in acc.account_name.lower():
+                    return acc.account_code
+
+        # 3. Derive the account from the user's own wording — this preserves
+        #    "home rent" / "laptop rent" as distinct sub-accounts instead of
+        #    forcing everything into "Office Rent". Code prefix from the chart
+        #    account for the category if one exists, else the keyword map.
+        mapped = EXPENSE_ACCOUNTS.get(category)
+        if mapped:
+            prefix = mapped.split("-")[0]
+            # Use chart account code if a category account exists
+            for acc in chart_accounts:
+                if category in acc.account_name.lower():
+                    prefix = acc.account_code.split("-")[0]
+                    break
+            if descriptor_words:
+                derived_name = " ".join(descriptor_words).title()
+                return f"{prefix}-{derived_name}"
+            return mapped
+
     return "7200-Miscellaneous"
 
 
@@ -97,8 +153,11 @@ def record_transaction_nl(input: RecordTransactionNLInput, db: Session) -> Recor
     if amount is None or amount <= Decimal("0.00"):
         raise ValueError("No valid amount found in description")
 
-    # Step 2: Categorize the expense
-    debit_account = _categorize_description(description)
+    # Step 2: Categorize the expense — explicit override wins, else dynamic
+    if input.debit_account:
+        debit_account = input.debit_account
+    else:
+        debit_account = _categorize_description(description, db)
 
     # Step 3: Check for duplicate
     duplicate = _check_duplicate(description, posted_date, amount, db)
