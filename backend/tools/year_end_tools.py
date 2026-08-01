@@ -578,6 +578,9 @@ def carry_forward_balances(
     entries = db.query(JournalEntry).filter(
         JournalEntry.posted_date <= input.closing_date,
         JournalEntry.status == "posted",
+        # Exclude previously created carry-forward entries so re-running
+        # never double-counts balances (idempotency fix)
+        ~JournalEntry.entry_id.like("CF-%"),
     ).all()
 
     # Net balance per account
@@ -621,9 +624,9 @@ def carry_forward_balances(
                 posted_date=input.closing_date,
                 reference=None,
                 debit_account=debit_acc,
-                debit_amount=abs(net_bal) if net_bal > Decimal("0") else Decimal("0"),
+                debit_amount=abs(net_bal),
                 credit_account=credit_acc,
-                credit_amount=abs(net_bal) if net_bal < Decimal("0") else Decimal("0"),
+                credit_amount=abs(net_bal),
                 status="posted",
             )
             # Check if already exists for this carry-forward
@@ -664,8 +667,18 @@ def draft_notes_to_financials(
     commitments, and contingencies from system data.
     """
     notes: list[FinancialNote] = []
-    requested = input.note_types or ["accounting_policies", "revenue_recognition",
-                                      "depreciation_method", "commitments", "contingencies"]
+    SUPPORTED_NOTE_TYPES = {"accounting_policies", "revenue_recognition",
+                            "depreciation_method", "commitments", "contingencies"}
+    requested = input.note_types or list(SUPPORTED_NOTE_TYPES)
+
+    # Validate requested note types - reject unsupported ones with a clear
+    # error instead of silently ignoring them
+    unsupported = [t for t in requested if t not in SUPPORTED_NOTE_TYPES]
+    if unsupported:
+        raise ValueError(
+            f"Unsupported note type(s): {', '.join(unsupported)}. "
+            f"Supported types: {', '.join(sorted(SUPPORTED_NOTE_TYPES))}"
+        )
 
     for note_type in requested:
         if note_type == "accounting_policies":

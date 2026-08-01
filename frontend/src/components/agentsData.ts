@@ -466,6 +466,36 @@ export const AGENTS_DATA: AgentDef[] = [
           { name: "closing_date", type: "date", placeholder: "Date of Close", required: true },
           { name: "confirm", type: "checkbox", placeholder: "Confirm Action", required: true }
         ]
+      },
+      {
+        name: "transfer_retained_earnings",
+        description: "Transfer net profit to retained earnings",
+        approval: false,
+        aiOnly: false,
+        inputs: [
+          { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true }
+        ]
+      },
+      {
+        name: "carry_forward_balances",
+        description: "Carry opening/closing balances to next year",
+        approval: false,
+        aiOnly: false,
+        inputs: [
+          { name: "from_fiscal_year", type: "number", placeholder: "e.g. 2025", required: true },
+          { name: "to_fiscal_year", type: "number", placeholder: "e.g. 2026", required: true },
+          { name: "closing_date", type: "date", placeholder: "Closing Date (optional)", required: false }
+        ]
+      },
+      {
+        name: "draft_notes_to_financials",
+        description: "Draft explanatory notes for financial statements",
+        approval: false,
+        aiOnly: false,
+        inputs: [
+          { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true },
+          { name: "note_types", type: "text", placeholder: "accounting_policies,going_concern (comma-sep)", required: false }
+        ]
       }
     ]
   },
@@ -505,9 +535,11 @@ export const AGENTS_DATA: AgentDef[] = [
         approval: true,
         aiOnly: false,
         inputs: [
-          { name: "material_id", type: "text", placeholder: "Material ID", required: true },
-          { name: "actual_qty", type: "text", placeholder: "Actual Qty Used", required: true },
-          { name: "actual_cost", type: "text", placeholder: "Actual Cost", required: true }
+          { name: "account_code", type: "text", placeholder: "e.g. 6000", required: true },
+          { name: "period", type: "number", placeholder: "Month 1-12", required: true },
+          { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true },
+          { name: "standard_cost", type: "text", placeholder: "Standard/Budgeted Cost", required: true },
+          { name: "standard_quantity", type: "text", placeholder: "Standard Qty (optional)", required: false }
         ]
       },
       {
@@ -519,6 +551,56 @@ export const AGENTS_DATA: AgentDef[] = [
           { name: "total_overhead", type: "text", placeholder: "Total Overhead Amount", required: true },
           { name: "allocation_method", type: "text", placeholder: "e.g. square_footage, direct_labor", required: true },
           { name: "department_metrics", type: "textarea", placeholder: "JSON metric overrides", required: true }
+        ]
+      },
+      {
+        name: "prepare_budget_forecast",
+        description: "Draft budget forecast from historical spend",
+        approval: false,
+        aiOnly: false,
+        inputs: [
+          { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true },
+          { name: "periods", type: "number", placeholder: "Months (default 12)", required: false },
+          { name: "account_code_prefix", type: "text", placeholder: "e.g. 6000 (optional)", required: false }
+        ]
+      },
+      {
+        name: "calculate_revenue_recognition",
+        description: "Percentage-of-completion revenue recognition",
+        approval: true,
+        aiOnly: false,
+        inputs: [
+          { name: "contract_id", type: "text", placeholder: "Contract ID", required: true },
+          { name: "contract_value", type: "text", placeholder: "Total Contract Value", required: true },
+          { name: "completion_percentage", type: "text", placeholder: "0-100", required: true },
+          { name: "previous_recognized", type: "text", placeholder: "Previously Recognized (optional)", required: false },
+          { name: "period", type: "number", placeholder: "Month 1-12", required: true },
+          { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true }
+        ]
+      },
+      {
+        name: "flag_provision_contingent_liability",
+        description: "Flag IAS 37 provision or contingent liability",
+        approval: true,
+        aiOnly: false,
+        inputs: [
+          { name: "description", type: "text", placeholder: "Liability Description", required: true },
+          { name: "estimated_amount", type: "text", placeholder: "Estimated Amount", required: true },
+          { name: "probability", type: "text", placeholder: "probable/possible/remote", required: true },
+          { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true }
+        ]
+      },
+      {
+        name: "flag_related_party_transaction",
+        description: "Flag insider-connected transactions",
+        approval: true,
+        aiOnly: false,
+        inputs: [
+          { name: "entry_id", type: "text", placeholder: "Journal Entry ID", required: true },
+          { name: "transaction_description", type: "text", placeholder: "Transaction Description", required: true },
+          { name: "amount", type: "text", placeholder: "Amount", required: true },
+          { name: "counterparty_name", type: "text", placeholder: "Counterparty Name", required: true },
+          { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true }
         ]
       }
     ]
@@ -573,6 +655,47 @@ export const AGENTS_DATA: AgentDef[] = [
           { name: "period", type: "number", placeholder: "Month 1-12", required: true },
           { name: "fiscal_year", type: "number", placeholder: "2026", required: true },
           { name: "confirm", type: "checkbox", placeholder: "Confirm data accuracy", required: true }
+        ]
+      },
+      {
+        name: "prepare_income_tax_filing",
+        description: "Draft FBR Income Tax filing (Form ITR)",
+        approval: true,
+        aiOnly: false,
+        inputs: [
+          { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true },
+          { name: "confirm", type: "checkbox", placeholder: "Confirm data accuracy", required: true }
+        ]
+      },
+      {
+        name: "get_tax_planning_advice",
+        description: "Tax planning guidance from your data",
+        approval: false,
+        aiOnly: false,
+        inputs: [
+          { name: "query", type: "text", placeholder: "e.g. How to reduce tax liability?", required: true },
+          { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true }
+        ]
+      },
+      {
+        name: "calculate_advance_minimum_tax",
+        description: "Advance minimum tax on turnover",
+        approval: false,
+        aiOnly: false,
+        inputs: [
+          { name: "annual_turnover", type: "text", placeholder: "Annual Turnover", required: true },
+          { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true },
+          { name: "business_type", type: "text", placeholder: "company/individual/aop", required: false }
+        ]
+      },
+      {
+        name: "flag_tax_exemption_zero_rating",
+        description: "Flag tax-exempt or zero-rated entries",
+        approval: true,
+        aiOnly: false,
+        inputs: [
+          { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true },
+          { name: "period", type: "number", placeholder: "Month 1-12 (optional)", required: false }
         ]
       }
     ]
@@ -669,8 +792,12 @@ export const AGENTS_DATA: AgentDef[] = [
         name: "generate_cost_cutting_recommendations",
         description: "Rank expense reduction suggestions",
         approval: false,
-        aiOnly: true,
-        inputs: []
+        aiOnly: false,
+        inputs: [
+          { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true },
+          { name: "period", type: "number", placeholder: "Month 1-12 (optional)", required: false },
+          { name: "min_savings_threshold", type: "text", placeholder: "Min Savings (optional)", required: false }
+        ]
       },
       {
         name: "generate_custom_report",
@@ -678,9 +805,11 @@ export const AGENTS_DATA: AgentDef[] = [
         approval: true,
         aiOnly: false,
         inputs: [
-          { name: "report_type", type: "text", placeholder: "summary/detailed/comparative", required: true },
-          { name: "from_date", type: "date", placeholder: "From Date", required: true },
-          { name: "to_date", type: "date", placeholder: "To Date", required: true }
+          { name: "report_title", type: "text", placeholder: "e.g. Q1 Expense Report", required: true },
+          { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true },
+          { name: "report_type", type: "text", placeholder: "summary/detailed/comparative/trend", required: true },
+          { name: "period_from", type: "number", placeholder: "Start Month 1-12 (optional)", required: false },
+          { name: "period_to", type: "number", placeholder: "End Month 1-12 (optional)", required: false }
         ]
       }
     ]

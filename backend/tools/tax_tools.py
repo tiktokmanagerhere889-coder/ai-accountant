@@ -148,9 +148,10 @@ def get_tax_planning_advice(inp: GetTaxPlanningAdviceInput, db: Session) -> GetT
     if revenue > Decimal("0"):
         est_tax = _round(net * corp_rate / Decimal("100"), 2) if corp_rate > Decimal("0") else Decimal("0")
         if net > Decimal("0"):
+            rate_label = f"{corp_rate}%" if corp_rate > Decimal("0") else "the configured rate"
             advice_parts.append(
                 f"Estimated tax liability for FY {inp.fiscal_year} is approximately {est_tax} "
-                f"(based on {net} net income at ~29% corporate rate)."
+                f"(based on {net} net income at {rate_label} corporate rate)."
             )
             if revenue > Decimal("10000000"):
                 advice_parts.append(
@@ -515,7 +516,8 @@ def prepare_income_tax_filing(inp: PrepareIncomeTaxFilingInput, db: Session) -> 
             "This prepares the data only - you will submit via FBR portal."
         )
 
-    filing_id = f"IT-{inp.fiscal_year}-{uuid.uuid4().hex[:4].upper()}"
+    # Deterministic filing ID (stable across re-runs for the same fiscal year)
+    filing_id = f"IT-{inp.fiscal_year}"
 
     # Total income from revenue accounts (resolved from chart)
     total_income = db.query(func.sum(JournalEntry.credit_amount)).filter(
@@ -570,8 +572,8 @@ def prepare_income_tax_filing(inp: PrepareIncomeTaxFilingInput, db: Session) -> 
     if taxable_income > Decimal("0"):
         message_parts.append(f"Estimated tax liability for FY {inp.fiscal_year}: {net_due}")
     else:
-        message_parts.append(f"No tax liability for FY {inp.fiscal_year} (net loss or zero income).")
-    message_parts.append("Review all figures before submitting via FBR portal.")
+        message_parts.append(f"No tax liability for FY {inp.fiscal_year} (net loss or zero income)")
+    message_parts.append("Review all figures before submitting via FBR portal")
 
     return PrepareIncomeTaxFilingOutput(
         filing_id=filing_id,
@@ -585,5 +587,5 @@ def prepare_income_tax_filing(inp: PrepareIncomeTaxFilingInput, db: Session) -> 
         filing_data=filing_data,
         needs_approval=True,
         status="prepared",
-        message=". ".join(message_parts),
+        message=". ".join(message_parts) + ".",
     )

@@ -117,6 +117,30 @@ def _categorize_description(description: str, db: Session) -> str:
     return "7200-Miscellaneous"
 
 
+def _ensure_account_in_chart(db: Session, account_code: str, account_type: str = "expense") -> None:
+    """Upsert an account into chart_of_accounts if it doesn't exist.
+
+    Derived accounts (e.g. "6400-Travel") are created by dynamic
+    categorization but were never registered in the chart, so the chart-driven
+    expense/revenue filters (P&L, retained earnings, tax) could not classify
+    them and they were silently excluded from expenses - producing wrong net
+    income. Registering them keeps journal entries consistent with the chart.
+    """
+    code, name = account_code.split("-", 1) if "-" in account_code else (account_code, account_code)
+    existing = db.query(ChartOfAccount).filter(
+        ChartOfAccount.account_code == account_code
+    ).first()
+    if existing:
+        return
+    db.add(ChartOfAccount(
+        account_code=account_code,
+        account_name=name,
+        account_type=account_type,
+        is_active=1,
+        created_at=date.today(),
+    ))
+
+
 def _generate_entry_id(db: Session) -> str:
     """Generate a unique journal entry ID like JE-YYYYMMDD-NNN."""
     today_str = date.today().strftime("%Y%m%d")
@@ -158,6 +182,10 @@ def record_transaction_nl(input: RecordTransactionNLInput, db: Session) -> Recor
         debit_account = input.debit_account
     else:
         debit_account = _categorize_description(description, db)
+
+    # Register derived accounts in the chart so P&L/RE/tax classification works
+    _ensure_account_in_chart(db, debit_account, account_type="expense")
+    _ensure_account_in_chart(db, CASH_ACCOUNT, account_type="asset")
 
     # Step 3: Check for duplicate
     duplicate = _check_duplicate(description, posted_date, amount, db)

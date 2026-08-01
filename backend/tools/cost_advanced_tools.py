@@ -566,7 +566,7 @@ def flag_related_party_transaction(
             flag_id=flag_id,
             entry_id=inp.entry_id,
             counterparty_name=inp.counterparty_name,
-            related_party_status="not_related",
+            related_party_status="unverifiable",
             confidence="low",
             disclosure_required=False,
             matched_via="no_match",

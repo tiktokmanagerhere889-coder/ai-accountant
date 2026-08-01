@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import Optional
 
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from db.models import ChartOfAccount
@@ -29,18 +29,34 @@ def _accounts_with_types(db: Session, account_types: list[str], name_keywords: l
 
 
 def _classify_filter_clause(account_column, db: Session, account_types: list[str], name_keywords: list[str], chart_name_keywords: list[str] | None = None):
-    """Build a filter clause: exact chart-account match OR conservative name match.
+    """Build a filter clause: exact chart-account match OR prefix match OR name match.
 
-    Chart-account match uses account_type plus optional account-name condition so
-    e.g. AR/cash (asset subtypes) are not confused with inventory. The name
-    fallback is kept narrow to avoid misclassification (e.g. "sales" is not used
-    because "Cost of Sales" is an expense).
+    Resolution order:
+      1. Exact chart-account match by account_type (optionally narrowed by name).
+      2. Numeric-prefix match against chart accounts of this type - only for
+         pure type-based filters (no chart_name_keywords). Sub-accounts created
+         dynamically (e.g. "6400-Travel" when "6000-Rent" is an expense in the
+         chart) share the leading digit of the parent code, so any 6xxx debit is
+         classified as an expense. This keeps P&L / retained earnings / tax
+         correct even when an account isn't registered in the chart yet.
+         Name-narrowed filters (cash/bank, receivable/debtor) intentionally
+         skip this to avoid over-matching e.g. AR under cash.
+      3. Conservative name fallback (kept narrow - "sales" is not used because
+         "Cost of Sales" is an expense).
     """
     clauses = []
 
     chart_codes = _accounts_with_types(db, account_types, chart_name_keywords)
     if chart_codes:
         clauses.append(account_column.in_(chart_codes))
+
+        # Prefix fallback only for pure type matches (no name narrowing).
+        if chart_name_keywords is None:
+            leading_digits = {c.split("-")[0][0] for c in chart_codes if c.split("-")[0][:1].isdigit()}
+            if leading_digits:
+                clauses.append(or_(*[
+                    func.substr(account_column, 1, 1) == d for d in sorted(leading_digits)
+                ]))
 
     # Conservative name fallback (accounts not yet in the chart)
     for kw in name_keywords:
