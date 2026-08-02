@@ -314,7 +314,7 @@ async def chat(request: ChatRequest):
     try:
         from db.database import get_session
         from intent_router import execute_route, is_approval_required
-        from result_formatter import format_tool_result
+        from result_formatter import format_tool_result, has_dedicated_formatter
 
         db = get_session()
         try:
@@ -336,9 +336,14 @@ async def chat(request: ChatRequest):
                     response=f"[Queued for approval: {entry.approval_id}] The action '{tool_name}' requires your approval. Open the Approvals panel to review and approve."
                 )
             text = format_tool_result(tool_name, result)
-            # Best-effort LLM polish (never blocks)
+            # LLM polish re-formats presentation only. It runs for EVERY routed
+            # tool so answers read naturally, but a verification step rejects
+            # output that introduces numbers absent from the real result — so
+            # Groq can reformat but never change the values.
             try:
-                polished = await _format_with_llm(request.message, text)
+                import json as _json
+                raw_json = _json.dumps(result, default=str) if isinstance(result, dict) else str(result)
+                polished = await _format_with_llm(request.message, text, raw_json)
                 if polished:
                     text = polished
             except Exception:
@@ -353,14 +358,19 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=500, detail="An internal error occurred while processing your request.")
 
 
-async def _format_with_llm(message: str, tool_text: str) -> str:
+async def _format_with_llm(message: str, tool_text: str, raw_json: str = "") -> str:
     """Best-effort: ask Groq to polish the tool result into plain English.
 
-    Returns the polished text, or "" if the LLM is unavailable or produces a
-    broken artifact (e.g. tool-call tags like <|python_tag|>). Never blocks
-    the response - if Groq is rate-limited or down, we return the raw text.
+    The LLM may ONLY reformat presentation - it must preserve every value
+    exactly as given. A verification pass rejects the polished text if it
+    introduces numbers not present in the source data (e.g. Groq once replaced
+    a real cash balance of 245,000 with a hallucinated -1,117,000).
+
+    Returns the polished text, or "" if the LLM is unavailable, produces a
+    broken artifact, or changes values. Never blocks the response.
     """
     try:
+        import re as _re
         from agent_defs.model_providers import create_groq_provider, GROQ_FALLBACK_MODEL
         from agents import Runner
         from agents.run_config import RunConfig
@@ -371,24 +381,56 @@ async def _format_with_llm(message: str, tool_text: str) -> str:
             instructions=(
                 "You are a financial report presenter. You receive a user question and the raw "
                 "tool result data. Rewrite the result as a clear, friendly, plain-English answer "
-                "to the user's question. Do NOT invent numbers, do NOT add information, do NOT "
-                "refuse - just present the given data clearly. Keep it under 150 words. "
-                "Reply with plain text only - no tags, no JSON, no code blocks."
+                "to the user's question.\n"
+                "STRICT RULES:\n"
+                "- Use ONLY the numbers and values present in the data. Never round, change, or "
+                "invent any number, even if it looks wrong or negative.\n"
+                "- Do NOT add any figure that is not in the data.\n"
+                "- Do NOT refuse or say you cannot access data - the data is provided.\n"
+                "- Keep it under 150 words. Plain text only - no tags, no JSON, no code blocks."
             ),
             model=GROQ_FALLBACK_MODEL,
         )
         result = await Runner.run(
             formatter,
-            input=f"User asked: {message}\n\nTool result data:\n{tool_text}",
+            input=f"User asked: {message}\n\nTool result data (JSON):\n{raw_json or tool_text}",
             run_config=RunConfig(model_provider=create_groq_provider()),
         )
         polished = result.final_output.strip()
         # Reject artifacts: tool-call tags, JSON blocks, or content shorter than the raw
         if not polished or "<|" in polished or polished.startswith("{"):
             return ""
+        # Verification: any number in the polished text must exist in the source.
+        source = raw_json or tool_text
+        if not _numbers_preserved(polished, source):
+            return ""
         return polished
     except Exception:
         return ""
+
+
+def _numbers_preserved(polished: str, source: str) -> bool:
+    """True if every number in the polished text appears in the source data.
+
+    Both sides are normalized (commas stripped, trailing decimals trimmed) so
+    "245,000.00" in the reply matches "245000.00" in the source. If the LLM
+    invents any number not present in the source, this returns False and the
+    polished text is discarded in favor of the deterministic formatter.
+    """
+    import re as _re
+
+    def _norm(s: str) -> str:
+        s = s.replace(",", "").strip()
+        if "." in s:
+            s = s.rstrip("0").rstrip(".")
+        return s
+
+    source_nums = {_norm(n) for n in _re.findall(r"\d[\d,]*\.?\d*", source.replace("PKR", ""))}
+    polished_nums = {_norm(n) for n in _re.findall(r"\d[\d,]*\.?\d*", polished.replace("PKR", ""))}
+    for n in polished_nums:
+        if n and n not in source_nums:
+            return False
+    return True
 
 
 # Direct Tool Execution (bypasses LLM)

@@ -43,6 +43,16 @@ def format_tool_result(tool_name: str, result: dict) -> str:
     return _generic(result)
 
 
+def has_dedicated_formatter(tool_name: str) -> bool:
+    """True if this tool has a dedicated plain-English formatter.
+
+    When True, the deterministic text is already readable and the LLM polish
+    step must NOT override it (Groq has hallucinated numbers over correct data).
+    Only tools WITHOUT a dedicated formatter fall back to LLM polish.
+    """
+    return tool_name in _FORMATTERS
+
+
 def _generic(result: dict) -> str:
     """Fallback: pick the most meaningful field, else pretty JSON."""
     # Common summary fields
