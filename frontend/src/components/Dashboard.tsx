@@ -29,11 +29,20 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
 
   const fetchDashboardStats = async () => {
     setAuditLoading(true);
+    // Use the current date dynamically so the dashboard always reflects the
+    // latest entries (was hardcoded to 2026-08-01, missing newer transactions).
+    const today = new Date();
+    const todayISO = today.toISOString().slice(0, 10);
+    const currentYear = today.getFullYear();
+    const firstOfMonth = `${todayISO.slice(0, 7)}-01`;
+    const yearStart = `${currentYear}-01-01`;
+    const yearEnd = `${currentYear}-12-31`;
+
     try {
       // 1. Fetch cash position via DIRECT tool (no LLM — reliable)
       const cashRes = await axios.post(`${apiBase}/tools/execute`, {
         tool_name: "check_cash_position",
-        params: { as_of_date: "2026-08-01", account_id: "ALL" },
+        params: { as_of_date: todayISO, account_id: "ALL" },
       }, { timeout: 30000 });
       const cashData = cashRes.data.result;
       if (cashData && typeof cashData.closing_balance !== "undefined") {
@@ -46,7 +55,7 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
       try {
         const healthRes = await axios.post(`${apiBase}/tools/execute`, {
           tool_name: "assess_financial_health",
-          params: { fiscal_year: 2026 },
+          params: { fiscal_year: currentYear },
         }, { timeout: 30000 });
         const score = healthRes.data.result?.score;
         if (typeof score === "number") {
@@ -61,7 +70,7 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
       // 3. Fetch recent ledger entries via DIRECT tool
       const ledgerRes = await axios.post(`${apiBase}/tools/execute`, {
         tool_name: "get_general_ledger",
-        params: { from_date: "2026-07-01", to_date: "2026-08-31" },
+        params: { from_date: yearStart, to_date: yearEnd },
       }, { timeout: 30000 });
       const accounts = ledgerRes.data.result?.accounts || [];
       const txs = accounts.map((a: any) => ({
