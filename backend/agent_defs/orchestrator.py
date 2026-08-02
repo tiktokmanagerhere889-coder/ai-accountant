@@ -141,6 +141,9 @@ ORCHESTRATOR_AGENT = Agent(
 
 async def run_orchestrator(user_request: str) -> str:
     """Route a user request through the Orchestrator to the right specialist agent."""
+    # Sanitize non-ASCII from the request so httpx never hits an ascii encode
+    # error when serializing to a provider (fixes 'ascii' codec crash).
+    user_request = _ascii_safe(user_request)
     for attempt_model, provider_fn, label in [
         (GROQ_MODEL, create_groq_provider, "Groq"),
         (GROQ_FALLBACK_MODEL, create_groq_provider, "Groq fallback"),
@@ -159,7 +162,19 @@ async def run_orchestrator(user_request: str) -> str:
             )
             return result.final_output
         except Exception as e:
-            error_detail = str(e)[:100]
+            error_detail = _ascii_safe(str(e))[:100]
             last_error = f"{label}: {error_detail}"
             logger.warning(f"Provider {label} failed: {error_detail}")
     return f"Error: All providers unavailable.\n{last_error}"
+
+
+def _ascii_safe(text: str) -> str:
+    """Replace non-ASCII chars with ASCII equivalents so httpx/provider
+    serialization never raises UnicodeEncodeError. Keeps the message readable."""
+    if not isinstance(text, str):
+        return str(text)
+    # Map common non-ASCII to ASCII; drop the rest
+    replacements = {"—": "-", "–": "-", "→": "->", "“": '"', "”": '"', "‘": "'", "’": "'"}
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    return "".join(ch if ord(ch) < 128 else "?" for ch in text)

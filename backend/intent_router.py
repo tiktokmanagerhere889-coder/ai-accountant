@@ -309,18 +309,22 @@ def route_tool(message: str) -> Optional[tuple[str, dict]]:
 
 
 def execute_route(message: str, db: Session) -> Optional[tuple[str, dict]]:
-    """Route a message to a tool and execute it. Returns (tool_name, result) or None."""
+    """Route a message to a tool and execute it. Returns (tool_name, result) or None.
+
+    IMPORTANT: if a tool is MATCHED but fails to execute (DB error, validation,
+    etc.), this raises the error rather than returning None. Returning None here
+    makes the /chat endpoint fall through to the LLM orchestrator, which then
+    fails across all providers and surfaces misleading errors. A matched-but-failed
+    tool should surface its real error, never trigger the LLM chain.
+    """
     match = route_tool(message)
     if match is None:
         return None
     tool_name, params = match
     if tool_name not in REGISTRY:
         return None
-    try:
-        result = execute_tool(tool_name, params)
-        return tool_name, result
-    except Exception:
-        return None
+    result = execute_tool(tool_name, params)
+    return tool_name, result
 
 
 def is_approval_required(tool_name: str) -> bool:

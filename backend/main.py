@@ -319,6 +319,14 @@ async def chat(request: ChatRequest):
         db = get_session()
         try:
             routed = execute_route(request.message, db)
+        except Exception as route_err:
+            # A matched tool failed to execute. Surface the real error cleanly
+            # instead of falling through to the LLM orchestrator (which would
+            # fail across all providers and show a misleading message).
+            db.close()
+            return ChatResponse(
+                response=f"[Tool error] {request.message}\n\n{str(route_err)}"
+            )
         finally:
             db.close()
 
