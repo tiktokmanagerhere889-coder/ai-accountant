@@ -27,6 +27,7 @@ interface ApprovalRecord {
   rejection_reason?: string | null;
   edited_params?: Record<string, any> | null;
   result?: any;
+  formatted_result?: string | null;
 }
 
 interface ApprovalsPanelProps {
@@ -85,6 +86,8 @@ export default function ApprovalsPanel({ open, onClose, onPendingCountChange }: 
   const [rejectReasons, setRejectReasons] = useState<Record<string, string>>({});
   // approval_id -> "approving" | "rejecting"
   const [actioning, setActioning] = useState<Record<string, string>>({});
+  // How to display approved tool results: "text" (plain English) or "json" (raw)
+  const [resultViewMode, setResultViewMode] = useState<"text" | "json">("text");
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -345,11 +348,36 @@ export default function ApprovalsPanel({ open, onClose, onPendingCountChange }: 
 
           {/* History */}
           <div className="pt-2">
-            <div className="flex items-center gap-2 pb-2">
-              <History className="w-4 h-4 text-gray-500" />
-              <span className="text-[10px] uppercase font-bold tracking-wider text-gray-500">
-                Approval History
-              </span>
+            <div className="flex items-center justify-between pb-2">
+              <div className="flex items-center gap-2">
+                <History className="w-4 h-4 text-gray-500" />
+                <span className="text-[10px] uppercase font-bold tracking-wider text-gray-500">
+                  Approval History
+                </span>
+              </div>
+              {/* Result view mode toggle: plain text or JSON */}
+              <div className="flex items-center gap-1 rounded border border-gray-200 dark:border-gray-700 p-0.5">
+                <button
+                  onClick={() => setResultViewMode("text")}
+                  className={`px-2 py-0.5 text-[10px] font-semibold rounded transition-colors ${
+                    resultViewMode === "text"
+                      ? "bg-accent-light text-white"
+                      : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                  }`}
+                >
+                  Text
+                </button>
+                <button
+                  onClick={() => setResultViewMode("json")}
+                  className={`px-2 py-0.5 text-[10px] font-semibold rounded transition-colors ${
+                    resultViewMode === "json"
+                      ? "bg-accent-light text-white"
+                      : "text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                  }`}
+                >
+                  JSON
+                </button>
+              </div>
             </div>
             {history.length === 0 ? (
               <div className="text-xs text-gray-500 py-2">No resolved approvals yet.</div>
@@ -378,8 +406,12 @@ export default function ApprovalsPanel({ open, onClose, onPendingCountChange }: 
                       </div>
                     )}
                     {item.status !== "rejected" && item.result !== null && item.result !== undefined && (
-                      <div className="text-[11px] text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-2 font-mono max-h-24 overflow-y-auto break-all">
-                        {shortResult(item.result)}
+                      <div className="text-[11px] text-gray-600 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded p-2 font-mono max-h-40 overflow-y-auto break-all whitespace-pre-wrap">
+                        {resultViewMode === "text" && item.formatted_result
+                          ? item.formatted_result
+                          : resultViewMode === "text"
+                            ? shortResult(item.result)
+                            : JSON.stringify(item.result, null, 2)}
                       </div>
                     )}
                   </div>

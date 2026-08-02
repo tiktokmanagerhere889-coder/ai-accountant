@@ -161,6 +161,15 @@ def reject_approval(
 
 def serialize_approval(entry: ApprovalQueue) -> dict:
     """Return a JSON-serializable dict for an ApprovalQueue row."""
+    result = _safe_json(entry.result)
+    formatted_result = None
+    if result and isinstance(result, dict):
+        try:
+            from result_formatter import format_tool_result
+            formatted_result = format_tool_result(entry.tool_name, result)
+        except Exception:
+            formatted_result = None
+
     return {
         "approval_id": entry.approval_id,
         "tool_name": entry.tool_name,
@@ -171,7 +180,8 @@ def serialize_approval(entry: ApprovalQueue) -> dict:
         "resolved_at": entry.resolved_at.isoformat() if entry.resolved_at else None,
         "rejection_reason": entry.rejection_reason,
         "edited_params": _safe_json(entry.edited_params),
-        "result": _safe_json(entry.result),
+        "result": result,
+        "formatted_result": formatted_result,
     }
 
 

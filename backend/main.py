@@ -304,12 +304,91 @@ def get_api_key_status(db: Session = Depends(get_db)):
 
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
+    """Handle a chat message.
+
+    Reliability-first: try the deterministic intent router (no LLM decides what
+    to run) so the answer is always grounded in real tool data. If the router
+    matches, we execute the tool directly and format the result. Only when the
+    router does NOT match a known intent do we fall back to the LLM orchestrator.
+    """
     try:
+        from db.database import get_session
+        from intent_router import execute_route, is_approval_required
+        from result_formatter import format_tool_result
+
+        db = get_session()
+        try:
+            routed = execute_route(request.message, db)
+        finally:
+            db.close()
+
+        if routed is not None:
+            tool_name, result = routed
+            if is_approval_required(tool_name):
+                # Approval-required tools still queue via the queue service
+                from approval_service import queue_for_approval
+                db = get_session()
+                try:
+                    entry = queue_for_approval(tool_name, result, db, submitted_by="chat-router")
+                finally:
+                    db.close()
+                return ChatResponse(
+                    response=f"[Queued for approval: {entry.approval_id}] The action '{tool_name}' requires your approval. Open the Approvals panel to review and approve."
+                )
+            text = format_tool_result(tool_name, result)
+            # Best-effort LLM polish (never blocks)
+            try:
+                polished = await _format_with_llm(request.message, text)
+                if polished:
+                    text = polished
+            except Exception:
+                pass
+            return ChatResponse(response=text)
+
+        # Router didn't match - fall back to LLM orchestrator
         response_text = await run_orchestrator(request.message)
         return ChatResponse(response=response_text)
     except Exception as e:
         logger.error(f"Orchestrator invocation error: {e}")
         raise HTTPException(status_code=500, detail="An internal error occurred while processing your request.")
+
+
+async def _format_with_llm(message: str, tool_text: str) -> str:
+    """Best-effort: ask Groq to polish the tool result into plain English.
+
+    Returns the polished text, or "" if the LLM is unavailable or produces a
+    broken artifact (e.g. tool-call tags like <|python_tag|>). Never blocks
+    the response - if Groq is rate-limited or down, we return the raw text.
+    """
+    try:
+        from agent_defs.model_providers import create_groq_provider, GROQ_FALLBACK_MODEL
+        from agents import Runner
+        from agents.run_config import RunConfig
+        from agents import Agent
+
+        formatter = Agent(
+            name="Result Formatter",
+            instructions=(
+                "You are a financial report presenter. You receive a user question and the raw "
+                "tool result data. Rewrite the result as a clear, friendly, plain-English answer "
+                "to the user's question. Do NOT invent numbers, do NOT add information, do NOT "
+                "refuse - just present the given data clearly. Keep it under 150 words. "
+                "Reply with plain text only - no tags, no JSON, no code blocks."
+            ),
+            model=GROQ_FALLBACK_MODEL,
+        )
+        result = await Runner.run(
+            formatter,
+            input=f"User asked: {message}\n\nTool result data:\n{tool_text}",
+            run_config=RunConfig(model_provider=create_groq_provider()),
+        )
+        polished = result.final_output.strip()
+        # Reject artifacts: tool-call tags, JSON blocks, or content shorter than the raw
+        if not polished or "<|" in polished or polished.startswith("{"):
+            return ""
+        return polished
+    except Exception:
+        return ""
 
 
 # Direct Tool Execution (bypasses LLM)
