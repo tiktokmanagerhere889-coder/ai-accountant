@@ -115,6 +115,11 @@ def create_journal_entry(input: CreateJournalEntryInput, db: Session) -> CreateJ
     if existing_check is not None:
         raise ValueError(f"Generated entry_id '{entry_id}' already exists after retry")
 
+    # Trim account names so leading/trailing spaces never create duplicate
+    # accounts (e.g. " 1000-Cash" vs "1000-Cash") that break cash/ledger sums.
+    debit_account = input.debit_account.strip() if input.debit_account else input.debit_account
+    credit_account = input.credit_account.strip() if input.credit_account else input.credit_account
+
     # Create the journal entry
     entry = JournalEntry(
         entry_id=entry_id,
@@ -122,9 +127,9 @@ def create_journal_entry(input: CreateJournalEntryInput, db: Session) -> CreateJ
         posted_date=input.posted_date,
         reference=input.reference,
         contact_id=input.contact_id,
-        debit_account=input.debit_account,
+        debit_account=debit_account,
         debit_amount=input.debit_amount,
-        credit_account=input.credit_account,
+        credit_account=credit_account,
         credit_amount=input.credit_amount,
         status=input.status,
     )

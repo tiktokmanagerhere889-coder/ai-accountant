@@ -152,6 +152,65 @@ def _ensure_bank_transactions_custom_fields() -> None:
     logger.info("Added bank_transactions.custom_fields column")
 
 
+# ---------------------------------------------------------------------------
+# 5. Seed the standard chart of accounts (idempotent - check-then-insert)
+# ---------------------------------------------------------------------------
+
+DEFAULT_CHART_OF_ACCOUNTS = [
+    # Assets
+    ("1000-Cash", "Cash", "asset"),
+    ("1100-Bank", "Bank", "asset"),
+    ("1200-Accounts Receivable", "Accounts Receivable", "asset"),
+    ("1300-Prepaid Expenses", "Prepaid Expenses", "asset"),
+    ("1400-Fixed Assets", "Fixed Assets", "asset"),
+    # Liabilities
+    ("2000-Payables", "Accounts Payable", "liability"),
+    ("2100-Loans Payable", "Loans Payable", "liability"),
+    ("2200-Tax Payable", "Tax Payable", "liability"),
+    # Equity
+    ("3000-Equity", "Owner's Equity", "equity"),
+    ("3100-Retained Earnings", "Retained Earnings", "equity"),
+    ("3200-Opening Balance Equity", "Opening Balance Equity", "equity"),
+    # Revenue
+    ("4000-Revenue", "Sales Revenue", "revenue"),
+    ("4100-Service Income", "Service Income", "revenue"),
+    # Expenses
+    ("5000-Cost of Sales", "Cost of Sales", "expense"),
+    ("6000-Rent", "Rent Expense", "expense"),
+    ("6100-Salary", "Salary Expense", "expense"),
+    ("6200-Utilities", "Utilities Expense", "expense"),
+    ("6300-Office Supplies", "Office Supplies", "expense"),
+    ("6400-Travel", "Travel Expense", "expense"),
+    ("6500-Meals", "Meals Expense", "expense"),
+    ("6600-Entertainment", "Entertainment", "expense"),
+    ("6700-Advertising", "Advertising", "expense"),
+    ("6800-Insurance", "Insurance", "expense"),
+    ("6900-Maintenance", "Maintenance", "expense"),
+    ("7000-Tax", "Tax Expense", "expense"),
+    ("7100-Professional Fees", "Professional Fees", "expense"),
+    ("7200-Miscellaneous", "Miscellaneous", "expense"),
+]
+
+
+def _seed_chart_of_accounts() -> None:
+    """Seed the standard chart of accounts if empty (idempotent)."""
+    with engine.begin() as conn:
+        existing = conn.execute(text("SELECT COUNT(*) FROM chart_of_accounts")).scalar()
+        if existing and existing > 0:
+            logger.info("chart_of_accounts already has %s rows - skip", existing)
+            return
+        for code, name, atype in DEFAULT_CHART_OF_ACCOUNTS:
+            conn.execute(
+                text(
+                    "INSERT INTO chart_of_accounts (account_code, account_name, account_type, is_active, created_at) "
+                    "VALUES (:code, :name, :type, 1, CURRENT_DATE) "
+                    "ON CONFLICT (account_code) DO NOTHING"
+                ),
+                {"code": code, "name": name, "type": atype},
+            )
+        logger.info("Seeded %s standard chart of accounts", len(DEFAULT_CHART_OF_ACCOUNTS))
+
+
 def run_migrations() -> None:
     """Run all idempotent migrations + seeds. Safe to call every startup."""
     _ensure_fetched_at_column()
@@ -159,6 +218,7 @@ def run_migrations() -> None:
     _seed_tax_rates()
     _seed_eobi_rates()
     _seed_asset_configs()
+    _seed_chart_of_accounts()
     logger.info("DB migrations + seed complete")
 
 
