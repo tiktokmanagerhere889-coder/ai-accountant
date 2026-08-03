@@ -120,12 +120,45 @@ def _params_year_period(text: str) -> dict:
     return {"fiscal_year": _extract_year(text), "period": _extract_period(text)}
 
 
+def _extract_date_pair(text: str) -> tuple[Optional[date], Optional[date]]:
+    """Extract the FIRST and SECOND dates from text as (from_date, to_date).
+
+    Uses the user's exact dates — never invents or duplicates. Falls back to
+    (None, None) when no explicit dates are present (caller applies defaults).
+    """
+    dates: list[date] = []
+
+    # YYYY-MM-DD (also YYYY/MM/DD)
+    for m in re.finditer(r"(20\d{2})[-/](\d{1,2})[-/](\d{1,2})", text):
+        try:
+            dates.append(date(int(m.group(1)), int(m.group(2)), int(m.group(3))))
+        except ValueError:
+            pass
+
+    # DD-MM-YYYY, only if not already captured as YYYY-MM-DD
+    if len(dates) < 2:
+        for m in re.finditer(r"(\d{1,2})[-/](\d{1,2})[-/](20\d{2})", text):
+            try:
+                d = date(int(m.group(3)), int(m.group(2)), int(m.group(1)))
+                if d not in dates:
+                    dates.append(d)
+            except ValueError:
+                pass
+
+    if len(dates) >= 2:
+        return dates[0], dates[1]
+    if len(dates) == 1:
+        return dates[0], dates[0]
+    return None, None
+
+
 def _params_dates(text: str) -> dict:
+    from_d, to_d = _extract_date_pair(text)
     today = date.today()
     first_of_month = today.replace(day=1)
     return {
-        "from_date": _extract_date(text, first_of_month),
-        "to_date": _extract_date(text, today),
+        "from_date": from_d if from_d else first_of_month,
+        "to_date": to_d if to_d else today,
     }
 
 
