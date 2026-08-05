@@ -6,6 +6,7 @@ interface ToolCallInfo {
   toolName: string;
   recordId?: string;
   summary: string;
+  status?: "executed" | "queued";
 }
 
 interface Message {
@@ -140,8 +141,9 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
         }
       }
 
-      // Extract tool-call info + suggest follow-ups
-      const toolCalls = extractToolCalls(data.response);
+      // Extract tool-call info + suggest follow-ups.
+      // Prefer the backend's structured tool_calls field; fall back to text parsing.
+      const toolCalls = (data.tool_calls?.length ? data.tool_calls : extractToolCalls(data.response)) as ToolCallInfo[];
       const suggestions = followUpSuggestions(userMessage, toolCalls);
 
       setMessages((prev) => [
@@ -181,7 +183,7 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
     try {
       const response = await axios.post(`${apiBase}/chat`, { message: text }, { timeout: 60000 });
       const data = response.data;
-      const toolCalls = extractToolCalls(data.response);
+      const toolCalls = (data.tool_calls?.length ? data.tool_calls : extractToolCalls(data.response)) as ToolCallInfo[];
       const suggestions = followUpSuggestions(text, toolCalls);
       setMessages((prev) => [
         ...prev,
@@ -303,6 +305,11 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
                       <span className="font-medium text-accent-light">{tc.toolName}</span>
                       {" — "}
                       <span className="text-gray-500 dark:text-gray-400">{tc.summary}</span>
+                      {tc.status === "queued" && (
+                        <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-amber-500/15 text-amber-600 dark:text-amber-400 font-semibold uppercase">
+                          queued
+                        </span>
+                      )}
                       {tc.recordId && (
                         <span className="ml-1.5 font-mono text-[10px] px-1.5 py-0.5 rounded bg-accent-light/10 text-accent-light">
                           {tc.recordId}

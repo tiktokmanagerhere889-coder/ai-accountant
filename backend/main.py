@@ -105,6 +105,14 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     response: str
+    tool_calls: Optional[list["ToolCallInfo"]] = None
+
+
+class ToolCallInfo(BaseModel):
+    toolName: str
+    summary: str
+    recordId: Optional[str] = None
+    status: Optional[str] = None  # "executed" | "queued"
 
 
 # Root and Health Checks
@@ -302,6 +310,39 @@ def get_api_key_status(db: Session = Depends(get_db)):
 
 # Orchestrator Routes (AI Routing)
 
+def _tool_call_info(tool_name: str, result, message: str) -> ToolCallInfo:
+    """Build a ToolCallInfo from a routed tool's result for chat transparency."""
+    import json as _json
+    summary = "Tool executed"
+    record_id = None
+    if isinstance(result, dict):
+        # Extract a record id from common id keys
+        for k in ("entry_id", "journal_entry_id", "record_id", "asset_id", "run_id", "task_id", "accrual_id", "cheque_id", "provision_id", "filing_id", "contact_id", "approval_id"):
+            if result.get(k):
+                record_id = str(result[k])
+                break
+        for k in ("message", "status", "summary", "description"):
+            if result.get(k):
+                summary = str(result[k])
+                break
+        # Report tools: include account count + total balances for a useful bubble
+        if "accounts" in result and isinstance(result["accounts"], list):
+            accounts = result["accounts"]
+            if accounts:
+                summary = f"{len(accounts)} accounts"
+                # total_debits/total_credits may be top-level or per-account
+                tdebits = result.get("total_debits")
+                tcredits = result.get("total_credits")
+                if tdebits is not None or tcredits is not None:
+                    summary += f", debits {tdebits}, credits {tcredits}"
+        elif "total_debits" in result and "total_credits" in result:
+            summary = f"debits {result['total_debits']}, credits {result['total_credits']}"
+    # Trim long summaries for the bubble
+    if len(summary) > 120:
+        summary = summary[:120] + "…"
+    return ToolCallInfo(toolName=tool_name, summary=summary, recordId=record_id, status="executed")
+
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """Handle a chat message.
@@ -332,6 +373,7 @@ async def chat(request: ChatRequest):
 
         if routed is not None:
             tool_name, result = routed
+            tool_call = _tool_call_info(tool_name, result, request.message)
             if is_approval_required(tool_name):
                 # Approval-required tools still queue via the queue service
                 from approval_service import queue_for_approval
@@ -340,8 +382,11 @@ async def chat(request: ChatRequest):
                     entry = queue_for_approval(tool_name, result, db, submitted_by="chat-router")
                 finally:
                     db.close()
+                tool_call.status = "queued"
+                tool_call.summary = f"Action queued for approval ({entry.approval_id})"
                 return ChatResponse(
-                    response=f"[Queued for approval: {entry.approval_id}] The action '{tool_name}' requires your approval. Open the Approvals panel to review and approve."
+                    response=f"[Queued for approval: {entry.approval_id}] The action '{tool_name}' requires your approval. Open the Approvals panel to review and approve.",
+                    tool_calls=[tool_call],
                 )
             text = format_tool_result(tool_name, result)
             # LLM polish re-formats presentation only. It runs for EVERY routed
@@ -356,7 +401,7 @@ async def chat(request: ChatRequest):
                     text = polished
             except Exception:
                 pass
-            return ChatResponse(response=text)
+            return ChatResponse(response=text, tool_calls=[tool_call])
 
         # Router didn't match - fall back to LLM orchestrator
         response_text = await run_orchestrator(request.message)
