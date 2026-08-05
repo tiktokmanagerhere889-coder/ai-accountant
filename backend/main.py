@@ -390,21 +390,8 @@ async def _finish_routed(tool_name: str, result, message: str, conv_id: Optional
     return ChatResponse(response=text, tool_calls=[tool_call], conversation_id=conv_id)
 
 
-@app.post("/chat", response_model=ChatResponse)
-async def chat(request: ChatRequest):
-    """Handle a chat message.
-
-    Reliability-first: try the deterministic intent router (no LLM decides what
-    to run) so the answer is always grounded in real tool data. If the router
-    matches, we execute the tool directly and format the result. Only when the
-    router does NOT match a known intent do we fall back to the LLM orchestrator.
-
-    Slot-filling: a write tool matched with missing required fields is NOT
-    executed. A pending intent is registered (keyed by conversation_id) and a
-    clarifying question is returned; the user's next message merges into it until
-    the tool can execute. Greetings/vague messages never match the router and go
-    to the LLM, which answers conversationally (see Milestone A).
-    """
+async def _chat_impl(request: ChatRequest) -> ChatResponse:
+    """Handle a chat message (no persistence — wrapped by chat())."""
     conv_id = request.conversation_id or "default"
     try:
         from intent_router import route_tool
@@ -481,6 +468,104 @@ async def chat(request: ChatRequest):
     except Exception as e:
         logger.error(f"Orchestrator invocation error: {e}")
         raise HTTPException(status_code=500, detail="An internal error occurred while processing your request.")
+
+
+def _persist_chat(conv_id: str, user_msg: str, ai_msg: str, tool_calls: Optional[list]) -> None:
+    """Persist a user + AI message pair into conversations/chat_messages.
+
+    Best-effort: never raises (the chat response must not fail because history
+    couldn't save). Creates the conversation row on first message and sets a
+    title from the user's first message.
+    """
+    try:
+        from db.models import Conversation, ChatMessage
+        db = get_session()
+        try:
+            conv = db.query(Conversation).filter(Conversation.conversation_id == conv_id).first()
+            if conv is None:
+                title = user_msg[:40] + ("…" if len(user_msg) > 40 else "")
+                conv = Conversation(conversation_id=conv_id, title=title)
+                db.add(conv)
+            db.add(ChatMessage(conversation_id=conv_id, role="user", content=user_msg))
+            db.add(ChatMessage(conversation_id=conv_id, role="ai", content=ai_msg, tool_calls_json=json.dumps(tool_calls) if tool_calls else None))
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        pass
+
+
+@app.post("/chat", response_model=ChatResponse)
+async def chat(request: ChatRequest):
+    """Handle a chat message, persisting the exchange to conversation history.
+
+    Persist AFTER the impl runs so a save failure never blocks the answer.
+    """
+    conv_id = request.conversation_id or f"conv-{uuid.uuid4().hex[:12]}"
+    resp = await _chat_impl(request)
+    _persist_chat(conv_id, request.message, resp.response, resp.tool_calls)
+    return resp
+
+
+# Chat history endpoints (ChatGPT-style conversation list + messages)
+
+@app.get("/conversations")
+def list_conversations(db: Session = Depends(get_db)):
+    """List all conversations, newest first, with last-message preview."""
+    from db.models import Conversation, ChatMessage
+    convs = db.query(Conversation).order_by(Conversation.updated_at.desc()).limit(50).all()
+    out = []
+    for c in convs:
+        last = db.query(ChatMessage).filter(
+            ChatMessage.conversation_id == c.conversation_id
+        ).order_by(ChatMessage.timestamp.desc()).first()
+        out.append({
+            "conversation_id": c.conversation_id,
+            "title": c.title,
+            "created_at": c.created_at.isoformat(),
+            "updated_at": c.updated_at.isoformat(),
+            "last_message": last.content[:80] if last else "",
+        })
+    return {"conversations": out}
+
+
+@app.post("/conversations")
+def create_conversation(db: Session = Depends(get_db)):
+    """Create a new empty conversation, returns its id."""
+    from db.models import Conversation
+    import uuid as _uuid
+    conv_id = f"conv-{_uuid.uuid4().hex[:12]}"
+    db.add(Conversation(conversation_id=conv_id, title="New Chat"))
+    db.commit()
+    return {"conversation_id": conv_id, "title": "New Chat"}
+
+
+@app.get("/conversations/{conversation_id}/messages")
+def get_conversation_messages(conversation_id: str, db: Session = Depends(get_db)):
+    """List messages in a conversation, oldest first."""
+    from db.models import ChatMessage
+    msgs = db.query(ChatMessage).filter(
+        ChatMessage.conversation_id == conversation_id
+    ).order_by(ChatMessage.timestamp.asc()).all()
+    return {"messages": [
+        {
+            "role": m.role,
+            "content": m.content,
+            "tool_calls": json.loads(m.tool_calls_json) if m.tool_calls_json else None,
+            "timestamp": m.timestamp.isoformat(),
+        }
+        for m in msgs
+    ]}
+
+
+@app.delete("/conversations/{conversation_id}")
+def delete_conversation(conversation_id: str, db: Session = Depends(get_db)):
+    """Delete a conversation and its messages."""
+    from db.models import Conversation, ChatMessage
+    db.query(ChatMessage).filter(ChatMessage.conversation_id == conversation_id).delete()
+    db.query(Conversation).filter(Conversation.conversation_id == conversation_id).delete()
+    db.commit()
+    return {"status": "deleted"}
 
 
 async def _format_with_llm(message: str, tool_text: str, raw_json: str = "") -> str:

@@ -119,7 +119,9 @@ ORCHESTRATOR_INSTRUCTIONS = f"""You are {ORCHESTRATOR_NAME}. Route each user req
 - agent_advisory: spending analysis, spending pattern, financial advice, financial health, cost cutting, reduce expenses, financial ratios, ratio analysis, custom report, report generation
 - agent_system_admin: system status, health check, is everything working, usage stats, system preferences, company settings, configuration, schedule backup, backup data, system task, maintenance, admin
 
-Pass the user's full request to the tool. After the tool returns, explain the result in plain English."""
+Pass the user's full request to the tool. After the tool returns, explain the result in plain English.
+
+Greetings, chit-chat, or general questions ('hi', 'hello', 'how are you', 'what can you do', 'thanks'): answer directly and conversationally — do NOT route them to a specialist agent and do NOT call any tool. Just greet the user, briefly introduce yourself, and ask what accounting task you can help with."""
 
 ORCHESTRATOR_AGENT = Agent(
     name=ORCHESTRATOR_NAME,

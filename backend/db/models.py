@@ -478,6 +478,27 @@ class AuditLog(Base):
     timestamp = Column(DateTime, nullable=False, default=func.now())
 
 
+class Conversation(Base):
+    __tablename__ = "conversations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    conversation_id = Column(String, nullable=False, unique=True, index=True)
+    title = Column(String, nullable=False, default="New Chat")
+    created_at = Column(DateTime, nullable=False, default=func.now())
+    updated_at = Column(DateTime, nullable=False, default=func.now(), onupdate=func.now())
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    conversation_id = Column(String, nullable=False, index=True)
+    role = Column(String, nullable=False)  # "user" | "ai"
+    content = Column(Text, nullable=False)
+    tool_calls_json = Column(Text, nullable=True)  # JSON array of ToolCallInfo
+    timestamp = Column(DateTime, nullable=False, default=func.now())
+
+
 class UserRole(Base):
     __tablename__ = "user_roles"
 

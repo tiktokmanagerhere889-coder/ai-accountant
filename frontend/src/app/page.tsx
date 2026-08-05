@@ -192,6 +192,14 @@ export default function Home() {
         />
 
         {/* Center Panel (Main contents) */}
+        {currentView === "chat" ? (
+          <main className="flex-1 overflow-hidden flex">
+            <ChatPanel
+              fullPage
+              onTransactionLogged={() => setRefreshTrigger((prev) => prev + 1)}
+            />
+          </main>
+        ) : (
         <main className="flex-1 overflow-y-auto p-8 w-full lg:max-w-5xl mx-auto">
           {currentView === "dashboard" && (
             <Dashboard
@@ -220,9 +228,7 @@ export default function Home() {
             />
           )}
         </main>
-
-        {/* Right AI Chat box */}
-        <ChatPanel onTransactionLogged={() => setRefreshTrigger((prev) => prev + 1)} />
+        )}
       </div>
 
       {/* Settings preferences modal */}

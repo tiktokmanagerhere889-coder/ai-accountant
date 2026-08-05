@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { Send, Check, X, ShieldAlert, Loader2, Sparkles, Wand2 } from "lucide-react";
+import { Send, Check, X, ShieldAlert, Loader2, Sparkles, Wand2, Plus, Trash2, MessageSquare } from "lucide-react";
 
 interface ToolCallInfo {
   toolName: string;
@@ -24,6 +24,7 @@ interface Message {
 
 interface ChatPanelProps {
   onTransactionLogged?: () => void;
+  fullPage?: boolean;
 }
 
 // Quick-suggestion chips shown before any message is sent
@@ -87,7 +88,7 @@ function followUpSuggestions(userMessage: string, toolCalls: ToolCallInfo[]): st
   return pool.slice(0, 3);
 }
 
-export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
+export default function ChatPanel({ onTransactionLogged, fullPage = false }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       sender: "ai",
@@ -104,6 +105,7 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
     }
     return `conv-${Date.now()}`;
   });
+  const [conversations, setConversations] = useState<any[]>([]);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
@@ -170,6 +172,85 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
       ]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Load conversation list once (for the full-page ChatGPT-style sidebar)
+  useEffect(() => {
+    if (!fullPage) return;
+    const fetchConvs = async () => {
+      try {
+        const res = await axios.get(`${apiBase}/conversations`, { timeout: 15000 });
+        setConversations(res.data.conversations || []);
+      } catch (err) {
+        // backend may not have the endpoint — silent
+      }
+    };
+    fetchConvs();
+  }, [fullPage, apiBase]);
+
+  const startNewChat = async () => {
+    const id = `conv-${Date.now()}`;
+    setConversationId(id);
+    localStorage.setItem("chat-conversation-id", id);
+    setMessages([
+      {
+        sender: "ai",
+        text: "Hello! I am your AI Accounting Assistant. You can ask me to perform financial tasks, draft balances, analyze budgets, or record double entries using plain English.",
+        suggestions: QUICK_SUGGESTIONS,
+      },
+    ]);
+    // Register the conversation on the backend so it appears in history
+    try {
+      const res = await axios.post(`${apiBase}/conversations`, {}, { timeout: 15000 });
+      if (res.data.conversation_id) {
+        setConversationId(res.data.conversation_id);
+        localStorage.setItem("chat-conversation-id", res.data.conversation_id);
+      }
+    } catch (err) {
+      // silent — backend will create on first /chat anyway
+    }
+    const res2 = await axios.get(`${apiBase}/conversations`, { timeout: 15000 });
+    setConversations(res2.data.conversations || []);
+  };
+
+  const openConversation = async (id: string) => {
+    setConversationId(id);
+    localStorage.setItem("chat-conversation-id", id);
+    try {
+      const res = await axios.get(`${apiBase}/conversations/${id}/messages`, { timeout: 15000 });
+      const msgs = res.data.messages || [];
+      if (msgs.length === 0) {
+        setMessages([
+          {
+            sender: "ai",
+            text: "Hello! I am your AI Accounting Assistant. You can ask me to perform financial tasks, draft balances, analyze budgets, or record double entries using plain English.",
+            suggestions: QUICK_SUGGESTIONS,
+          },
+        ]);
+        return;
+      }
+      setMessages(
+        msgs.map((m: any) => ({
+          sender: m.role === "user" ? "user" : "ai",
+          text: m.content,
+          toolCalls: m.tool_calls?.length ? m.tool_calls : undefined,
+        }))
+      );
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const deleteConversation = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await axios.delete(`${apiBase}/conversations/${id}`, { timeout: 15000 });
+      const res = await axios.get(`${apiBase}/conversations`, { timeout: 15000 });
+      setConversations(res.data.conversations || []);
+      if (id === conversationId) startNewChat();
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -283,8 +364,53 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
     });
   }
 
+  // Full-page mode: ChatGPT-style layout (left history sidebar + main chat).
+  // Drawer mode: compact right panel.
   return (
-    <div className="flex flex-col h-full bg-surface-light dark:bg-surface-dark border-l border-gray-200 dark:border-gray-800 w-full lg:w-80 xl:w-96 flex-shrink-0">
+    <div className={`flex h-full bg-surface-light dark:bg-surface-dark ${fullPage ? "w-full border-l-0" : "border-l border-gray-200 dark:border-gray-800 w-full lg:w-80 xl:w-96 flex-shrink-0"}`}>
+      {fullPage && (
+        <div className="hidden md:flex flex-col w-64 border-r border-gray-200 dark:border-gray-800 bg-surface-light dark:bg-surface-dark flex-shrink-0">
+          {/* New Chat button */}
+          <div className="p-3 border-b border-gray-200 dark:border-gray-800">
+            <button
+              onClick={startNewChat}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded bg-accent-light hover:bg-accent-light/90 text-white text-sm font-medium transition-colors"
+            >
+              <Plus className="w-4 h-4" /> New Chat
+            </button>
+          </div>
+          {/* Conversation history */}
+          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+            {conversations.map((c) => (
+              <div
+                key={c.conversation_id}
+                onClick={() => openConversation(c.conversation_id)}
+                className={`group flex items-center gap-2 px-3 py-2 rounded text-xs cursor-pointer transition-colors ${
+                  c.conversation_id === conversationId
+                    ? "bg-accent-light/15 text-accent-light font-medium"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                }`}
+              >
+                <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" />
+                <span className="truncate flex-1">{c.title || "New Chat"}</span>
+                <button
+                  onClick={(e) => deleteConversation(c.conversation_id, e)}
+                  className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500"
+                  aria-label="Delete conversation"
+                >
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+            {conversations.length === 0 && (
+              <p className="px-3 py-2 text-[11px] text-gray-400">No conversations yet.</p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Main chat column */}
+      <div className="flex flex-col flex-1 min-w-0">
       {/* Header */}
       <div className="p-4 border-b border-gray-200 dark:border-gray-800 flex items-center gap-2">
         <Sparkles className="w-5 h-5 text-accent-light" />
@@ -410,6 +536,7 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
         >
           <Send className="w-4 h-4" />
         </button>
+      </div>
       </div>
     </div>
   );
