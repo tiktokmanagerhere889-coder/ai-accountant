@@ -127,33 +127,21 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
         localStorage.setItem("chat-conversation-id", data.conversation_id);
       }
 
-      // Basic fallback extraction parser if the response indicates approval needed
+      // Approval detection from the structured tool_calls field: a queued tool
+      // carries approval_id in its summary ("Action queued for approval (APR-..)").
+      const toolCalls = (data.tool_calls?.length ? data.tool_calls : extractToolCalls(data.response)) as ToolCallInfo[];
       let approvalData: { toolName: string; description: string; params: Record<string, any>; approvalId: string } | null = null;
-      if (
-        data.response.includes('"needs_approval": true') ||
-        data.response.includes("needs_approval: true") ||
-        data.response.includes('"needs_approval": 1')
-      ) {
-        // Try parsing JSON block out of response
-        try {
-          const jsonMatch = data.response.match(/\{[\s\S]*?\}/);
-          if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
-            approvalData = {
-              toolName: parsed.tool || "Accounting Tool",
-              description: parsed.message || parsed.description || "Action needs human confirmation.",
-              params: parsed.parameters || parsed,
-              approvalId: parsed.approval_id || uuidv4(),
-            };
-          }
-        } catch (err) {
-          // Log parsing error silently
-        }
+      const queuedTool = toolCalls.find((tc) => tc.status === "queued");
+      if (queuedTool) {
+        const idMatch = queuedTool.summary.match(/\(([A-Za-z0-9-]+)\)/);
+        approvalData = {
+          toolName: queuedTool.toolName,
+          description: queuedTool.summary,
+          params: {},
+          approvalId: idMatch ? idMatch[1] : uuidv4(),
+        };
       }
 
-      // Extract tool-call info + suggest follow-ups.
-      // Prefer the backend's structured tool_calls field; fall back to text parsing.
-      const toolCalls = (data.tool_calls?.length ? data.tool_calls : extractToolCalls(data.response)) as ToolCallInfo[];
       const suggestions = followUpSuggestions(userMessage, toolCalls);
 
       setMessages((prev) => [
@@ -225,25 +213,38 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
   const handleApproval = async (approved: boolean, cardData: any) => {
     setLoading(true);
     try {
-      const response = await axios.post(`${apiBase}/chat`, {
-        message: approved ? `approve the task ${cardData.toolName}` : `reject the task ${cardData.toolName}`
-      }, { timeout: 30000 });
+      const endpoint = approved
+        ? `${apiBase}/approvals/${cardData.approvalId}/approve`
+        : `${apiBase}/approvals/${cardData.approvalId}/reject`;
+      const response = await axios.post(endpoint, {}, { timeout: 60000 });
+      const data = response.data;
+
+      // Update the card's tool-call status to reflect the outcome in-thread.
+      const outcome = approved
+        ? (data?.status === "executed" ? "executed" : "approved")
+        : "rejected";
 
       setMessages((prev) => [
         ...prev,
         {
           sender: "ai",
           text: approved
-            ? `Approved action: ${cardData.toolName}. Response:\n\n${cleanMarkdownJSON(response.data.response)}`
-            : `Rejected action: ${cardData.toolName}.`,
+            ? `✅ Approved action: ${cardData.toolName}.\n\n${data?.message || data?.response || data?.detail || "The action was approved and executed."}`
+            : `❌ Rejected action: ${cardData.toolName}.`,
         }
       ]);
 
-      // Clean current card from message block
+      // Clean current card from message block + mark its tool-call done
       setMessages((prev) =>
         prev.map((msg) =>
           msg.approvalCard?.approvalId === cardData.approvalId
-            ? { ...msg, approvalCard: undefined }
+            ? {
+                ...msg,
+                approvalCard: undefined,
+                toolCalls: (msg.toolCalls || []).map((tc) =>
+                  tc.toolName === cardData.toolName ? { ...tc, status: outcome as any } : tc
+                ),
+              }
             : msg
         )
       );

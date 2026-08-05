@@ -665,7 +665,7 @@ def approve_pending_approval(
     except Exception as e:
         logger.error(f"Approval execution error ({approval_id}): {e}")
         raise HTTPException(status_code=500, detail=str(e))
-    return {"approval": serialize_approval(entry), "result": result}
+    return {"approval": serialize_approval(entry), "result": result, "message": f"Approved and executed {entry.tool_name} ({approval_id})."}
 
 
 @app.post("/approvals/{approval_id}/reject")
@@ -681,7 +681,7 @@ def reject_pending_approval(
         msg = str(e)
         status_code = 404 if "not found" in msg else 400
         raise HTTPException(status_code=status_code, detail=msg)
-    return {"approval": serialize_approval(entry)}
+    return {"approval": serialize_approval(entry), "message": f"Rejected {entry.tool_name} ({approval_id})."}
 
 
 # Data Export (per agent / all agents)
