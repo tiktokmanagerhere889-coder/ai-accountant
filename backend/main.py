@@ -101,11 +101,14 @@ class BackupTriggerResponse(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
+    conversation_id: Optional[str] = None
 
 
 class ChatResponse(BaseModel):
     response: str
     tool_calls: Optional[list["ToolCallInfo"]] = None
+    conversation_id: Optional[str] = None
+    pending: Optional["PendingIntent"] = None
 
 
 class ToolCallInfo(BaseModel):
@@ -113,6 +116,12 @@ class ToolCallInfo(BaseModel):
     summary: str
     recordId: Optional[str] = None
     status: Optional[str] = None  # "executed" | "queued"
+
+
+class PendingIntent(BaseModel):
+    tool_name: str
+    question: str
+    conversation_id: str
 
 
 # Root and Health Checks
@@ -343,6 +352,44 @@ def _tool_call_info(tool_name: str, result, message: str) -> ToolCallInfo:
     return ToolCallInfo(toolName=tool_name, summary=summary, recordId=record_id, status="executed")
 
 
+async def _finish_routed(tool_name: str, result, message: str, conv_id: Optional[str] = None) -> ChatResponse:
+    """Turn an executed tool's result into a ChatResponse (approval queue /
+    LLM polish / tool_calls). Shared by the direct route and slot-fill paths."""
+    from intent_router import is_approval_required
+    from result_formatter import format_tool_result
+
+    tool_call = _tool_call_info(tool_name, result, message)
+    if is_approval_required(tool_name):
+        # Approval-required tools still queue via the queue service
+        from approval_service import queue_for_approval
+        db = get_session()
+        try:
+            entry = queue_for_approval(tool_name, result, db, submitted_by="chat-router")
+        finally:
+            db.close()
+        tool_call.status = "queued"
+        tool_call.summary = f"Action queued for approval ({entry.approval_id})"
+        return ChatResponse(
+            response=f"[Queued for approval: {entry.approval_id}] The action '{tool_name}' requires your approval. Open the Approvals panel to review and approve.",
+            tool_calls=[tool_call],
+            conversation_id=conv_id,
+        )
+    text = format_tool_result(tool_name, result)
+    # LLM polish re-formats presentation only. It runs for EVERY routed
+    # tool so answers read naturally, but a verification step rejects
+    # output that introduces numbers absent from the real result — so
+    # Groq can reformat but never change the values.
+    try:
+        import json as _json
+        raw_json = _json.dumps(result, default=str) if isinstance(result, dict) else str(result)
+        polished = await _format_with_llm(message, text, raw_json)
+        if polished:
+            text = polished
+    except Exception:
+        pass
+    return ChatResponse(response=text, tool_calls=[tool_call], conversation_id=conv_id)
+
+
 @app.post("/chat", response_model=ChatResponse)
 async def chat(request: ChatRequest):
     """Handle a chat message.
@@ -351,61 +398,86 @@ async def chat(request: ChatRequest):
     to run) so the answer is always grounded in real tool data. If the router
     matches, we execute the tool directly and format the result. Only when the
     router does NOT match a known intent do we fall back to the LLM orchestrator.
+
+    Slot-filling: a write tool matched with missing required fields is NOT
+    executed. A pending intent is registered (keyed by conversation_id) and a
+    clarifying question is returned; the user's next message merges into it until
+    the tool can execute. Greetings/vague messages never match the router and go
+    to the LLM, which answers conversationally (see Milestone A).
     """
+    conv_id = request.conversation_id or "default"
     try:
-        from db.database import get_session
-        from intent_router import execute_route, is_approval_required
-        from result_formatter import format_tool_result, has_dedicated_formatter
+        from intent_router import route_tool
+        from tool_registry import execute_tool, REGISTRY
+        import slot_fill
 
-        db = get_session()
-        try:
-            routed = execute_route(request.message, db)
-        except Exception as route_err:
-            # A matched tool failed to execute. Surface the real error cleanly
-            # instead of falling through to the LLM orchestrator (which would
-            # fail across all providers and show a misleading message).
-            db.close()
-            return ChatResponse(
-                response=f"[Tool error] {request.message}\n\n{str(route_err)}"
-            )
-        finally:
-            db.close()
-
-        if routed is not None:
-            tool_name, result = routed
-            tool_call = _tool_call_info(tool_name, result, request.message)
-            if is_approval_required(tool_name):
-                # Approval-required tools still queue via the queue service
-                from approval_service import queue_for_approval
-                db = get_session()
-                try:
-                    entry = queue_for_approval(tool_name, result, db, submitted_by="chat-router")
-                finally:
-                    db.close()
-                tool_call.status = "queued"
-                tool_call.summary = f"Action queued for approval ({entry.approval_id})"
+        # ---- 1. Pending intent? Merge the user's answer ----
+        pending = slot_fill.PENDING_INTENTS.get(conv_id)
+        if pending is not None:
+            fresh = route_tool(request.message)
+            # A fresh clear command replaces the pending intent; otherwise treat
+            # this message as the answer to the clarifying question.
+            if fresh is not None and fresh[0] != pending["tool_name"]:
+                slot_fill.PENDING_INTENTS.pop(conv_id, None)
+            else:
+                params = slot_fill.merge_answer(pending, request.message)
+                pending["params"] = params
+                if slot_fill.is_complete(pending["tool_name"], params):
+                    slot_fill.PENDING_INTENTS.pop(conv_id, None)
+                    try:
+                        result = execute_tool(pending["tool_name"], params)
+                    except Exception as exc:
+                        return ChatResponse(
+                            response=f"[Tool error] {request.message}\n\n{str(exc)}",
+                            conversation_id=conv_id,
+                        )
+                    return await _finish_routed(pending["tool_name"], result, request.message, conv_id)
+                # Still missing fields - re-ask with updated context.
+                question = slot_fill.describe_missing(pending["tool_name"], params)
+                slot_fill.PENDING_INTENTS[conv_id] = pending
                 return ChatResponse(
-                    response=f"[Queued for approval: {entry.approval_id}] The action '{tool_name}' requires your approval. Open the Approvals panel to review and approve.",
-                    tool_calls=[tool_call],
+                    response=question,
+                    conversation_id=conv_id,
+                    pending=PendingIntent(
+                        tool_name=pending["tool_name"], question=question, conversation_id=conv_id
+                    ),
                 )
-            text = format_tool_result(tool_name, result)
-            # LLM polish re-formats presentation only. It runs for EVERY routed
-            # tool so answers read naturally, but a verification step rejects
-            # output that introduces numbers absent from the real result — so
-            # Groq can reformat but never change the values.
+
+        # ---- 2. Normal routing ----
+        match = route_tool(request.message)
+        if match is not None:
+            tool_name, params = match
+            # Proactive slot-fill: do not execute a write tool with missing fields.
+            if slot_fill.is_write_tool(tool_name):
+                question = slot_fill.describe_missing(tool_name, params)
+                if question:
+                    slot_fill.PENDING_INTENTS[conv_id] = {
+                        "tool_name": tool_name,
+                        "params": params,
+                        "original": request.message,
+                    }
+                    return ChatResponse(
+                        response=question,
+                        conversation_id=conv_id,
+                        pending=PendingIntent(
+                            tool_name=tool_name, question=question, conversation_id=conv_id
+                        ),
+                    )
             try:
-                import json as _json
-                raw_json = _json.dumps(result, default=str) if isinstance(result, dict) else str(result)
-                polished = await _format_with_llm(request.message, text, raw_json)
-                if polished:
-                    text = polished
-            except Exception:
-                pass
-            return ChatResponse(response=text, tool_calls=[tool_call])
+                result = execute_tool(tool_name, params)
+            except Exception as route_err:
+                # A matched tool failed to execute. Surface the real error cleanly
+                # instead of falling through to the LLM orchestrator (which would
+                # fail across all providers and show a misleading message).
+                return ChatResponse(
+                    response=f"[Tool error] {request.message}\n\n{str(route_err)}",
+                    conversation_id=conv_id,
+                )
+            return await _finish_routed(tool_name, result, request.message, conv_id)
 
         # Router didn't match - fall back to LLM orchestrator
         response_text = await run_orchestrator(request.message)
-        return ChatResponse(response=response_text)
+        return ChatResponse(response=response_text, conversation_id=conv_id)
     except Exception as e:
         logger.error(f"Orchestrator invocation error: {e}")
         raise HTTPException(status_code=500, detail="An internal error occurred while processing your request.")

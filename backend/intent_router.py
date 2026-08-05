@@ -219,7 +219,7 @@ def _params_record_transaction(text: str) -> dict:
 ROUTES: list[tuple[list[str], str, callable]] = [
     # --- Daily Entry ---
     (["cash position", "cash balance", "cash position", "how much cash", "current balance", "balance check"], "check_cash_position", _params_cash_position),
-    (["record transaction", "record expense", "record income", "add transaction", "paid ", "bought ", "purchase ", "spent ", "record a transaction"], "record_transaction_nl", _params_record_transaction),
+    (["record transaction", "record expense", "record income", "record an expense", "record an income", "record a transaction", "record a payment", "add transaction", "add a transaction", "add an expense", "add an income", "paid ", "bought ", "purchase ", "spent ", "paid for "], "record_transaction_nl", _params_record_transaction),
     (["receipt", "scan receipt", "ocr", "process receipt"], "process_receipt_image", _params_none),
     (["bank transaction", "bank statement", "check bank", "list bank"], "check_bank_transactions", _params_dates),
     (["record bank", "bank register", "add bank transaction"], "record_bank_transaction", _params_record_transaction),

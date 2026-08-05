@@ -98,6 +98,12 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const [conversationId, setConversationId] = useState<string>(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("chat-conversation-id") || `conv-${Date.now()}`;
+    }
+    return `conv-${Date.now()}`;
+  });
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
@@ -114,8 +120,12 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
     setLoading(true);
 
     try {
-      const response = await axios.post(`${apiBase}/chat`, { message: userMessage }, { timeout: 60000 });
+      const response = await axios.post(`${apiBase}/chat`, { message: userMessage, conversation_id: conversationId }, { timeout: 60000 });
       const data = response.data;
+      if (data.conversation_id) {
+        setConversationId(data.conversation_id);
+        localStorage.setItem("chat-conversation-id", data.conversation_id);
+      }
 
       // Basic fallback extraction parser if the response indicates approval needed
       let approvalData: { toolName: string; description: string; params: Record<string, any>; approvalId: string } | null = null;
@@ -181,8 +191,12 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
     setMessages((prev) => [...prev, { sender: "user", text }]);
     setLoading(true);
     try {
-      const response = await axios.post(`${apiBase}/chat`, { message: text }, { timeout: 60000 });
+      const response = await axios.post(`${apiBase}/chat`, { message: text, conversation_id: conversationId }, { timeout: 60000 });
       const data = response.data;
+      if (data.conversation_id) {
+        setConversationId(data.conversation_id);
+        localStorage.setItem("chat-conversation-id", data.conversation_id);
+      }
       const toolCalls = (data.tool_calls?.length ? data.tool_calls : extractToolCalls(data.response)) as ToolCallInfo[];
       const suggestions = followUpSuggestions(text, toolCalls);
       setMessages((prev) => [
