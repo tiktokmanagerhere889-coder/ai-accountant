@@ -113,7 +113,7 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
     setLoading(true);
 
     try {
-      const response = await axios.post(`${apiBase}/chat`, { message: userMessage }, { timeout: 30000 });
+      const response = await axios.post(`${apiBase}/chat`, { message: userMessage }, { timeout: 60000 });
       const data = response.data;
 
       // Basic fallback extraction parser if the response indicates approval needed
@@ -179,7 +179,7 @@ export default function ChatPanel({ onTransactionLogged }: ChatPanelProps) {
     setMessages((prev) => [...prev, { sender: "user", text }]);
     setLoading(true);
     try {
-      const response = await axios.post(`${apiBase}/chat`, { message: text }, { timeout: 30000 });
+      const response = await axios.post(`${apiBase}/chat`, { message: text }, { timeout: 60000 });
       const data = response.data;
       const toolCalls = extractToolCalls(data.response);
       const suggestions = followUpSuggestions(text, toolCalls);

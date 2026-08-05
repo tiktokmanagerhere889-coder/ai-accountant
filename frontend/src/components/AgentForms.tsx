@@ -146,7 +146,7 @@ export default function AgentForms({ agent, onToolExecuted, onQueuedForApproval 
         });
         instruction += paramList.join(", ");
 
-        const response = await axios.post(`${apiBase}/chat`, { message: instruction }, { timeout: 30000 });
+        const response = await axios.post(`${apiBase}/chat`, { message: instruction }, { timeout: 60000 });
         setSuccess({ summary: "AI response received. See output below for details." });
         setOutput(response.data.response);
         onToolExecuted({
