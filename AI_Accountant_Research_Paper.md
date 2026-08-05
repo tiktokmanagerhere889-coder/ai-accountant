@@ -195,7 +195,7 @@ capability through its own checkpointing system and was seriously considered, bu
 to set up the graph structure, and given the very short build window for this project, the smaller amount
 of boilerplate code needed by the OpenAI Agents SDK made it the more practical choice. The SDK also no
 longer requires an OpenAI model specifically, since it can connect to other providers through custom
-model configuration, which matters because this project uses Groq and Cerebras rather than an OpenAI
+model configuration, which matters because this project uses Groq and Gemini rather than an OpenAI
 model.
 
 The system uses an Orchestrator plus Agents as Tools pattern: one master Orchestrator agent receives
@@ -211,15 +211,15 @@ something that runs without any ongoing cost. The table below compares the main 
 Provider | Free Limit | Speed | Tool Calling | Note
 ---------|-----------|-------|-------------|-----
 Groq | One thousand requests per day on the higher-quality 70B model (lighter models allow up to 14,400 requests per day). Free tier supports multiple model sizes. | Extremely fast, LPU-based inference. | Supported | Chosen as the primary model provider. Its free-tier limits are documented and predictable, tool-calling support is reliable, and LPU inference makes responses fast enough for a live demo.
-Cerebras | About one million tokens per day, no credit card required on the free plan. | Very fast, runs on dedicated inference hardware. | Supported | Chosen as the automatic fallback. If Groq's rate limit is reached, the application switches to Cerebras without the user noticing any interruption.
-OpenRouter | Around twenty-five free models available through one API key, but capped at fifty requests per day unless a one-time paid credit balance is added. | Varies by model. | Depends on the model chosen. | Considered as the fallback, but the fifty-requests-per-day free cap was judged too tight for a live demo, so Cerebras was chosen instead.
-Google Gemini | Fifteen hundred requests per day on the Flash model. | Good. | Native and well-documented. | Considered and initially planned, later dropped after running into account access issues.
+Google Gemini | Roughly fifteen requests per minute and one thousand requests per day on the free tier (Flash-Lite model). | Good. | Native and well-documented; OpenAI-compatible endpoint verified. | Chosen as the automatic fallback. If Groq's rate limit is reached, the application switches to Gemini without the user noticing any interruption. Replaced Cerebras, which kept hitting billing/402 errors in production.
+Cerebras | About one million tokens per day, no credit card required on the free plan. | Very fast, runs on dedicated inference hardware. | Supported | Initially planned as the fallback, but repeatedly hit billing/402 errors in production, so it was removed entirely in favour of Gemini.
+OpenRouter | Around twenty-five free models available through one API key, but capped at fifty requests per day unless a one-time paid credit balance is added. | Varies by model. | Depends on the model chosen. | Considered as the fallback, but the fifty-requests-per-day free cap was judged too tight for a live demo, so Gemini was chosen instead.
 
 Groq is the primary model provider because its free-tier rate limits are predictable, its LPU-based
 inference is fast enough for a responsive chat experience, and its tool-calling support is reliable across
 the model sizes used in this project. The primary model is meta-llama/llama-4-scout-17b-16e-instruct,
 with llama-3.3-70b-versatile as a within-Groq fallback for requests that exceed the primary model's
-rate limits. Cerebras is configured as the final fallback using llama3.1-8b: if Groq's daily quota is
+rate limits. Gemini is configured as the final fallback using gemini-flash-lite-latest: if Groq's daily quota is
 exhausted, the application switches over automatically without the user noticing any interruption.
 This two-provider, three-model setup was chosen so the work continues without stopping, and so
 that no single provider outage or rate-limit event brings the assistant down entirely.
@@ -249,7 +249,7 @@ Frontend | Next.js with TypeScript, screens for daily expenses, income, ledgers,
 Backend | Python, managed with uv, exposed through a FastAPI application.
 Data validation | Pydantic models on every request and response so bad input is rejected before it reaches the database or a formula.
 Database | PostgreSQL, storing all transactions, ledgers, and master data.
-Agent layer | OpenAI Agents SDK, Orchestrator plus ten specialist agents, connected to Groq as the primary model with Cerebras as a fallback.
+Agent layer | OpenAI Agents SDK, Orchestrator plus ten specialist agents, connected to Groq as the primary model with Gemini as a fallback.
 Containerization | Docker and docker-compose, so the whole stack runs locally with one command.
 
 7. Feature List for Implementation
@@ -296,7 +296,7 @@ boundary, using an AI agent for natural-language entry and explanation, ordinary
 calculation, and a human approval step wherever the outcome matters. Twenty-four of the sixty-eight
 tools require explicit human approval before any data is written, covering all irreversible, legally
 sensitive, or judgement-heavy actions. The free-tier model and framework choices made here, Groq as
-the primary model provider with Cerebras as a fallback, and the OpenAI Agents SDK for orchestration,
+the primary model provider with Gemini as a fallback, and the OpenAI Agents SDK for orchestration,
 were selected specifically to support this approval-based pattern without needing a paid service.
 
 9. References
@@ -305,7 +305,7 @@ OpenAI. OpenAI Agents SDK documentation.
 LangChain. LangGraph documentation.
 CrewAI. CrewAI documentation.
 Groq. GroqCloud API documentation and rate limits.
-Cerebras. Cerebras Inference API documentation and free tier limits.
+Google. Gemini API documentation, model list, and rate limits.
 OpenRouter. OpenRouter API documentation and free model list.
 Google. Gemini API documentation and rate limits.
 Pydantic. Pydantic documentation for data validation.
