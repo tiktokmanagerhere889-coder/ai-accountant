@@ -600,9 +600,33 @@ async def chat(request: ChatRequest):
 
 # Chat history endpoints (ChatGPT-style conversation list + messages)
 
+def _derive_title(first_user_msg: str) -> str:
+    """Deterministic short title from a first user message (no LLM).
+
+    Used as a fallback so conversations created before smart titles (or whose
+    LLM title task failed) still show a meaningful name in history. Keeps the
+    message short and strips dates/amounts noise where possible.
+    """
+    msg = first_user_msg.strip()
+    if not msg:
+        return "New Chat"
+    # Cap length at ~42 chars on a word boundary.
+    if len(msg) <= 42:
+        return msg
+    cut = msg[:42]
+    if " " in cut:
+        cut = cut[: cut.rfind(" ")]
+    return cut + "…"
+
+
 @app.get("/conversations")
 def list_conversations(db: Session = Depends(get_db)):
-    """List all conversations, newest first, with last-message preview."""
+    """List all conversations, newest first, with last-message preview.
+
+    Conversations whose stored title is a placeholder ("New Chat"/empty) fall
+    back to a deterministic title derived from their first user message, so
+    history always reads meaningfully even when the LLM title task never ran.
+    """
     from db.models import Conversation, ChatMessage
     convs = db.query(Conversation).order_by(Conversation.updated_at.desc()).limit(50).all()
     out = []
@@ -610,9 +634,16 @@ def list_conversations(db: Session = Depends(get_db)):
         last = db.query(ChatMessage).filter(
             ChatMessage.conversation_id == c.conversation_id
         ).order_by(ChatMessage.timestamp.desc()).first()
+        first_user = db.query(ChatMessage).filter(
+            ChatMessage.conversation_id == c.conversation_id,
+            ChatMessage.role == "user",
+        ).order_by(ChatMessage.timestamp.asc()).first()
+        title = c.title
+        if not title or title.strip() in ("New Chat", "", "Untitled"):
+            title = _derive_title(first_user.content if first_user else "")
         out.append({
             "conversation_id": c.conversation_id,
-            "title": c.title,
+            "title": title,
             "created_at": c.created_at.isoformat(),
             "updated_at": c.updated_at.isoformat(),
             "last_message": last.content[:80] if last else "",
