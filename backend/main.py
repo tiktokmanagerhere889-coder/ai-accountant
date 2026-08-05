@@ -470,25 +470,111 @@ async def _chat_impl(request: ChatRequest) -> ChatResponse:
         raise HTTPException(status_code=500, detail="An internal error occurred while processing your request.")
 
 
-def _persist_chat(conv_id: str, user_msg: str, ai_msg: str, tool_calls: Optional[list]) -> None:
+def _tool_calls_to_json(tool_calls: Optional[list]) -> Optional[str]:
+    """Serialize a list of ToolCallInfo (or dicts) to JSON for persistence.
+
+    Pydantic models are dumped to dicts first so json.dumps never hits a
+    non-serializable object (which previously rolled back the whole message).
+    """
+    if not tool_calls:
+        return None
+    try:
+        dumped = [
+            tc.model_dump() if hasattr(tc, "model_dump") else tc
+            for tc in tool_calls
+        ]
+        return json.dumps(dumped, default=str)
+    except Exception:
+        return None
+
+
+def _persist_chat(conv_id: str, user_msg: str, ai_msg: str, tool_calls: Optional[list]) -> bool:
     """Persist a user + AI message pair into conversations/chat_messages.
 
     Best-effort: never raises (the chat response must not fail because history
-    couldn't save). Creates the conversation row on first message and sets a
-    title from the user's first message.
+    couldn't save). Creates the conversation row on first message. Returns True
+    if this was a new conversation (so the caller can generate a smart title).
     """
+    needs_title = False
     try:
         from db.models import Conversation, ChatMessage
         db = get_session()
         try:
             conv = db.query(Conversation).filter(Conversation.conversation_id == conv_id).first()
             if conv is None:
+                needs_title = True
                 title = user_msg[:40] + ("…" if len(user_msg) > 40 else "")
                 conv = Conversation(conversation_id=conv_id, title=title)
                 db.add(conv)
+            elif conv.title in ("New Chat", "", "Untitled"):
+                # Conversation pre-created (New Chat button) — still needs a smart title.
+                needs_title = True
             db.add(ChatMessage(conversation_id=conv_id, role="user", content=user_msg))
-            db.add(ChatMessage(conversation_id=conv_id, role="ai", content=ai_msg, tool_calls_json=json.dumps(tool_calls) if tool_calls else None))
+            db.add(ChatMessage(
+                conversation_id=conv_id, role="ai", content=ai_msg,
+                tool_calls_json=_tool_calls_to_json(tool_calls),
+            ))
             db.commit()
+        finally:
+            db.close()
+    except Exception:
+        pass
+    return needs_title
+
+
+async def _llm_title(user_msg: str) -> str:
+    """Generate a short meaningful title from the first user message.
+
+    Best-effort: returns "" if all providers fail, so the raw message title is
+    kept. Uses the same Groq -> Gemini fallback chain as the orchestrator.
+    """
+    from agents import Agent, Runner
+    from agents.run_config import RunConfig
+    from agent_defs.model_providers import (
+        create_groq_provider, create_gemini_provider,
+        GROQ_FALLBACK_MODEL, GEMINI_MODEL,
+    )
+    instructions = (
+        "You are a conversation titler. Summarize the user's first message into a "
+        "short title (3-6 words, no more). Use a concise noun phrase or short verb "
+        "phrase like 'Trial balance', 'Office rent expense', 'Cash flow check', "
+        "'Utility expense'. For a simple greeting or chit-chat use 'Greeting'. "
+        "No quotes, no periods, no 'About', no filler words. Reply with the title only."
+    )
+    for model, provider_fn in [(GROQ_FALLBACK_MODEL, create_groq_provider), (GEMINI_MODEL, create_gemini_provider)]:
+        try:
+            agent = Agent(
+                name="Conversation Title",
+                instructions=instructions,
+                model=model,
+            )
+            result = await Runner.run(
+                agent, input=user_msg,
+                run_config=RunConfig(model_provider=provider_fn()),
+            )
+            title = result.final_output.strip().strip('"').strip("'").strip()
+            if title and len(title) > 5:
+                if len(title) > 60:
+                    title = title[:60].rstrip() + "…"
+                return title
+        except Exception:
+            continue
+    return ""
+
+
+async def _title_conversation(conv_id: str, user_msg: str) -> None:
+    """Async background task: generate a smart title and update the conversation."""
+    title = await _llm_title(user_msg)
+    if not title:
+        return
+    try:
+        from db.models import Conversation
+        db = get_session()
+        try:
+            conv = db.query(Conversation).filter(Conversation.conversation_id == conv_id).first()
+            if conv is not None:
+                conv.title = title
+                db.commit()
         finally:
             db.close()
     except Exception:
@@ -499,11 +585,16 @@ def _persist_chat(conv_id: str, user_msg: str, ai_msg: str, tool_calls: Optional
 async def chat(request: ChatRequest):
     """Handle a chat message, persisting the exchange to conversation history.
 
-    Persist AFTER the impl runs so a save failure never blocks the answer.
+    Persist AFTER the impl runs so a save failure never blocks the answer. On
+    the first message of a conversation, fire a background task to generate a
+    meaningful title (Claude.ai-style) so the history list reads nicely.
     """
+    import asyncio
     conv_id = request.conversation_id or f"conv-{uuid.uuid4().hex[:12]}"
     resp = await _chat_impl(request)
-    _persist_chat(conv_id, request.message, resp.response, resp.tool_calls)
+    is_new = _persist_chat(conv_id, request.message, resp.response, resp.tool_calls)
+    if is_new:
+        asyncio.create_task(_title_conversation(conv_id, request.message))
     return resp
 
 

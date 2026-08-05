@@ -105,7 +105,7 @@ export default function Home() {
 
   return (
     <ErrorBoundary>
-      <div className={`min-h-screen flex flex-col font-sans bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-200`}>
+      <div className={`h-screen flex flex-col overflow-hidden font-sans bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-200`}>
       {/* Top Bar */}
       <header className="flex items-center justify-between px-6 py-3 border-b bg-surface-light dark:bg-surface-dark border-gray-200 dark:border-gray-800 flex-shrink-0 z-10">
         <div className="flex items-center gap-3">

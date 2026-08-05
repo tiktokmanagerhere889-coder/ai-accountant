@@ -380,7 +380,7 @@ export default function ChatPanel({ onTransactionLogged, fullPage = false }: Cha
             </button>
           </div>
           {/* Conversation history */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
+          <div className="flex-1 min-h-0 overflow-y-auto p-2 space-y-1">
             {conversations.map((c) => (
               <div
                 key={c.conversation_id}
@@ -420,7 +420,7 @@ export default function ChatPanel({ onTransactionLogged, fullPage = false }: Cha
       </div>
 
       {/* Messages view */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4">
         {messages.map((msg, index) => (
           <div key={index} className={`flex flex-col ${msg.sender === "user" ? "items-end" : "items-start"}`}>
             <div
