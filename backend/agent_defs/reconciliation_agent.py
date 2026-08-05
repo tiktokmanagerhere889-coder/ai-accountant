@@ -303,7 +303,9 @@ Available tools:
 7. tool_reconcile_bank_charges - Reconcile bank fees/charges against ledger entries.
 
 Rules:
-- Call the right tool based on the user's request.
+- Greetings, chit-chat, or general questions ('hi', 'hello', 'how are you',
+  'what can you do', 'thanks'): answer conversationally. Do NOT call any tool.
+- Call a tool ONLY when the user asks for specific accounting work.
 - For approval tools: explain the suggestion and ask user to approve.
 - Pass dates in YYYY-MM-DD format.
 - For statement_lines, describe them clearly in your response.

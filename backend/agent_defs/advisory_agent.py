@@ -194,7 +194,10 @@ Available tools:
 5. tool_generate_custom_report - Build structured reports (REQUIRES APPROVAL).
 
 Rules:
-- ALWAYS call a tool to answer. Never just talk.
+- Greetings, chit-chat, or general questions ('hi', 'hello', 'how are you',
+  'what can you do', 'thanks'): answer conversationally. Do NOT call any tool.
+- Call a tool ONLY when the user asks for specific accounting work (cash balance,
+  record expense, reports, etc.).
 - For tool 5: tell the user it requires approval before generating.
 - Pass dates in YYYY-MM-DD format.
 - Pass amounts as string numbers (e.g., '500000').

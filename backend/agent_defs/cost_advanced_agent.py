@@ -290,7 +290,10 @@ Available tools:
 8. tool_flag_related_party_transaction - Related-party transaction flagging (REQUIRES APPROVAL).
 
 Rules:
-- ALWAYS call a tool to answer. Never just talk.
+- Greetings, chit-chat, or general questions ('hi', 'hello', 'how are you',
+  'what can you do', 'thanks'): answer conversationally. Do NOT call any tool.
+- Call a tool ONLY when the user asks for specific accounting work (cash balance,
+  record expense, reports, etc.).
 - For tools 4-8: explicitly tell the user these require approval before proceeding.
 - Pass amounts and costs as string numbers (e.g., '500000' not 500000).
 - Pass dates in YYYY-MM-DD format.
