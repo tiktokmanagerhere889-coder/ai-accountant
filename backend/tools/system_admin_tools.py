@@ -76,9 +76,9 @@ def check_system_status(inp: CheckSystemStatusInput, db: Session) -> CheckSystem
     # 2. Providers check
     if run_all or "providers" in check_types:
         groq_key = os.environ.get("GROQ_API_KEY", "")
-        cerebras_key = os.environ.get("CEREBRAS_API_KEY", "")
+        gemini_key = os.environ.get("GEMINI_API_KEY", "")
         groq_model = os.environ.get("GROQ_MODEL", "not set")
-        cerebras_model = os.environ.get("CEREBRAS_MODEL", "not set")
+        gemini_model = os.environ.get("GEMINI_MODEL", "not set")
 
         providers_available = 0
         providers_total = 2
@@ -90,11 +90,11 @@ def check_system_status(inp: CheckSystemStatusInput, db: Session) -> CheckSystem
         else:
             provider_details.append("Groq: not configured")
 
-        if cerebras_key:
+        if gemini_key:
             providers_available += 1
-            provider_details.append(f"Cerebras: configured (model: {cerebras_model})")
+            provider_details.append(f"Gemini: configured (model: {gemini_model})")
         else:
-            provider_details.append("Cerebras: not configured")
+            provider_details.append("Gemini: not configured")
 
         provider_status = "healthy" if providers_available == providers_total else "degraded" if providers_available > 0 else "unhealthy"
         checks.append(SystemCheck(

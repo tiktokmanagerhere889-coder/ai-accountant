@@ -22,8 +22,8 @@ from tools.reconciliation_tools import (
     reconcile_bank_charges,
 )
 from agent_defs.model_providers import (
-    create_cerebras_provider, create_groq_provider,
-    GROQ_MODEL, GROQ_FALLBACK_MODEL, CEREBRAS_MODEL,
+    create_groq_provider, create_gemini_provider,
+    GROQ_MODEL, GROQ_FALLBACK_MODEL, GEMINI_MODEL,
 )
 
 
@@ -323,7 +323,7 @@ async def run_reconciliation_agent(user_request: str) -> str:
     for attempt_model, provider_fn, label in [
         (GROQ_MODEL, create_groq_provider, "Groq"),
         (GROQ_FALLBACK_MODEL, create_groq_provider, "Groq fallback"),
-        (CEREBRAS_MODEL, create_cerebras_provider, "Cerebras"),
+        (GEMINI_MODEL, create_gemini_provider, "Gemini"),
     ]:
         try:
             agent = RECONCILIATION_AGENT if attempt_model == GROQ_MODEL else Agent(

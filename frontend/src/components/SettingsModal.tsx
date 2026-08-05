@@ -8,7 +8,7 @@ interface SettingsModalProps {
 
 export default function SettingsModal({ onClose }: SettingsModalProps) {
   // Read and simulate settings from env structure
-  const [cerebrasKey, setCerebrasKey] = React.useState("••••••••••••••••••••••••");
+  const [geminiKey, setGeminiKey] = React.useState("••••••••••••••••••••••••");
   const [groqKey, setGroqKey] = React.useState("••••••••••••••••••••••••");
   const [keyStatus, setKeyStatus] = React.useState<Record<string, boolean>>({});
 
@@ -30,7 +30,7 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
       const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
       await axios.post(`${apiBase}/settings/api-keys`, {
         GROQ_API_KEY: groqKey,
-        CEREBRAS_API_KEY: cerebrasKey
+        GEMINI_API_KEY: geminiKey
       });
       // Refresh status
       const res = await axios.get(`${apiBase}/settings/api-keys`);
@@ -64,17 +64,17 @@ export default function SettingsModal({ onClose }: SettingsModalProps) {
         <div className="space-y-4">
           <div>
             <label className="block text-[10px] font-bold text-gray-700 dark:text-gray-300 uppercase tracking-wide mb-1.5">
-              CEREBRAS API KEY
+              GEMINI API KEY
             </label>
             <div className="flex items-center gap-2">
               <input
                 type="password"
                 autoComplete="off"
-                value={cerebrasKey}
-                onChange={(e) => setCerebrasKey(e.target.value)}
+                value={geminiKey}
+                onChange={(e) => setGeminiKey(e.target.value)}
                 className="flex-1 text-xs px-3 py-2.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light font-mono"
               />
-              {keyStatus["CEREBRAS_API_KEY"] ? (
+              {keyStatus["GEMINI_API_KEY"] ? (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-semibold whitespace-nowrap">&#10003; Configured</span>
               ) : (
                 <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-500/10 text-gray-500 font-semibold whitespace-nowrap">Using Default</span>

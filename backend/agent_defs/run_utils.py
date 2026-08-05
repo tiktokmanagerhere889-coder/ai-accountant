@@ -3,7 +3,7 @@
 Shared utility used by the orchestrator's agent-tools. Provides:
 - Retry on empty/malformed output
 - Retry on transient Groq provider failures
-- Skip Cerebras on 402 Payment Required (billing issue)
+- Skip provider on 402 Payment Required / 429 rate limit (billing/limit issues)
 - Applies to all agents through a single wrapper function
 """
 import typing
@@ -48,7 +48,7 @@ async def run_with_retry(
         user_request: The user's request string
         max_retries: Max retry attempts (default 1; total attempts = 1 + max_retries).
             Capped at 1 to avoid multiplying the provider fallback chain
-            (each attempt already tries Groq -> Groq fallback -> Cerebras).
+            (each attempt already tries Groq -> Groq fallback -> Gemini).
 
     Returns:
         The first valid output, or the last attempt's output if all fail

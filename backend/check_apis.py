@@ -1,4 +1,4 @@
-"""Check Groq and Cerebras API endpoints."""
+"""Check Groq and Gemini API endpoints."""
 import os, sys
 sys.path.insert(0, os.path.dirname(__file__))
 
@@ -22,47 +22,34 @@ elif resp.status_code == 200:
 else:
     print(f"  {resp.text[:200]}")
 
-# --- Cerebras ---
-ckey = get_api_key("CEREBRAS_API_KEY")
-print(f"\nCerebras key: {ckey[:12]}...{ckey[-4:] if len(ckey) > 16 else ''}")
+# --- Gemini (OpenAI-compatible endpoint) ---
+gkey = get_api_key("GEMINI_API_KEY")
+print(f"\nGemini key: {gkey[:12]}...{gkey[-4:] if len(gkey) > 16 else ''}")
 
-# List models first
 try:
     mresp = requests.get(
-        "https://api.cerebras.ai/v1/models",
-        headers={"Authorization": f"Bearer {ckey}"},
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest",
+        headers={"x-goog-api-key": gkey},
         timeout=10,
     )
-    print(f"Cerebras models endpoint {mresp.status_code}")
+    print(f"Gemini models endpoint {mresp.status_code}")
     if mresp.status_code == 200:
-        models = mresp.json()
-        print(f"  Available: {[m['id'] for m in models.get('data', models)][:10]}")
+        info = mresp.json()
+        print(f"  displayName: {info.get('displayName')}")
     else:
         print(f"  {mresp.text[:200]}")
 except Exception as e:
-    print(f"  Model list error: {e}")
+    print(f"  Model info error: {e}")
 
-# Try chat completion
+# Try chat completion via OpenAI-compat layer
 resp = requests.post(
-    "https://api.cerebras.ai/v1/chat/completions",
-    headers={"Authorization": f"Bearer {ckey}", "Content-Type": "application/json"},
-    json={"model": "llama3.1-70b", "messages": [{"role": "user", "content": "hi"}]},
+    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
+    headers={"Authorization": f"Bearer {gkey}", "Content-Type": "application/json"},
+    json={"model": "gemini-flash-lite-latest", "messages": [{"role": "user", "content": "hi"}]},
     timeout=15,
 )
-print(f"\nCerebras chat {resp.status_code}")
+print(f"\nGemini chat {resp.status_code}")
 if resp.status_code == 200:
     print(f"  OK: {resp.json()['choices'][0]['message']['content'][:80]}")
 else:
     print(f"  {resp.text[:300]}")
-
-# Also test with fallback model names
-for model in ["llama-3.1-70b", "llama3.1-8b", "llama-3.1-8b"]:
-    resp = requests.post(
-        "https://api.cerebras.ai/v1/chat/completions",
-        headers={"Authorization": f"Bearer {ckey}", "Content-Type": "application/json"},
-        json={"model": model, "messages": [{"role": "user", "content": "hi"}]},
-        timeout=10,
-    )
-    print(f"  Cerebras model={model}: {resp.status_code}")
-    if resp.status_code != 404:
-        print(f"    => {resp.text[:100]}")

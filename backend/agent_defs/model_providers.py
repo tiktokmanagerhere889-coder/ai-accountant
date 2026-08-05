@@ -1,4 +1,4 @@
-"""Custom model providers for Cerebras (primary) and Groq (fallback).
+"""Custom model providers for Groq (primary) and Gemini (fallback).
 
 Both providers implement OpenAI-compatible chat completions APIs.
 """
@@ -21,11 +21,12 @@ if dotenv_path.exists():
 # Model configuration - Groq primary (verified against Groq's live model list 2026-07)
 # primary: llama-3.3-70b-versatile (strong tool calling, free tier)
 # fallback: llama-3.1-8b-instant (fast, reliable)
-# Cerebras: gemma-4-31b (verified against Cerebras /v1/models - 2026-08)
-#   previous llama-3.3-70b was 404: not in Cerebras model list.
+# Gemini fallback: gemini-flash-lite-latest (verified standalone 2026-08-05 against
+#   https://generativelanguage.googleapis.com/v1beta/openai/chat/completions —
+#   HTTP 200, tool-calling works). Replaces Cerebras, which kept hitting billing/402.
 GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 GROQ_FALLBACK_MODEL = os.environ.get("GROQ_FALLBACK_MODEL", "llama-3.1-8b-instant")
-CEREBRAS_MODEL = os.environ.get("CEREBRAS_MODEL", "gemma-4-31b")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-lite-latest")
 
 def get_api_key(key_name: str) -> str:
     """Check user_api_keys table first, fall back to env var.
@@ -43,11 +44,12 @@ def get_api_key(key_name: str) -> str:
     return os.environ.get(key_name, "")
 
 
-def create_cerebras_provider() -> OpenAIProvider:
-    """Create an OpenAI-compatible provider for Cerebras inference.
+def create_gemini_provider() -> OpenAIProvider:
+    """Create an OpenAI-compatible provider for Gemini inference.
 
-    Base URL: https://api.cerebras.ai/v1
-    Uses Chat Completions API (not Responses API).
+    Base URL: https://generativelanguage.googleapis.com/v1beta/openai/
+    Uses Chat Completions API (OpenAI compatibility layer).
+    Verified standalone 2026-08-05: HTTP 200 + tool-calling on gemini-flash-lite-latest.
 
     Fail-fast: the underlying AsyncOpenAI client uses max_retries=0 so a 429
     or 5xx surfaces immediately instead of triggering SDK backoff retries
@@ -55,8 +57,8 @@ def create_cerebras_provider() -> OpenAIProvider:
     fallback in the orchestrator handles the failure instead.
     """
     client = AsyncOpenAI(
-        api_key=get_api_key("CEREBRAS_API_KEY"),
-        base_url="https://api.cerebras.ai/v1",
+        api_key=get_api_key("GEMINI_API_KEY"),
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
         max_retries=0,
         timeout=30.0,
     )
@@ -71,7 +73,7 @@ def create_groq_provider() -> OpenAIProvider:
 
     Base URL: https://api.groq.com/openai/v1
     Uses Chat Completions API (not Responses API).
-    Same fail-fast client as Cerebras: max_retries=0, 30s timeout.
+    Same fail-fast client as Gemini: max_retries=0, 30s timeout.
     """
     client = AsyncOpenAI(
         api_key=get_api_key("GROQ_API_KEY"),

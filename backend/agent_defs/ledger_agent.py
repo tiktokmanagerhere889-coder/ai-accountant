@@ -23,8 +23,8 @@ from tools.ledger_tools import (
 from tools.asset_tools import categorize_fixed_asset
 from tools.contact_tools import manage_contact
 from agent_defs.model_providers import (
-    create_cerebras_provider, create_groq_provider,
-    GROQ_MODEL, GROQ_FALLBACK_MODEL, CEREBRAS_MODEL,
+    create_groq_provider, create_gemini_provider,
+    GROQ_MODEL, GROQ_FALLBACK_MODEL, GEMINI_MODEL,
 )
 
 
@@ -310,12 +310,12 @@ Rules:
 async def run_ledger_agent(user_request: str) -> str:
     """Run the Ledger Agent with a user request.
 
-    Groq primary -> Groq fallback -> Cerebras last resort.
+    Groq primary -> Groq fallback -> Gemini last resort.
     """
     for attempt_model, provider_fn, label in [
         (GROQ_MODEL, create_groq_provider, "Groq"),
         (GROQ_FALLBACK_MODEL, create_groq_provider, "Groq fallback"),
-        (CEREBRAS_MODEL, create_cerebras_provider, "Cerebras"),
+        (GEMINI_MODEL, create_gemini_provider, "Gemini"),
     ]:
         try:
             agent = LEDGER_AGENT if attempt_model == GROQ_MODEL else Agent(

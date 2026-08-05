@@ -26,8 +26,8 @@ from tools.tax_tools import (
     prepare_sales_tax_filing, prepare_income_tax_filing,
 )
 from agent_defs.model_providers import (
-    create_cerebras_provider, create_groq_provider,
-    GROQ_MODEL, GROQ_FALLBACK_MODEL, CEREBRAS_MODEL,
+    create_groq_provider, create_gemini_provider,
+    GROQ_MODEL, GROQ_FALLBACK_MODEL, GEMINI_MODEL,
 )
 
 
@@ -270,11 +270,11 @@ Rules:
 
 
 async def run_tax_agent(user_request: str) -> str:
-    """Run the Tax Agent. Groq -> Groq fallback -> Cerebras."""
+    """Run the Tax Agent. Groq -> Groq fallback -> Gemini."""
     for attempt_model, provider_fn, label in [
         (GROQ_MODEL, create_groq_provider, "Groq"),
         (GROQ_FALLBACK_MODEL, create_groq_provider, "Groq fallback"),
-        (CEREBRAS_MODEL, create_cerebras_provider, "Cerebras"),
+        (GEMINI_MODEL, create_gemini_provider, "Gemini"),
     ]:
         try:
             agent = TAX_AGENT if attempt_model == GROQ_MODEL else Agent(

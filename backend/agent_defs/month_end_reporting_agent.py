@@ -24,8 +24,8 @@ from tools.month_end_tools import (
     get_loan_debt_schedule, forecast_cash_flow,
 )
 from agent_defs.model_providers import (
-    create_cerebras_provider, create_groq_provider,
-    GROQ_MODEL, GROQ_FALLBACK_MODEL, CEREBRAS_MODEL,
+    create_groq_provider, create_gemini_provider,
+    GROQ_MODEL, GROQ_FALLBACK_MODEL, GEMINI_MODEL,
 )
 
 
@@ -305,12 +305,12 @@ Rules:
 async def run_month_end_agent(user_request: str) -> str:
     """Run the Month-End Reporting Agent with a user request.
 
-    Groq primary -> Groq fallback -> Cerebras last resort.
+    Groq primary -> Groq fallback -> Gemini last resort.
     """
     for attempt_model, provider_fn, label in [
         (GROQ_MODEL, create_groq_provider, "Groq"),
         (GROQ_FALLBACK_MODEL, create_groq_provider, "Groq fallback"),
-        (CEREBRAS_MODEL, create_cerebras_provider, "Cerebras"),
+        (GEMINI_MODEL, create_gemini_provider, "Gemini"),
     ]:
         try:
             agent = MONTH_END_AGENT if attempt_model == GROQ_MODEL else Agent(

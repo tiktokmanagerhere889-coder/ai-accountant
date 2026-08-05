@@ -27,11 +27,11 @@ from tools.bank_tools import check_bank_transactions
 from tools.petty_cash_tools import manage_petty_cash
 from tools.receipt_tools import process_receipt_image
 from agent_defs.model_providers import (
-    create_cerebras_provider,
     create_groq_provider,
+    create_gemini_provider,
     GROQ_MODEL,
     GROQ_FALLBACK_MODEL,
-    CEREBRAS_MODEL,
+    GEMINI_MODEL,
 )
 
 
@@ -237,7 +237,7 @@ Rules:
 async def run_daily_entry_agent(user_request: str) -> str:
     """Run the Daily Entry Agent with a user request.
 
-    Uses Groq (qwen) as primary, Groq (llama-3.1-8b) as fallback, Cerebras as last resort.
+    Uses Groq as primary, Groq (llama-3.1-8b) as fallback, Gemini as last resort.
     """
     try:
         result = await Runner.run(
@@ -262,23 +262,23 @@ async def run_daily_entry_agent(user_request: str) -> str:
             return result.final_output
         except Exception as groq_fallback_error:
             try:
-                cereal_agent = Agent(
+                gemini_agent = Agent(
                     name="Daily Entry Agent",
                     instructions=DAILY_ENTRY_AGENT.instructions,
                     tools=DAILY_ENTRY_AGENT.tools,
-                    model=CEREBRAS_MODEL,
+                    model=GEMINI_MODEL,
                 )
                 result = await Runner.run(
-                    cereal_agent,
+                    gemini_agent,
                     input=user_request,
-                    run_config=RunConfig(model_provider=create_cerebras_provider()),
+                    run_config=RunConfig(model_provider=create_gemini_provider()),
                 )
                 return result.final_output
-            except Exception as cerebras_error:
+            except Exception as gemini_error:
                 return (
                     f"All providers unavailable.\n"
                     f"Groq: {groq_error}\n"
                     f"Groq fallback: {groq_fallback_error}\n"
-                    f"Cerebras: {cerebras_error}\n"
+                    f"Gemini: {gemini_error}\n"
                     f"Please check API keys in .env and try again."
                 )

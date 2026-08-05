@@ -20,8 +20,8 @@ from tools.year_end_tools import (
     carry_forward_balances, draft_notes_to_financials, close_fiscal_year,
 )
 from agent_defs.model_providers import (
-    create_cerebras_provider, create_groq_provider,
-    GROQ_MODEL, GROQ_FALLBACK_MODEL, CEREBRAS_MODEL,
+    create_groq_provider, create_gemini_provider,
+    GROQ_MODEL, GROQ_FALLBACK_MODEL, GEMINI_MODEL,
 )
 
 
@@ -245,12 +245,12 @@ Rules:
 async def run_year_end_agent(user_request: str) -> str:
     """Run the Year-End Close & Financial Statements Agent with a user request.
 
-    Groq primary -> Groq fallback -> Cerebras last resort.
+    Groq primary -> Groq fallback -> Gemini last resort.
     """
     for attempt_model, provider_fn, label in [
         (GROQ_MODEL, create_groq_provider, "Groq"),
         (GROQ_FALLBACK_MODEL, create_groq_provider, "Groq fallback"),
-        (CEREBRAS_MODEL, create_cerebras_provider, "Cerebras"),
+        (GEMINI_MODEL, create_gemini_provider, "Gemini"),
     ]:
         try:
             agent = YEAR_END_AGENT if attempt_model == GROQ_MODEL else Agent(

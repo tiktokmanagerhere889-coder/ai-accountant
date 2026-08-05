@@ -20,8 +20,8 @@ from tools.system_admin_tools import (
     manage_system_preferences, schedule_system_task,
 )
 from agent_defs.model_providers import (
-    create_cerebras_provider, create_groq_provider,
-    GROQ_MODEL, GROQ_FALLBACK_MODEL, CEREBRAS_MODEL,
+    create_groq_provider, create_gemini_provider,
+    GROQ_MODEL, GROQ_FALLBACK_MODEL, GEMINI_MODEL,
 )
 
 
@@ -167,11 +167,11 @@ Rules:
 
 
 async def run_system_admin_agent(user_request: str) -> str:
-    """Run the System Admin Agent. Groq -> Groq fallback -> Cerebras."""
+    """Run the System Admin Agent. Groq -> Groq fallback -> Gemini."""
     for attempt_model, provider_fn, label in [
         (GROQ_MODEL, create_groq_provider, "Groq"),
         (GROQ_FALLBACK_MODEL, create_groq_provider, "Groq fallback"),
-        (CEREBRAS_MODEL, create_cerebras_provider, "Cerebras"),
+        (GEMINI_MODEL, create_gemini_provider, "Gemini"),
     ]:
         try:
             agent = SYSTEM_ADMIN_AGENT if attempt_model == GROQ_MODEL else Agent(

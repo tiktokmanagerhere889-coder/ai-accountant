@@ -6,7 +6,7 @@
 [![Next.js](https://img.shields.io/badge/Frontend-Next.js%2014-black?style=flat-square&logo=next.js)](https://nextjs.org)
 [![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL-336791?style=flat-square&logo=postgresql)](https://postgresql.org)
 [![OpenAI Agents SDK](https://img.shields.io/badge/Agents-OpenAI%20Agents%20SDK-412991?style=flat-square&logo=openai)](https://openai.github.io/openai-agents-python/)
-[![Groq](https://img.shields.io/badge/LLM-Groq%20%2B%20Cerebras-F55036?style=flat-square)](https://groq.com)
+[![Groq](https://img.shields.io/badge/LLM-Groq%20%2B%20Gemini-F55036?style=flat-square)](https://groq.com)
 [![Docker](https://img.shields.io/badge/Infra-Docker-2496ED?style=flat-square&logo=docker)](https://docker.com)
 
 ---
@@ -80,7 +80,7 @@ The **24 approval-gated tools** pause and wait for explicit human confirmation b
 
 ### Prerequisites
 - Docker + Docker Compose
-- A free [Groq API key](https://console.groq.com) and [Cerebras API key](https://cloud.cerebras.ai)
+- A free [Groq API key](https://console.groq.com) and [Gemini API key](https://aistudio.google.com/app/apikey)
 
 ### 1. Clone and configure
 
@@ -93,10 +93,10 @@ Create a `.env` file in the root:
 
 ```env
 GROQ_API_KEY=your_groq_key_here
-CEREBRAS_API_KEY=your_cerebras_key_here
+GEMINI_API_KEY=your_gemini_key_here
 GROQ_MODEL=meta-llama/llama-4-scout-17b-16e-instruct
 GROQ_FALLBACK_MODEL=llama-3.3-70b-versatile
-CEREBRAS_MODEL=llama3.1-8b
+GEMINI_MODEL=gemini-flash-lite-latest
 ```
 
 ### 2. Start all services

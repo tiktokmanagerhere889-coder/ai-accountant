@@ -15,7 +15,7 @@ AI accounting assistant built on an Orchestrator + 10 agents + 63 tools pattern.
 | Database | PostgreSQL |
 | Data Models | Pydantic |
 | Agent Framework | OpenAI Agents SDK |
-| LLM Provider | Cerebras (primary) + Groq (fallback) |
+| LLM Provider | Groq (primary) + Gemini (fallback) |
 | Infrastructure | Docker |
 
 ## Folder Structure
