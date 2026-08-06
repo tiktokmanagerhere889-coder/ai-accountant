@@ -363,6 +363,26 @@ def _fmt_sales_tax_adjust(result: dict) -> str:
     )
 
 
+def _fmt_tax_filings(result: dict) -> str:
+    """Plain-English list of persisted tax filings."""
+    items = result.get("items") or []
+    if not items:
+        return result.get("message") or "No tax filings on record."
+    lines = []
+    for f in items[:20]:
+        period_s = ""
+        if f.get("period"):
+            period_s = "/P%02d" % int(f.get("period"))
+        lines.append(
+            f"  - {f.get('filing_id')} {f.get('filing_type')} FY {f.get('fiscal_year')}{period_s}: "
+            f"net payable {_money(f.get('net_payable', 0))} (revenue {_money(f.get('total_revenue', 0))}, "
+            f"expenses {_money(f.get('total_expenses', 0))}, tax {_money(f.get('tax_liability', 0))}) "
+            f"[{f.get('status', '')}]"
+        )
+    more = f"\n  ... and {len(items) - 20} more" if len(items) > 20 else ""
+    return f"{len(items)} tax filing(s) on record:\n" + "\n".join(lines) + more
+
+
 def _fmt_flag_exemption(result: dict) -> str:
     """Plain-English tax-exemption/zero-rating flag summary."""
     items = result.get("flagged_entries") or []
@@ -417,6 +437,7 @@ _FORMATTERS = {
     "get_loan_debt_schedule": _fmt_loan,
     "prepare_income_tax_filing": _fmt_filing,
     "prepare_sales_tax_filing": _fmt_filing,
+    "list_tax_filings": _fmt_tax_filings,
     "draft_notes_to_financials": _fmt_generic_report,
     "prepare_budget_forecast": _fmt_generic_report,
     "get_tax_planning_advice": lambda r: r.get("advice") or "Tax planning advice generated.",

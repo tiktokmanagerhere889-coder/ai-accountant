@@ -7,12 +7,13 @@ prepare_sales_tax_filing, prepare_income_tax_filing.
 """
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
+import json
 import uuid
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from db.models import JournalEntry, TaxRate, EobiRate, Contact, RetainedEarnings
+from db.models import JournalEntry, TaxRate, EobiRate, Contact, RetainedEarnings, TaxFiling
 from tools.account_utils import revenue_filter_clause, expense_filter_clause
 from tools.schemas import (
     CalculateWithholdingTaxInput, CalculateWithholdingTaxOutput,
@@ -24,6 +25,7 @@ from tools.schemas import (
     FlaggedExemptionEntry,
     PrepareSalesTaxFilingInput, PrepareSalesTaxFilingOutput,
     PrepareIncomeTaxFilingInput, PrepareIncomeTaxFilingOutput,
+    ListTaxFilingsInput, ListTaxFilingsOutput, TaxFilingItem,
 )
 
 
@@ -442,14 +444,39 @@ def prepare_sales_tax_filing(inp: PrepareSalesTaxFilingInput, db: Session) -> Pr
             "This prepares the data only - you will submit via FBR portal."
         )
 
-    filing_id = f"ST-{inp.fiscal_year}-{inp.period:02d}-{uuid.uuid4().hex[:4].upper()}"
-
     sales_rate, rate_src = _sales_tax_rate(db)
     if sales_rate == Decimal("0"):
         raise ValueError(
             "Sales tax rate is not configured in tax_rates (SALES_TAX). "
             "Add the rate before preparing the filing."
         )
+
+    # Already filed for this period? Return the stored filing (no re-save).
+    existing = db.query(TaxFiling).filter(
+        TaxFiling.filing_type == "sales",
+        TaxFiling.fiscal_year == inp.fiscal_year,
+        TaxFiling.period == inp.period,
+    ).first()
+    if existing is not None:
+        fd = json.loads(existing.filing_data) if existing.filing_data else {}
+        return PrepareSalesTaxFilingOutput(
+            filing_id=existing.filing_id,
+            period=inp.period,
+            fiscal_year=inp.fiscal_year,
+            sales_tax_payable=Decimal(fd.get("output_tax", "0")),
+            input_tax_adjustments=Decimal(fd.get("input_tax", "0")),
+            net_amount_payable=Decimal(fd.get("net_payable", "0")),
+            filing_data=fd,
+            needs_approval=True,
+            status=existing.status,
+            message=(
+                f"A sales tax filing for period {inp.period}/{inp.fiscal_year} already "
+                f"exists ({existing.filing_id}) and was NOT re-saved. Review it via "
+                "'show my tax filings' or the Export (Tax) workbook."
+            ),
+        )
+
+    filing_id = f"ST-{inp.fiscal_year}-{inp.period:02d}-{uuid.uuid4().hex[:4].upper()}"
 
     # Calculate output tax from revenue
     revenue = db.query(func.sum(JournalEntry.credit_amount)).filter(
@@ -487,6 +514,21 @@ def prepare_sales_tax_filing(inp: PrepareSalesTaxFilingInput, db: Session) -> Pr
         "note": "This data must be verified and submitted manually via FBR portal.",
     }
 
+    # Persist the prepared filing so it survives restarts and can be exported.
+    db.add(TaxFiling(
+        filing_id=filing_id,
+        filing_type="sales",
+        fiscal_year=inp.fiscal_year,
+        period=inp.period,
+        total_revenue=_round(revenue, 2),
+        total_expenses=_round(purchases, 2),
+        tax_liability=output_tax,
+        net_payable=net_payable,
+        filing_data=json.dumps(filing_data, default=str),
+        status="prepared",
+    ))
+    db.commit()
+
     return PrepareSalesTaxFilingOutput(
         filing_id=filing_id,
         period=inp.period,
@@ -497,7 +539,7 @@ def prepare_sales_tax_filing(inp: PrepareSalesTaxFilingInput, db: Session) -> Pr
         filing_data=filing_data,
         needs_approval=True,
         status="prepared",
-        message=f"Sales tax filing {filing_id} prepared. Review and submit via FBR portal.",
+        message=f"Sales tax filing {filing_id} prepared and saved. Review and submit via FBR portal.",
     )
 
 
@@ -514,6 +556,33 @@ def prepare_income_tax_filing(inp: PrepareIncomeTaxFilingInput, db: Session) -> 
         raise ValueError(
             "Income tax filing preparation requires confirm=True. "
             "This prepares the data only - you will submit via FBR portal."
+        )
+
+    # Already filed for this fiscal year? Return the stored filing (no re-save).
+    existing = db.query(TaxFiling).filter(
+        TaxFiling.filing_type == "income",
+        TaxFiling.fiscal_year == inp.fiscal_year,
+        TaxFiling.period.is_(None),
+    ).first()
+    if existing is not None:
+        fd = json.loads(existing.filing_data) if existing.filing_data else {}
+        return PrepareIncomeTaxFilingOutput(
+            filing_id=existing.filing_id,
+            fiscal_year=inp.fiscal_year,
+            total_income=Decimal(fd.get("total_income", "0")),
+            total_expenses=Decimal(fd.get("total_expenses", "0")),
+            taxable_income=Decimal(fd.get("taxable_income", "0")),
+            tax_liability=Decimal(fd.get("tax_liability", "0")),
+            advance_tax_paid=Decimal(fd.get("advance_tax_paid", "0")),
+            net_tax_due=Decimal(fd.get("net_tax_due", "0")),
+            filing_data=fd,
+            needs_approval=True,
+            status=existing.status,
+            message=(
+                f"An income tax filing for FY {inp.fiscal_year} already exists "
+                f"({existing.filing_id}) and was NOT re-saved. Review it via "
+                "'show my tax filings' or the Export (Tax) workbook."
+            ),
         )
 
     # Deterministic filing ID (stable across re-runs for the same fiscal year)
@@ -575,6 +644,21 @@ def prepare_income_tax_filing(inp: PrepareIncomeTaxFilingInput, db: Session) -> 
         message_parts.append(f"No tax liability for FY {inp.fiscal_year} (net loss or zero income)")
     message_parts.append("Review all figures before submitting via FBR portal")
 
+    # Persist the prepared filing so it survives restarts and can be exported.
+    db.add(TaxFiling(
+        filing_id=filing_id,
+        filing_type="income",
+        fiscal_year=inp.fiscal_year,
+        period=None,
+        total_revenue=total_income,
+        total_expenses=total_expenses,
+        tax_liability=tax_liability,
+        net_payable=net_due,
+        filing_data=json.dumps(filing_data, default=str),
+        status="prepared",
+    ))
+    db.commit()
+
     return PrepareIncomeTaxFilingOutput(
         filing_id=filing_id,
         fiscal_year=inp.fiscal_year,
@@ -589,3 +673,46 @@ def prepare_income_tax_filing(inp: PrepareIncomeTaxFilingInput, db: Session) -> 
         status="prepared",
         message=". ".join(message_parts) + ".",
     )
+
+
+# ---------------------------------------------------------------------------
+# Tool 9: List Tax Filings (read-only)
+# ---------------------------------------------------------------------------
+
+def list_tax_filings(inp: ListTaxFilingsInput, db: Session) -> ListTaxFilingsOutput:
+    """List all persisted tax filings (sales/income) for review and export.
+
+    Read-only — never requires approval. Backed by the tax_filings table that
+    prepare_sales_tax_filing / prepare_income_tax_filing persist into.
+    """
+    query = db.query(TaxFiling)
+    if inp.filing_type:
+        query = query.filter(TaxFiling.filing_type == inp.filing_type)
+    if inp.fiscal_year:
+        query = query.filter(TaxFiling.fiscal_year == inp.fiscal_year)
+    rows = query.order_by(
+        TaxFiling.created_at.desc(), TaxFiling.fiscal_year.desc()
+    ).all()
+
+    items = [
+        TaxFilingItem(
+            filing_id=r.filing_id,
+            filing_type=r.filing_type,
+            fiscal_year=r.fiscal_year,
+            period=r.period,
+            total_revenue=r.total_revenue or Decimal("0"),
+            total_expenses=r.total_expenses or Decimal("0"),
+            tax_liability=r.tax_liability or Decimal("0"),
+            net_payable=r.net_payable or Decimal("0"),
+            status=r.status or "prepared",
+            created_at=r.created_at.date() if r.created_at else None,
+        )
+        for r in rows
+    ]
+
+    message = (
+        f"{len(items)} tax filing(s) on record."
+        if items
+        else "No tax filings on record yet. Prepare a sales or income tax filing to save one."
+    )
+    return ListTaxFilingsOutput(items=items, total_count=len(items), message=message)

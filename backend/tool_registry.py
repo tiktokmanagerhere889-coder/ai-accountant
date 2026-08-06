@@ -235,6 +235,7 @@ from tools.tax_tools import (
     flag_tax_exemption_zero_rating,
     prepare_sales_tax_filing,
     prepare_income_tax_filing,
+    list_tax_filings,
 )
 from tools.schemas import (
     CalculateWithholdingTaxInput,
@@ -253,6 +254,8 @@ from tools.schemas import (
     PrepareSalesTaxFilingOutput,
     PrepareIncomeTaxFilingInput,
     PrepareIncomeTaxFilingOutput,
+    ListTaxFilingsInput,
+    ListTaxFilingsOutput,
 )
 
 # --- Audit ---
@@ -376,7 +379,7 @@ REGISTRY: dict[str, ToolEntry] = {
     "flag_provision_contingent_liability": (flag_provision_contingent_liability, FlagProvisionContingentLiabilityInput, FlagProvisionContingentLiabilityOutput, False),
     "flag_related_party_transaction": (flag_related_party_transaction, FlagRelatedPartyTransactionInput, FlagRelatedPartyTransactionOutput, False),
 
-    # === Tax (8 tools) ===
+    # === Tax (9 tools) ===
     "calculate_withholding_tax": (calculate_withholding_tax, CalculateWithholdingTaxInput, CalculateWithholdingTaxOutput, False),
     "get_tax_planning_advice": (get_tax_planning_advice, GetTaxPlanningAdviceInput, GetTaxPlanningAdviceOutput, False),
     "calculate_advance_minimum_tax": (calculate_advance_minimum_tax, CalculateAdvanceMinimumTaxInput, CalculateAdvanceMinimumTaxOutput, False),
@@ -385,6 +388,7 @@ REGISTRY: dict[str, ToolEntry] = {
     "flag_tax_exemption_zero_rating": (flag_tax_exemption_zero_rating, FlagTaxExemptionZeroRatingInput, FlagTaxExemptionZeroRatingOutput, False),
     "prepare_sales_tax_filing": (prepare_sales_tax_filing, PrepareSalesTaxFilingInput, PrepareSalesTaxFilingOutput, False),
     "prepare_income_tax_filing": (prepare_income_tax_filing, PrepareIncomeTaxFilingInput, PrepareIncomeTaxFilingOutput, False),
+    "list_tax_filings": (list_tax_filings, ListTaxFilingsInput, ListTaxFilingsOutput, False),
 
     # === Audit (4 tools) ===
     "detect_anomaly_transactions": (detect_anomaly_transactions, DetectAnomalyTransactionsInput, DetectAnomalyTransactionsOutput, False),

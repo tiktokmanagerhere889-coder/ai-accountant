@@ -257,6 +257,20 @@ def _params_filing_income(text: str) -> dict:
     return p
 
 
+def _params_filings(text: str) -> dict:
+    """List-tax-filings route: optional type + fiscal year filters from the message."""
+    p = {}
+    t = text.lower()
+    if "income" in t or "itr" in t or "incometax" in t:
+        p["filing_type"] = "income"
+    elif "sales" in t or "st-" in t:
+        p["filing_type"] = "sales"
+    year = _extract_year(text)
+    if year:
+        p["fiscal_year"] = year
+    return p
+
+
 def _params_aging(text: str) -> dict:
     return {"as_of_date": _extract_date(text) or date.today()}
 
@@ -984,6 +998,7 @@ ROUTES: list[tuple[list[str], str, callable]] = [
     (["eobi", "old age benefit"], "calculate_eobi_deductions", _params_eobi),
     (["sales tax input", "sales tax output", "input tax", "output tax", "adjust sales tax"], "adjust_sales_tax_input_output", _params_year_period),
     (["exemption", "zero rating", "zero-rated", "tax exempt"], "flag_tax_exemption_zero_rating", _params_year),
+    (["show my tax filings", "show tax filings", "tax filings", "my filings", "list filings", "saved filings", "my tax filing"], "list_tax_filings", _params_filings),
     (["sales tax filing", "file sales tax", "sales tax return"], "prepare_sales_tax_filing", _params_filing_sales),
     (["income tax filing", "file income tax", "income tax return"], "prepare_income_tax_filing", _params_filing_income),
 

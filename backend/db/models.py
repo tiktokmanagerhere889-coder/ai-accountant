@@ -387,6 +387,29 @@ class EobiRate(Base):
     max_insurable_amount = Column(Numeric, nullable=True)
 
 
+class TaxFiling(Base):
+    """A prepared sales/income tax filing, saved on human approval.
+
+    prepare_sales_tax_filing / prepare_income_tax_filing only compute numbers;
+    the row is written at approval time so the filing persists for review,
+    re-download, and a future FBR-submission flow. filing_data holds the full
+    FBR-structured payload as JSON.
+    """
+    __tablename__ = "tax_filings"
+
+    filing_id = Column(String, primary_key=True)
+    filing_type = Column(String, nullable=False, index=True)  # "sales" | "income"
+    fiscal_year = Column(Integer, nullable=False, index=True)
+    period = Column(Integer, nullable=True)                   # month 1-12; None for income
+    total_revenue = Column(Numeric(18, 2), default=Decimal("0"))
+    total_expenses = Column(Numeric(18, 2), default=Decimal("0"))
+    tax_liability = Column(Numeric(18, 2), default=Decimal("0"))
+    net_payable = Column(Numeric(18, 2), default=Decimal("0"))
+    filing_data = Column(Text, nullable=True)                 # FBR-structured payload (JSON)
+    status = Column(String, default="prepared")               # prepared | submitted
+    created_at = Column(DateTime, default=func.now())
+
+
 class FlaggedEntry(Base):
     __tablename__ = "flagged_entries"
 

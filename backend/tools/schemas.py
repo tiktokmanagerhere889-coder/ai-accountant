@@ -1541,6 +1541,33 @@ class PrepareIncomeTaxFilingOutput(BaseModel):
     message: str = ""
 
 
+# Tool 9: List Tax Filings (read-only)
+class TaxFilingItem(BaseModel):
+    filing_id: str
+    filing_type: str
+    fiscal_year: int
+    period: Optional[int] = None
+    total_revenue: Decimal = Decimal("0")
+    total_expenses: Decimal = Decimal("0")
+    tax_liability: Decimal = Decimal("0")
+    net_payable: Decimal = Decimal("0")
+    status: str = ""
+    created_at: Optional[date] = None
+
+
+class ListTaxFilingsInput(BaseModel):
+    filing_type: Optional[str] = Field(
+        default=None, description="Filter by filing type: 'sales' or 'income'"
+    )
+    fiscal_year: Optional[int] = Field(default=None, description="Filter by fiscal year")
+
+
+class ListTaxFilingsOutput(BaseModel):
+    items: list[TaxFilingItem]
+    total_count: int
+    message: str = ""
+
+
 # --- Agent 8: Audit & Regulatory ---
 
 # Tool 1: Detect Anomaly Transactions (No approval)

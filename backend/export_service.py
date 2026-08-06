@@ -52,6 +52,7 @@ from db.models import (
     StatutoryRegister,
     SystemBackupLog,
     SystemConfig,
+    TaxFiling,
     TaxRate,
     UserRole,
 )
@@ -328,6 +329,16 @@ def _tax_rates(db: Session) -> list[dict]:
     return _all_rows(db, TaxRate)
 
 
+def _tax_filings(db: Session) -> list[dict]:
+    """Persisted sales/income tax filings (newest first)."""
+    return [
+        _row_to_dict(r)
+        for r in db.query(TaxFiling).order_by(
+            TaxFiling.created_at.desc(), TaxFiling.fiscal_year.desc()
+        ).all()
+    ]
+
+
 def _eobi_rates(db: Session) -> list[dict]:
     return _all_rows(db, EobiRate)
 
@@ -571,6 +582,7 @@ AGENT_QUERIES: dict[str, list[tuple[str, Callable[[Session], list[dict]]]]] = {
     "tax": [
         ("TAX RATES", _tax_rates),
         ("EOBI RATES", _eobi_rates),
+        ("TAX FILINGS", _tax_filings),
         ("COMPLIANCE DEADLINES", _compliance_deadlines),
     ],
     "audit": [
