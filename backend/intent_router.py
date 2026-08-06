@@ -184,6 +184,79 @@ def _params_tax_planning(text: str) -> dict:
     return {"query": text, "fiscal_year": _extract_year(text) or date.today().year}
 
 
+_WHT_TYPES = {
+    "salary": "salary", "contract": "contract", "supply": "supply",
+    "service": "service", "services": "service", "rent": "rent",
+    "commission": "commission",
+}
+
+
+def _extract_withholding_type(text: str) -> str:
+    """Map a phrase in the message to a valid withholding_type.
+
+    Defaults to 'salary' only when a type is actually named in the message
+    (e.g. 'salary', 'rent', 'services'). The route requires the type to be
+    present; otherwise it routes to slot-fill so the missing field is asked
+    for instead of silently computing WHT on a guessed type.
+    """
+    t = text.lower()
+    for word, kind in _WHT_TYPES.items():
+        if word in t:
+            return kind
+    return ""
+
+
+def _params_withholding(text: str) -> dict:
+    return {
+        "amount": _extract_amount(text),
+        "withholding_type": _extract_withholding_type(text),
+        "transaction_date": _extract_date(text) or date.today(),
+    }
+
+
+def _params_amt(text: str) -> dict:
+    bt = "individual" if "individual" in text.lower() else (
+        "aop" if "aop" in text.lower() else "company"
+    )
+    return {
+        "annual_turnover": _extract_amount(text),
+        "fiscal_year": _extract_year(text) or date.today().year,
+        "business_type": bt,
+    }
+
+
+def _params_eobi(text: str) -> dict:
+    cat = None
+    t = text.lower()
+    for word in ("worker", "staff", "executive"):
+        if word in t:
+            cat = word
+            break
+    return {
+        "gross_salary": _extract_amount(text),
+        "period": _extract_period(text),
+        "fiscal_year": _extract_year(text) or date.today().year,
+        "employee_category": cat,
+    }
+
+
+def _params_filing_sales(text: str) -> dict:
+    """Sales-tax filing route: period+year from the message, always confirm=True.
+
+    The filing tool refuses to run without confirm=True, so the router injects
+    it - the approval gate is the human consent, not a hidden flag.
+    """
+    p = _params_year_period(text)
+    p["confirm"] = True
+    return p
+
+
+def _params_filing_income(text: str) -> dict:
+    p = _params_year(text)
+    p["confirm"] = True
+    return p
+
+
 def _params_aging(text: str) -> dict:
     return {"as_of_date": _extract_date(text) or date.today()}
 
@@ -905,14 +978,14 @@ ROUTES: list[tuple[list[str], str, callable]] = [
     (["related party", "related-party", "insider"], "flag_related_party_transaction", _params_record_transaction),
 
     # --- Tax ---
-    (["withholding", "wht", "withholding tax"], "calculate_withholding_tax", lambda t: {"amount": _extract_amount(t) or "1000", "withholding_type": "salary"}),
+    (["withholding", "wht", "withholding tax"], "calculate_withholding_tax", _params_withholding),
     (["tax planning", "tax advice", "reduce tax", "tax liability"], "get_tax_planning_advice", _params_tax_planning),
-    (["advance tax", "minimum tax", "super tax", "minimum/super"], "calculate_advance_minimum_tax", lambda t: {"annual_turnover": _extract_amount(t) or "1000000", "fiscal_year": _extract_year(t) or date.today().year}),
-    (["eobi", "old age benefit"], "calculate_eobi_deductions", lambda t: {"gross_salary": _extract_amount(t) or "100000", "period": _extract_period(t) or 1, "fiscal_year": _extract_year(t) or date.today().year}),
+    (["advance tax", "minimum tax", "super tax", "minimum/super"], "calculate_advance_minimum_tax", _params_amt),
+    (["eobi", "old age benefit"], "calculate_eobi_deductions", _params_eobi),
     (["sales tax input", "sales tax output", "input tax", "output tax", "adjust sales tax"], "adjust_sales_tax_input_output", _params_year_period),
     (["exemption", "zero rating", "zero-rated", "tax exempt"], "flag_tax_exemption_zero_rating", _params_year),
-    (["sales tax filing", "file sales tax", "sales tax return"], "prepare_sales_tax_filing", _params_year_period),
-    (["income tax filing", "file income tax", "income tax return"], "prepare_income_tax_filing", _params_year),
+    (["sales tax filing", "file sales tax", "sales tax return"], "prepare_sales_tax_filing", _params_filing_sales),
+    (["income tax filing", "file income tax", "income tax return"], "prepare_income_tax_filing", _params_filing_income),
 
     # --- Audit ---
     (["anomaly", "fraud detection", "detect fraud", "suspicious", "anomaly detection", "check anomaly"], "detect_anomaly_transactions", _params_dates),

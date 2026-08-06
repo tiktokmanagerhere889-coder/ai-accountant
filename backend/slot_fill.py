@@ -32,6 +32,11 @@ from intent_router import (
     _params_lcbg,
     _params_bank_charges,
     _params_record_bank_transaction,
+    _params_withholding,
+    _params_amt,
+    _params_eobi,
+    _params_year_period,
+    _params_filing_sales,
 )
 
 # Tools that write to the DB and benefit from slot-filling when fields are missing.
@@ -50,6 +55,13 @@ WRITE_TOOLS = {
     "track_cheque_clearing",
     "track_lc_bank_guarantee",
     "reconcile_bank_charges",
+    # Agent 5 (Tax): compute tools need amount/turnover/salary; approval tools
+    # need period/year. Never queue or execute with invented defaults.
+    "calculate_withholding_tax",
+    "calculate_advance_minimum_tax",
+    "calculate_eobi_deductions",
+    "adjust_sales_tax_input_output",
+    "prepare_sales_tax_filing",
 }
 
 # In-memory pending intents: conversation_id -> PendingIntent dict
@@ -65,6 +77,14 @@ _AGENT3_PARSE_TOOLS = {
     "track_cheque_clearing": _params_cheque,
     "track_lc_bank_guarantee": _params_lcbg,
     "reconcile_bank_charges": _params_bank_charges,
+}
+
+_TAX_PARSE_TOOLS = {
+    "calculate_withholding_tax": _params_withholding,
+    "calculate_advance_minimum_tax": _params_amt,
+    "calculate_eobi_deductions": _params_eobi,
+    "adjust_sales_tax_input_output": _params_year_period,
+    "prepare_sales_tax_filing": _params_filing_sales,
 }
 
 
@@ -274,6 +294,48 @@ def describe_missing(tool_name: str, params: dict) -> Optional[str]:
             )
         return None
 
+    # --- Agent 5 (Tax) ---
+    if tool_name == "calculate_withholding_tax":
+        missing: list[str] = []
+        if not params.get("amount"):
+            missing.append("the payment amount")
+        if not params.get("withholding_type"):
+            missing.append("the withholding type (salary, contract, supply, service, rent, commission)")
+        if missing:
+            return (
+                "To calculate withholding tax I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + "\n(e.g. calculate withholding tax on 50000 for services)"
+            )
+        return None
+    if tool_name == "calculate_advance_minimum_tax":
+        if not params.get("annual_turnover"):
+            return (
+                "To calculate advance minimum tax I need the annual turnover. "
+                "\n(e.g. calculate minimum tax on 10000000 turnover as a company)"
+            )
+        return None
+    if tool_name == "calculate_eobi_deductions":
+        missing: list[str] = []
+        if not params.get("gross_salary"):
+            missing.append("the gross salary amount")
+        if not params.get("period"):
+            missing.append("the period (1-12 or month name)")
+        if missing:
+            return (
+                "To calculate EOBI deductions I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + "\n(e.g. calculate EOBI on gross salary 45000 for period 7)"
+            )
+        return None
+    if tool_name in ("adjust_sales_tax_input_output", "prepare_sales_tax_filing"):
+        if not params.get("period"):
+            return (
+                f"For {tool_name.replace('_', ' ')} I need the period (month number or name). "
+                "\n(e.g. adjust sales tax for July 2026)"
+            )
+        return None
+
     # Other write tools: generic clarifying question.
     return (
         "I need a bit more detail to complete that. Can you give me the amount, "
@@ -333,6 +395,16 @@ def merge_answer(pending: dict, answer: str) -> dict:
     if tool_name == "record_bank_transaction":
         merged = f"{description} {answer.strip()}".strip() if answer else description
         parsed = _params_record_bank_transaction(merged)
+        params = {**params, **parsed}
+        params["description"] = merged
+        return params
+    if tool_name in _TAX_PARSE_TOOLS:
+        # Re-parse the merged message through the tax tool's own parser so the
+        # answer fills the missing fields (e.g. '50000 for services' fills both
+        # amount and withholding_type).
+        merged = f"{description} {answer.strip()}".strip() if answer else description
+        parser = _TAX_PARSE_TOOLS[tool_name]
+        parsed = parser(merged)
         params = {**params, **parsed}
         params["description"] = merged
         return params
@@ -422,4 +494,12 @@ def is_complete(tool_name: str, params: dict) -> bool:
             and params.get("from_date")
             and params.get("to_date")
         )
+    if tool_name == "calculate_withholding_tax":
+        return bool(params.get("amount") and params.get("withholding_type"))
+    if tool_name == "calculate_advance_minimum_tax":
+        return bool(params.get("annual_turnover"))
+    if tool_name == "calculate_eobi_deductions":
+        return bool(params.get("gross_salary") and params.get("period"))
+    if tool_name in ("adjust_sales_tax_input_output", "prepare_sales_tax_filing"):
+        return bool(params.get("period") and params.get("fiscal_year"))
     return True

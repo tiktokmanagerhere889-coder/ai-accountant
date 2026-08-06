@@ -338,6 +338,47 @@ def _fmt_filing(result: dict) -> str:
     return f"{result.get('message') or result.get('summary') or 'Filing prepared.'} (filing ID {result.get('filing_id') or result.get('report_id')})"
 
 
+def _fmt_amt(result: dict) -> str:
+    """Plain-English advance minimum tax summary."""
+    rate = result.get("applicable_rate")
+    rate_s = f"{rate}%" if rate is not None else "the configured rate"
+    return (
+        f"Advance minimum tax on {_money(result.get('annual_turnover'))} turnover "
+        f"for FY {result.get('fiscal_year')}: {rate_s}, minimum tax {_money(result.get('minimum_tax'))}. "
+        f"(rate basis: {result.get('basis')})"
+    )
+
+
+def _fmt_sales_tax_adjust(result: dict) -> str:
+    """Plain-English sales-tax input/output adjustment summary."""
+    refund = result.get("refund_amount")
+    refund_s = f", refund {_money(refund)}" if refund else ""
+    return (
+        f"Sales tax adjustment for period {result.get('period')} / FY {result.get('fiscal_year')}: "
+        f"output tax {_money(result.get('calculated_output_tax'))}, "
+        f"input tax {_money(result.get('calculated_input_tax'))}, "
+        f"net payable {_money(result.get('net_tax_payable'))}{refund_s}."
+    )
+
+
+def _fmt_flag_exemption(result: dict) -> str:
+    """Plain-English tax-exemption/zero-rating flag summary."""
+    items = result.get("flagged_entries") or []
+    if not items:
+        return result.get("recommendation") or "No entries flagged for tax exemption or zero-rating."
+    lines = []
+    for f in items[:15]:
+        lines.append(
+            f"  - {f.get('entry_id')} {f.get('description')}: {_money(f.get('amount'))} "
+            f"[{f.get('exemption_type')}, {f.get('confidence')} confidence]"
+        )
+    more = f"\n  ... and {len(items) - 15} more" if len(items) > 15 else ""
+    return (
+        f"Tax exemption/zero-rating flags: {_money(result.get('total_flagged_amount'))} across "
+        f"{len(items)} entries.\n" + "\n".join(lines) + more
+    )
+
+
 def _fmt_generic_report(result: dict) -> str:
     return f"Report generated: {result.get('report_title')} - {result.get('summary', '')}"
 
@@ -359,6 +400,9 @@ _FORMATTERS = {
     "analyze_budget_variance": _fmt_budget_variance,
     "detect_anomaly_transactions": _fmt_anomaly,
     "calculate_withholding_tax": _fmt_withholding,
+    "calculate_advance_minimum_tax": _fmt_amt,
+    "adjust_sales_tax_input_output": _fmt_sales_tax_adjust,
+    "flag_tax_exemption_zero_rating": _fmt_flag_exemption,
     "calculate_eobi_deductions": _fmt_eobi,
     "transfer_retained_earnings": _fmt_retained,
     "convert_foreign_currency": _fmt_currency,
