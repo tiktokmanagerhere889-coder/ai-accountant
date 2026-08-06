@@ -103,11 +103,18 @@ def cash_filter_clause(account_column, db: Session, prefixes: Optional[list[str]
 
 
 def salary_filter_clause(account_column, db: Session, prefixes: Optional[list[str]] = None):
-    """Match salary/wages accounts from the chart, else name fallback."""
+    """Match salary/wages accounts from the chart, else name fallback.
+
+    chart_name_keywords narrows the chart match to accounts actually named
+    salary/wage, so the prefix-fallback branch does NOT fire — otherwise any
+    5/6/7/8-prefix expense (rent, utilities, travel...) leaks into payroll
+    reconciliation. Mirrors cash_filter_clause / ar_filter_clause.
+    """
     return _classify_filter_clause(
         account_column, db,
         account_types=["expense"],
         name_keywords=["salary", "wage"],
+        chart_name_keywords=["salary", "wage"],
     )
 
 

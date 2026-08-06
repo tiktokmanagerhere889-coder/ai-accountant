@@ -99,7 +99,12 @@ def _fmt_cash_flow(result: dict) -> str:
 
 
 def _fmt_aging(result: dict) -> str:
-    return f"Aging report as of {result.get('as_of_date')}: total outstanding {_money(result.get('total_outstanding'))}."
+    # GetAPAgingReportOutput uses grand_total; GetARAgingReportOutput uses
+    # total_outstanding. Read whichever the tool returned.
+    total = result.get("total_outstanding")
+    if total is None:
+        total = result.get("grand_total", 0)
+    return f"Aging report as of {result.get('as_of_date')}: total outstanding {_money(total)}."
 
 
 def _fmt_general_ledger(result: dict) -> str:
