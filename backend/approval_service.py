@@ -61,11 +61,24 @@ def _post_accrual_to_journal(db, result: dict, params: dict) -> None:
         JournalEntry.entry_id.like(prefix + "%")
     ).all()
     max_seq = 0
-    for eid in existing:
-        suffix = eid[0][len(prefix):] if isinstance(eid, tuple) else str(eid)[len(prefix):]
+    for row in existing:
+        # .all() on a column query returns SQLAlchemy Row objects (2.x), which
+        # are NOT tuple subclasses — row[0] reads the id, str(row) does not.
+        eid = row[0] if not isinstance(row, str) else row
+        suffix = str(eid)[len(prefix):]
         if suffix.isdigit():
             max_seq = max(max_seq, int(suffix))
+    # Collision-proof: the like-prefix scan can lag a concurrent writer (or a
+    # stale max_seq), so bump until the generated id is actually free.
     entry_id = "{}{:03d}".format(prefix, max_seq + 1)
+    while (
+        db.query(JournalEntry.entry_id)
+        .filter(JournalEntry.entry_id == entry_id)
+        .first()
+        is not None
+    ):
+        max_seq += 1
+        entry_id = "{}{:03d}".format(prefix, max_seq + 1)
 
     entry = JournalEntry(
         entry_id=entry_id,
