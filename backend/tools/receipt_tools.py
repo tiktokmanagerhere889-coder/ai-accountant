@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import base64
+import json
 import os
-import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
@@ -43,125 +43,85 @@ def _validate_image_format(image_data: str, image_filename: str) -> None:
         raise ValueError("Unsupported image format or size")
 
 
-def _get_document_ai_client():
-    """Create and return a Document AI client.
-
-    Supports both:
-      1. GOOGLE_APPLICATION_CREDENTIALS pointing at a local service-account JSON
-         (dev), and
-      2. Inline JSON in GOOGLE_APPLICATION_CREDENTIALS_JSON (Railway secret, so
-         no credential file needs to live on the box).
-    """
-    import google.auth.exceptions
-    from google.oauth2 import service_account
-    from google.cloud import documentai
-
-    creds_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
-    if creds_json:
-        creds = service_account.Credentials.from_service_account_info(
-            json.loads(creds_json),
-            scopes=["https://www.googleapis.com/auth/cloud-platform"],
-        )
-        return documentai.DocumentProcessorServiceClient(credentials=creds)
-
-    credentials_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-    if credentials_path and os.path.exists(credentials_path):
-        return documentai.DocumentProcessorServiceClient()
-
-    raise ValueError(
-        "No Document AI credentials configured. Set either GOOGLE_APPLICATION_CREDENTIALS "
-        "(path to a service-account JSON) or GOOGLE_APPLICATION_CREDENTIALS_JSON (the JSON body)."
-    )
-
-
-def _get_processor_name() -> str:
-    """Get the full processor resource name from environment variables."""
-    project_id = os.environ.get("GOOGLE_CLOUD_PROJECT_ID")
-    location = os.environ.get("GOOGLE_DOCUMENT_AI_LOCATION", "us")
-    processor_id = os.environ.get("GOOGLE_DOCUMENT_AI_PROCESSOR_ID")
-
-    if not all([project_id, location, processor_id]):
-        raise ValueError(
-            "Missing Document AI configuration. Set GOOGLE_CLOUD_PROJECT_ID, "
-            "GOOGLE_DOCUMENT_AI_LOCATION, and GOOGLE_DOCUMENT_AI_PROCESSOR_ID."
-        )
-
-    return f"projects/{project_id}/locations/{location}/processors/{processor_id}"
+_GEMINI_RECEIPT_PROMPT = (
+    "You are a receipt parser. Look at the receipt image and return ONLY a JSON "
+    'object with exactly these keys: "vendor_name" (string or null), "total_amount" '
+    '(number or null), "date" (string in YYYY-MM-DD format or null), "currency" '
+    '(string or null). No markdown, no code fences, no extra text. If a field '
+    "cannot be determined, use null. Example: "
+    '{"vendor_name":"Al Madina Store","total_amount":481.40,"date":"2026-08-05","currency":"PKR"}'
+)
 
 
 def _extract_receipt_data(image_data: str, image_filename: str) -> dict:
     """
-    Process a receipt image through Google Document AI Receipt Parser.
+    Extract receipt fields using Gemini vision (OpenAI-compatible endpoint).
+
+    Replaces Google Document AI, which required a Cloud project with billing
+    enabled (403 without it). Gemini free tier does not need billing and shares
+    the already-configured GEMINI_API_KEY + gemini-flash-lite-latest model.
 
     Returns dict with: vendor_name, total_amount, date, confidence
     """
-    # Decode base64 to raw bytes
-    image_bytes = base64.b64decode(image_data)
+    from openai import OpenAI
+    from agent_defs.model_providers import get_api_key
 
-    # Determine MIME type from filename
-    ext = image_filename.rsplit(".", 1)[-1].lower() if "." in image_filename else ""
-    mime_type = {
-        "png": "image/png",
-        "jpg": "image/jpeg",
-        "jpeg": "image/jpeg",
-    }.get(ext, "image/jpeg")
+    api_key = get_api_key("GEMINI_API_KEY")
+    if not api_key:
+        raise ValueError("GEMINI_API_KEY is not set. Configure it to process receipts.")
 
-    # Get Document AI client
-    client = _get_document_ai_client()
+    mime = "image/png" if image_filename.lower().endswith(".png") else "image/jpeg"
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://generativelanguage.googleapis.com/v1beta/openai/",
+        timeout=45.0,
+    )
+    resp = client.chat.completions.create(
+        model="gemini-flash-lite-latest",
+        messages=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": _GEMINI_RECEIPT_PROMPT},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:{mime};base64,{image_data}",
+                        },
+                    },
+                ],
+            },
+        ],
+        max_tokens=200,
+    )
+    text = (resp.choices[0].message.content or "").strip()
+    cleaned = text.replace("```json", "").replace("```", "").strip()
+    try:
+        data = json.loads(cleaned)
+    except Exception as e:
+        raise ValueError(f"Gemini did not return valid JSON: {e}")
 
-    from google.cloud import documentai_v1
-    raw_document = documentai_v1.RawDocument(content=image_bytes, mime_type=mime_type)
-
-    request = documentai_v1.ProcessRequest(name=_get_processor_name(), raw_document=raw_document)
-
-    # Process the document
-    result = client.process_document(request=request)
-    document = result.document
-
-    # Parse the extracted entities
-    vendor_name = None
-    total_amount = None
+    vendor_name = data.get("vendor_name")
+    total_amount = data.get("total_amount")
+    raw_date = data.get("date")
     receipt_date = None
-    confidence = 0.0
-
-    # Parse entities from the receipt parser
-    for entity in document.entities:
-        entity_type = entity.type_.lower() if entity.type_ else ""
-        mention_text = entity.mention_text.strip() if entity.mention_text else ""
-        confidence = max(confidence, entity.confidence if entity.confidence else 0.0)
-
-        if entity_type in ("supplier_name", "vendor_name", "merchant_name", "receiver_name"):
-            vendor_name = mention_text
-        elif entity_type in ("total_amount", "net_amount", "amount", "total"):
-            # Parse amount, handle currency symbols
-            amount_str = re.sub(r"[^\d.,]", "", mention_text)
-            amount_str = amount_str.replace(",", "")
+    if raw_date:
+        raw_date = str(raw_date)
+        for fmt in ("%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y", "%Y/%m/%d", "%d.%m.%Y"):
             try:
-                total_amount = Decimal(amount_str) if amount_str else None
+                receipt_date = datetime.strptime(raw_date, fmt).date()
+                break
             except Exception:
-                total_amount = None
-        elif entity_type in ("date", "receipt_date", "transaction_date"):
-            # Try to parse date
-            try:
-                receipt_date = datetime.strptime(mention_text, "%Y-%m-%d").date()
-            except Exception:
-                # Try other common formats
-                for fmt in ("%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y", "%Y/%m/%d", "%d.%m.%Y"):
-                    try:
-                        receipt_date = datetime.strptime(mention_text, fmt).date()
-                        break
-                    except Exception:
-                        continue
+                continue
 
-    # Default confidence if none found
-    if confidence == 0.0:
-        confidence = 0.85
+    if total_amount is not None:
+        total_amount = Decimal(str(total_amount))
 
     return {
         "vendor_name": vendor_name,
         "total_amount": total_amount,
         "date": receipt_date,
-        "confidence": Decimal(str(confidence)),
+        "confidence": Decimal("0.85"),
     }
 
 
@@ -178,7 +138,7 @@ def _generate_extraction_id(db: Session) -> str:
 def process_receipt_image(input: ProcessReceiptImageInput, db: Session) -> ProcessReceiptImageOutput:
     """Process a receipt image and return structured extraction results.
 
-    Validates the image format, extracts data via Google Document AI,
+    Validates the image format, extracts data via Gemini vision,
     validates the extracted amount, determines the extraction status based on confidence,
     and persists the result to the receipt_extractions table.
 
@@ -195,11 +155,11 @@ def process_receipt_image(input: ProcessReceiptImageInput, db: Session) -> Proce
     # Step 1: Validate image format and size
     _validate_image_format(input.image_data, input.image_filename)
 
-    # Step 2: Extract receipt data via Google Document AI
+    # Step 2: Extract receipt data via Gemini vision
     try:
         extraction = _extract_receipt_data(input.image_data, input.image_filename)
     except Exception as e:
-        raise ValueError(f"Document AI extraction failed: {str(e)}")
+        raise ValueError(f"Receipt extraction failed: {str(e)}")
 
     # Step 3: Determine confidence first
     confidence = extraction["confidence"]

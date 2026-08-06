@@ -400,7 +400,7 @@ async def _chat_impl(request: ChatRequest) -> ChatResponse:
                 "process_receipt_image", receipt_params, get_session(), submitted_by="chat-image"
             )
             return ChatResponse(
-                response=f"[Queued for approval: {entry.approval_id}] Receipt '{request.image.filename}' uploaded. It will be extracted with Google Document AI and must be approved before posting.",
+                response=f"[Queued for approval: {entry.approval_id}] Receipt '{request.image.filename}' uploaded. It will be extracted with Gemini vision and must be approved before posting.",
                 conversation_id=conv_id,
                 tool_calls=[ToolCallInfo(
                     toolName="process_receipt_image",
