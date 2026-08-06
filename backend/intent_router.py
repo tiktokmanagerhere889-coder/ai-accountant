@@ -496,14 +496,331 @@ def _params_manage_contact(text: str) -> dict:
     return out
 
 
+# ---------------------------------------------------------------------------
+# Reconciliation & Banking (Agent 3) natural-language parsing
+# ---------------------------------------------------------------------------
+
+_DEFAULT_BANK_ACCOUNT = "1100-Bank"
+
+_MONTH_NAMES = {
+    "january": 1, "february": 2, "march": 3, "april": 4, "may": 5, "june": 6,
+    "july": 7, "august": 8, "september": 9, "october": 10, "november": 11,
+    "december": 12, "jan": 1, "feb": 2, "mar": 3, "apr": 4, "jun": 6, "jul": 7,
+    "aug": 8, "sep": 9, "oct": 10, "nov": 11, "dec": 12,
+}
+
+
+def _extract_period_dates(text: str) -> Optional[tuple[date, date]]:
+    """Parse '<Month> [<YYYY>]' (e.g. "for July" or "for July 2026") into
+    (first_day, last_day). A bare month uses the current year."""
+    t = text.lower()
+    for name, mo in _MONTH_NAMES.items():
+        m = re.search(r"\b" + re.escape(name) + r"\s+(\d{4})\b", t)
+        if m:
+            y = int(m.group(1))
+            first = date(y, mo, 1)
+            last_day = (date(y + 1, 1, 1) if mo == 12 else date(y, mo + 1, 1)) - timedelta(days=1)
+            return first, last_day
+    # Bare month name (no year) -> current year.
+    for name, mo in _MONTH_NAMES.items():
+        if re.search(r"\b" + re.escape(name) + r"\b", t):
+            y = date.today().year
+            first = date(y, mo, 1)
+            last_day = (date(y + 1, 1, 1) if mo == 12 else date(y, mo + 1, 1)) - timedelta(days=1)
+            return first, last_day
+    return None
+
+
+def _params_period(text: str) -> dict:
+    """from_date/to_date honoring 'for July 2026', explicit dates, else current month."""
+    pd = _extract_period_dates(text)
+    if pd:
+        return {"from_date": pd[0], "to_date": pd[1]}
+    from_d, to_d = _extract_date_pair(text)
+    today = date.today()
+    return {
+        "from_date": from_d if from_d else today.replace(day=1),
+        "to_date": to_d if to_d else today,
+    }
+
+
+def _extract_bank_account(text: str) -> str:
+    """Resolve a bank reference to an account_id, defaulting to 1100-Bank.
+
+    Stops the account code at a trailing qualifier ("for", "in", "of", "on",
+    a month name, or end of text) so "1100-Bank for July" -> "1100-Bank".
+    """
+    m = re.search(
+        r"(?:BA-\d+|1\d{3}-[A-Za-z ]+?(?=\s+(?:for|in|of|on|dated|month|statement|account)\b|$))",
+        text,
+        re.I,
+    )
+    if m:
+        return m.group(0).strip().rstrip(" -")
+    return _DEFAULT_BANK_ACCOUNT
+
+
+def _extract_contact_id(text: str) -> Optional[str]:
+    m = re.search(r"\b(CNT-\d+)\b", text, re.I)
+    return m.group(1).upper() if m else None
+
+
+def _extract_contact_name(text: str, kind: str) -> Optional[str]:
+    """Capture the name after 'from'/'for'/'statement from', e.g. AL-MADINA GENERAL STORE."""
+    m = re.search(
+        r"(?:statement\s+from|from|for)\s+([A-Za-z][A-Za-z0-9 .&'\-]{2,79}?)"
+        r"(?:\s+(?:for|in|statement|from|with|dated|line|using|covering)\b|,|$)",
+        text,
+        re.I,
+    )
+    if not m:
+        return None
+    return m.group(1).strip().rstrip(".,").strip()
+
+
+def _resolve_contact_id(kind: str, name: str) -> Optional[str]:
+    """Resolve a contact name to a contact_id via the DB (best-effort)."""
+    try:
+        from db.database import get_session
+        from db.models import Contact
+        db = get_session()
+        try:
+            row = db.query(Contact).filter(
+                Contact.contact_type == kind,
+                Contact.contact_name.ilike("%{}%".format(name)),
+            ).first()
+            return row.contact_id if row else None
+        finally:
+            db.close()
+    except Exception:
+        return None
+
+
+def _parse_statement_lines(text: str, default_date: date) -> list[dict]:
+    """Parse 'line INV-200 50000' / 'INV-200 50000 dated 2026-07-15' lines."""
+    lines: list[dict] = []
+    for m in re.finditer(
+        r"\b(INV-\d+|CN-\d+|SI-\d+|PO-\d+|[A-Z]{2,}-\d+)\s+(\d[\d,]*(?:\.\d{1,2})?)",
+        text,
+        re.I,
+    ):
+        d = _extract_date(text[m.end():m.end() + 30]) or default_date
+        lines.append({
+            "reference": m.group(1),
+            "date": d,
+            "amount": m.group(2).replace(",", ""),
+        })
+    return lines
+
+
+def _params_bank_reconciliation(text: str) -> dict:
+    base = _params_period(text)
+    today = date.today()
+    return {
+        "bank_account_id": _extract_bank_account(text),
+        "statement_date": _extract_date(text) or today,
+        "from_date": base["from_date"],
+        "to_date": base["to_date"],
+    }
+
+
+def _params_accrual(text: str) -> dict:
+    t = text.lower()
+    if "salary" in t or "salaries" in t or "wage" in t:
+        acc_type = "salary"
+    elif "utilit" in t or "electric" in t or "gas" in t or "water" in t:
+        acc_type = "utilities"
+    elif "rent" in t:
+        acc_type = "rent"
+    else:
+        acc_type = "other"
+    pd = _extract_period_dates(text)
+    period_date = (pd[1] if pd else _extract_date(text)) or date.today()
+    out = {
+        "accrual_type": acc_type,
+        "description": text[:500],
+        "period_date": period_date,
+    }
+    amt = _extract_amount(text)
+    if amt:
+        out["amount"] = amt
+    pm = re.search(r"partial\s+(\d{1,3})\s+days?", text, re.I)
+    if pm:
+        out["partial_period_days"] = int(pm.group(1))
+    return out
+
+
+def _params_vendor_statement(text: str) -> dict:
+    return _params_statement(text, "vendor")
+
+
+def _params_customer_statement(text: str) -> dict:
+    return _params_statement(text, "customer")
+
+
+def _params_statement(text: str, kind: str) -> dict:
+    base = _params_period(text)
+    stmt_date = _extract_date(text) or date.today()
+    id_field = "{}_contact_id".format(kind)
+    name_field = "{}_name".format(kind)
+    out = {
+        "statement_date": stmt_date,
+        "from_date": base["from_date"],
+        "to_date": base["to_date"],
+        "statement_lines": _parse_statement_lines(text, stmt_date),
+    }
+    cid = _extract_contact_id(text)
+    if cid:
+        out[id_field] = cid
+    else:
+        name = _extract_contact_name(text, kind)
+        if name:
+            resolved = _resolve_contact_id(kind, name)
+            if resolved:
+                out[id_field] = resolved
+            else:
+                out[name_field] = name
+    return out
+
+
+def _params_cheque(text: str) -> dict:
+    t = text.lower()
+    if "bounce" in t:
+        action = "bounce"
+    elif "clear" in t:
+        action = "clear"
+    elif "reconcil" in t:
+        action = "reconcile"
+    elif "status" in t or "track" in t or "check" in t:
+        action = "status"
+    else:
+        action = "issue"
+
+    out = {"action": action}
+    # Strip any cheque id so its digits don't become the amount.
+    amt_text = re.sub(r"\bCHQ-\d+\b", " ", text, flags=re.I)
+    m = re.search(r"\b(CHQ-\d+)\b", text, re.I)
+    if m:
+        out["cheque_id"] = m.group(1).upper()
+    else:
+        m = re.search(r"cheque\s+(?:number\s+|no\.?\s*)?(\d{4,})", text, re.I)
+        if m:
+            out["cheque_id"] = "CHQ-" + m.group(1)
+            # Drop the cheque-number phrase so its digits don't read as the amount.
+            amt_text = text.replace(m.group(0), " ")
+    amt = _extract_amount(amt_text)
+    if amt:
+        out["amount"] = amt
+    m = re.search(r"\b(?:to|for)\s+([A-Za-z][A-Za-z0-9 .&'\-]{2,79})", text)
+    if m:
+        out["vendor_name"] = m.group(1).strip().rstrip(".,")
+    d = _extract_date(text)
+    if d:
+        out["issue_date"] = d
+    return out
+
+
+def _params_lcbg(text: str) -> dict:
+    t = text.lower()
+    if "amend" in t:
+        action = "amend"
+    # "expiring" (the expiry date clause on an issue) must NOT become "expire".
+    elif re.search(r"\bexpire[sd]?\b", t) or re.search(r"\bexpired\b", t):
+        action = "expire"
+    elif "close" in t:
+        action = "close"
+    elif "status" in t or "track" in t or "check" in t:
+        action = "status"
+    else:
+        action = "issue"
+
+    out = {"action": action}
+    m = re.search(r"\b(LC-\d+[-\d]*|BG-\d+[-\d]*)\b", text, re.I)
+    if m:
+        out["lc_id"] = m.group(1).upper()
+    if action == "issue":
+        if "bank guarantee" in t or "guarantee" in t or re.search(r"\bbg\b", t):
+            out["type"] = "BG"
+        else:
+            out["type"] = "LC"
+    amt = _extract_amount(re.sub(r"\b(?:LC|BG)-\d+[-\d]*\b", " ", text, flags=re.I))
+    if amt:
+        out["amount"] = amt
+    m = re.search(r"\bto\s+([A-Za-z][A-Za-z0-9 .&'\-]{2,79})", text)
+    if m:
+        out["beneficiary"] = m.group(1).strip().rstrip(".,")
+    exp_m = re.search(
+        r"expir(?:y|ing|es)\s*(?:date\s*[:=]?\s*)?([0-9]{4}[-/][0-9]{1,2}[-/][0-9]{1,2})",
+        text, re.I,
+    )
+    issue_txt = text
+    if exp_m:
+        out["expiry_date"] = _extract_date(exp_m.group(1))
+        issue_txt = text[:exp_m.start()] + text[exp_m.end():]
+    d = _extract_date(issue_txt)
+    if d:
+        out["issue_date"] = d
+    return out
+
+
+def _params_bank_charges(text: str) -> dict:
+    base = _params_period(text)
+    t = text.lower()
+    ctype = None
+    for kw in ("service", "maintenance", "transfer", "commission", "fee", "other"):
+        if kw in t:
+            ctype = kw
+            break
+    out = {
+        "bank_account_id": _extract_bank_account(text),
+        "from_date": base["from_date"],
+        "to_date": base["to_date"],
+    }
+    if ctype:
+        out["charge_type"] = ctype
+    return out
+
+
+_BANK_DESC_NOISE = re.compile(
+    r"\b(record|add|bank|transaction|credit|debit|deposit|withdrawal|withdraw|today|yesterday|on|for|from|to|the|a|an|of|status|cleared|pending|this|and|with)\b",
+    re.I,
+)
+
+
+def _clean_desc(text: str) -> str:
+    d = _BANK_DESC_NOISE.sub(" ", text)
+    d = re.sub(r"\d[\d,]*(?:\.\d{1,2})?", " ", d)
+    d = re.sub(r"\s+", " ", d).strip().strip(",-")
+    return d[:200]
+
+
+def _params_record_bank_transaction(text: str) -> dict:
+    t = text.lower()
+    if "credit" in t or "deposit" in t or "incoming" in t or "received" in t:
+        btype = "credit"
+    else:
+        btype = "debit"
+    out = {
+        "date": _extract_date(text) or date.today(),
+        "description": _clean_desc(text) or text[:200],
+        "type": btype,
+        "status": "cleared",
+        "account_id": _extract_bank_account(text),
+    }
+    amt = _extract_amount(text)
+    if amt:
+        out["amount"] = amt
+    return out
+
+
 # Routes: each is (keywords: list, tool_name: str, extractor: callable)
 ROUTES: list[tuple[list[str], str, callable]] = [
     # --- Daily Entry ---
     (["cash position", "cash balance", "cash position", "how much cash", "current balance", "balance check"], "check_cash_position", _params_cash_position),
     (["record transaction", "record expense", "record income", "record an expense", "record an income", "record a transaction", "record a payment", "add transaction", "add a transaction", "add an expense", "add an income", "paid ", "bought ", "purchase ", "spent ", "paid for "], "record_transaction_nl", _params_record_transaction),
     (["receipt", "scan receipt", "ocr", "process receipt"], "process_receipt_image", _params_none),
+    (["record bank", "bank register", "add bank transaction"], "record_bank_transaction", _params_record_bank_transaction),
     (["bank transaction", "bank statement", "check bank", "list bank"], "check_bank_transactions", _params_dates),
-    (["record bank", "bank register", "add bank transaction"], "record_bank_transaction", _params_record_transaction),
     (["petty cash"], "manage_petty_cash", _params_petty_cash),
 
     # --- Ledger ---
@@ -517,13 +834,13 @@ ROUTES: list[tuple[list[str], str, callable]] = [
     (["add vendor", "new vendor", "vendor master", "add customer", "new customer", "customer master", "manage contact", "add contact", "add supplier", "find vendor", "search vendor", "search customer", "update vendor", "update customer", "delete vendor", "delete customer"], "manage_contact", _params_manage_contact),
 
     # --- Reconciliation ---
-    (["bank reconciliation", "reconcile bank", "reconcile statement"], "run_bank_reconciliation", _params_dates),
-    (["accrual", "accrual entry", "post accrual"], "post_accrual_entry", _params_record_transaction),
-    (["vendor statement", "reconcile vendor"], "reconcile_vendor_statement", _params_dates),
-    (["customer statement", "reconcile customer"], "reconcile_customer_statement", _params_dates),
-    (["cheque", "cheque clearing", "check clearing", "cheque track"], "track_cheque_clearing", _params_none),
-    (["lc", "letter of credit", "bank guarantee", "guarantee track"], "track_lc_bank_guarantee", _params_none),
-    (["bank charges", "reconcile charges", "bank charge"], "reconcile_bank_charges", _params_dates),
+    (["cheque", "cheque clearing", "check clearing", "cheque track", "issue cheque", "clear cheque", "bounce cheque"], "track_cheque_clearing", _params_cheque),
+    (["lc", "letter of credit", "bank guarantee", "guarantee track", "issue lc", "issue bg"], "track_lc_bank_guarantee", _params_lcbg),
+    (["bank charges", "reconcile charges", "bank charge", "bank fees", "service charges", "reconcile service"], "reconcile_bank_charges", _params_bank_charges),
+    (["vendor statement", "reconcile vendor", "vendor reconciliation", "reconcile vendor statement"], "reconcile_vendor_statement", _params_vendor_statement),
+    (["customer statement", "reconcile customer", "customer reconciliation", "reconcile customer statement"], "reconcile_customer_statement", _params_customer_statement),
+    (["accrual", "accrual entry", "post accrual"], "post_accrual_entry", _params_accrual),
+    (["bank reconciliation", "reconcile bank", "reconcile statement", "bank statement match"], "run_bank_reconciliation", _params_bank_reconciliation),
 
     # --- Month-End ---
     (["unpaid bill", "unpaid", "overdue bill", "bills review"], "review_unpaid_bills", _params_aging),
@@ -612,6 +929,10 @@ def route_tool(message: str) -> Optional[tuple[str, dict]]:
     # categorizer instead of being treated as an ordinary expense.
     if _is_fixed_asset_intent(msg):
         return "categorize_fixed_asset", _params_fixed_asset(message)
+    # "reconcile bank statement" must reach reconciliation, not the Daily Entry
+    # check_bank_transactions route (its "bank statement" keyword matches first).
+    if "reconcile" in msg and "bank statement" in msg:
+        return "run_bank_reconciliation", _params_bank_reconciliation(message)
     has_unpaid = "unpaid" in msg
     for keywords, tool_name, extractor in ROUTES:
         for kw in keywords:

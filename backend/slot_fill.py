@@ -19,7 +19,19 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from intent_router import _extract_amount, parse_petty_cash, _params_journal_entry, _params_manage_contact
+from intent_router import (
+    _extract_amount,
+    parse_petty_cash,
+    _params_journal_entry,
+    _params_manage_contact,
+    _params_bank_reconciliation,
+    _params_accrual,
+    _params_vendor_statement,
+    _params_customer_statement,
+    _params_cheque,
+    _params_lcbg,
+    _params_bank_charges,
+)
 
 # Tools that write to the DB and benefit from slot-filling when fields are missing.
 WRITE_TOOLS = {
@@ -28,10 +40,31 @@ WRITE_TOOLS = {
     "record_bank_transaction",
     "manage_contact",
     "manage_petty_cash",
+    # Agent 3 (Reconciliation & Banking) — approval-required tools queue for
+    # human approval; slot-fill ensures they never queue with garbage params.
+    "run_bank_reconciliation",
+    "post_accrual_entry",
+    "reconcile_vendor_statement",
+    "reconcile_customer_statement",
+    "track_cheque_clearing",
+    "track_lc_bank_guarantee",
+    "reconcile_bank_charges",
 }
 
 # In-memory pending intents: conversation_id -> PendingIntent dict
 PENDING_INTENTS: dict[str, dict] = {}
+
+# Map each Agent 3 tool to its natural-language parser so merge_answer can
+# re-derive fields when the user answers a slot-fill question.
+_AGENT3_PARSE_TOOLS = {
+    "run_bank_reconciliation": _params_bank_reconciliation,
+    "post_accrual_entry": _params_accrual,
+    "reconcile_vendor_statement": _params_vendor_statement,
+    "reconcile_customer_statement": _params_customer_statement,
+    "track_cheque_clearing": _params_cheque,
+    "track_lc_bank_guarantee": _params_lcbg,
+    "reconcile_bank_charges": _params_bank_charges,
+}
 
 
 def is_write_tool(tool_name: str) -> bool:
@@ -128,6 +161,105 @@ def describe_missing(tool_name: str, params: dict) -> Optional[str]:
                 + "\n(e.g. add vendor AL-MADINA GENERAL STORE)"
             )
         return None
+    if tool_name == "run_bank_reconciliation":
+        # Needs bank account + statement date + period. Router defaults bank
+        # account to 1100-Bank and period to current month; only statement_date
+        # can go missing.
+        missing: list[str] = []
+        if not params.get("bank_account_id"):
+            missing.append("which bank account (e.g. 1100-Bank)")
+        if not params.get("statement_date"):
+            missing.append("the statement date")
+        if not params.get("from_date") or not params.get("to_date"):
+            missing.append("the period to reconcile (e.g. July 2026)")
+        if missing:
+            return (
+                "To run a bank reconciliation I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + "\n(e.g. run bank reconciliation for 1100-Bank for July 2026)"
+            )
+        return None
+    if tool_name == "post_accrual_entry":
+        missing: list[str] = []
+        if not params.get("accrual_type"):
+            missing.append("the accrual type (salary, utilities, rent)")
+        if not params.get("amount"):
+            missing.append("the amount")
+        if not params.get("period_date"):
+            missing.append("the period date (e.g. 2026-07-31)")
+        if missing:
+            return (
+                "To post an accrual entry I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + "\n(e.g. post accrual entry for salaries 150000 for July)"
+            )
+        return None
+    if tool_name in ("reconcile_vendor_statement", "reconcile_customer_statement"):
+        kind = "vendor" if tool_name == "reconcile_vendor_statement" else "customer"
+        id_field = f"{kind}_contact_id"
+        missing: list[str] = []
+        if not params.get(id_field):
+            missing.append(f"which {kind} contact (e.g. {kind.upper()}-NAME or CNT-001)")
+        if not params.get("statement_lines"):
+            missing.append("the statement lines (reference + amount, e.g. INV-200 50000)")
+        if missing:
+            return (
+                f"To reconcile a {kind} statement I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + f"\n(e.g. reconcile {kind} statement from ABC Trading with line INV-200 50000)"
+            )
+        return None
+    if tool_name == "track_cheque_clearing":
+        missing: list[str] = []
+        if not params.get("action"):
+            missing.append("what you want to do (issue, clear, bounce, reconcile, status)")
+        if not params.get("cheque_id") and params.get("action") in ("clear", "bounce", "reconcile", "status"):
+            missing.append("the cheque number (e.g. CHQ-001234)")
+        if params.get("action") == "issue":
+            if not params.get("vendor_name"):
+                missing.append("who the cheque is for (vendor name)")
+            if not params.get("amount"):
+                missing.append("the amount")
+        if missing:
+            return (
+                "For cheque tracking I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + "\n(e.g. issue cheque number 001234 for 50000 to Abdullah General Store)"
+            )
+        return None
+    if tool_name == "track_lc_bank_guarantee":
+        missing: list[str] = []
+        if not params.get("action"):
+            missing.append("what you want to do (issue, amend, expire, close, status)")
+        if not params.get("lc_id") and params.get("action") in ("amend", "expire", "close", "status"):
+            missing.append("the LC/BG ID (e.g. LC-202607-001)")
+        if params.get("action") == "issue":
+            if not params.get("type"):
+                missing.append("whether it's an LC or a BG")
+            if not params.get("beneficiary"):
+                missing.append("the beneficiary name")
+            if not params.get("amount"):
+                missing.append("the amount")
+        if missing:
+            return (
+                "For LC/BG tracking I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + "\n(e.g. issue LC for 5000000 to ABC Trading, expiring 2026-12-31)"
+            )
+        return None
+    if tool_name == "reconcile_bank_charges":
+        missing: list[str] = []
+        if not params.get("bank_account_id"):
+            missing.append("which bank account (e.g. 1100-Bank)")
+        if not params.get("from_date") or not params.get("to_date"):
+            missing.append("the period to check (e.g. July 2026)")
+        if missing:
+            return (
+                "To reconcile bank charges I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + "\n(e.g. reconcile bank charges for 1100-Bank for July)"
+            )
+        return None
 
     # Other write tools: generic clarifying question.
     return (
@@ -176,6 +308,15 @@ def merge_answer(pending: dict, answer: str) -> dict:
         params = {**params, **parsed}
         params["description"] = merged
         return params
+    if tool_name in _AGENT3_PARSE_TOOLS:
+        # Re-parse the merged message through the tool's own parser so the
+        # answer fills the missing fields.
+        merged = f"{description} {answer.strip()}".strip() if answer else description
+        parser = _AGENT3_PARSE_TOOLS[tool_name]
+        parsed = parser(merged)
+        params = {**params, **parsed}
+        params["description"] = merged
+        return params
     return params
 
 
@@ -214,5 +355,49 @@ def is_complete(tool_name: str, params: dict) -> bool:
             params.get("action")
             and params.get("contact_type")
             and params.get("contact_name")
+        )
+    if tool_name == "run_bank_reconciliation":
+        return bool(
+            params.get("bank_account_id")
+            and params.get("statement_date")
+            and params.get("from_date")
+            and params.get("to_date")
+        )
+    if tool_name == "post_accrual_entry":
+        return bool(
+            params.get("accrual_type")
+            and params.get("amount")
+            and params.get("period_date")
+        )
+    if tool_name == "reconcile_vendor_statement":
+        return bool(
+            params.get("vendor_contact_id")
+            and params.get("statement_lines")
+        )
+    if tool_name == "reconcile_customer_statement":
+        return bool(
+            params.get("customer_contact_id")
+            and params.get("statement_lines")
+        )
+    if tool_name == "track_cheque_clearing":
+        if not params.get("action"):
+            return False
+        if params.get("action") in ("clear", "bounce", "reconcile", "status"):
+            return bool(params.get("cheque_id"))
+        if params.get("action") == "issue":
+            # vendor_name/amount optional in schema; action alone is enough.
+            return True
+        return True
+    if tool_name == "track_lc_bank_guarantee":
+        if not params.get("action"):
+            return False
+        if params.get("action") in ("amend", "expire", "close", "status"):
+            return bool(params.get("lc_id"))
+        return True
+    if tool_name == "reconcile_bank_charges":
+        return bool(
+            params.get("bank_account_id")
+            and params.get("from_date")
+            and params.get("to_date")
         )
     return True
