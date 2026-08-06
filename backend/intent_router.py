@@ -809,6 +809,10 @@ def _params_record_bank_transaction(text: str) -> dict:
     }
     amt = _extract_amount(text)
     if amt:
+        # Preserve an explicit negative sign so bank charges (amount < 0)
+        # seed correctly for reconcile_bank_charges.
+        if re.search(r"-\s*" + re.escape(amt) + r"\b", text):
+            amt = "-" + amt
         out["amount"] = amt
     return out
 

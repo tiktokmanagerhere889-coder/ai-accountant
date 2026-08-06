@@ -18,6 +18,70 @@ from sqlalchemy.orm import Session
 from db.models import ApprovalQueue
 from tool_registry import execute_tool
 
+
+def _post_accrual_to_journal(db, result: dict, params: dict) -> None:
+    """Post an approved accrual suggestion as a real journal entry.
+
+    post_accrual_entry returns a suggestion (debit/credit accounts + amounts)
+    and never writes to the DB itself. On human approval we insert the JE here
+    so it appears in the general ledger / cash position (like categorize_fixed_asset
+    promotes its asset to approved on approval).
+
+    The journal entry id is derived from the same scheme create_journal_entry
+    uses (JE-YYYYMMDD-NNN), so it never collides.
+    """
+    from datetime import date
+    from db.models import JournalEntry
+
+    # Guard: never post twice (re-approval / edited re-run on same accrual).
+    if result.get("status") == "posted":
+        return
+
+    debit_account = result.get("debit_account") or params.get("debit_account")
+    credit_account = result.get("credit_account") or params.get("credit_account")
+    debit_amount = result.get("debit_amount") or result.get("amount")
+    credit_amount = result.get("credit_amount") or result.get("amount")
+    period_date = result.get("period_date") or params.get("period_date") or date.today()
+    description = params.get("description") or result.get("accrual_type") or "Accrual entry"
+    prorated = result.get("prorated_amount")
+
+    if not (debit_account and credit_account and debit_amount and credit_amount):
+        return  # missing accounts/amounts — cannot post a balanced entry
+
+    amount = prorated or debit_amount
+
+    # Generate JE-YYYYMMDD-NNN entry id.
+    if isinstance(period_date, str):
+        try:
+            period_date = date.fromisoformat(str(period_date)[:10])
+        except ValueError:
+            period_date = date.today()
+    prefix = "JE-{}-".format(period_date.strftime("%Y%m%d"))
+    existing = db.query(JournalEntry.entry_id).filter(
+        JournalEntry.entry_id.like(prefix + "%")
+    ).all()
+    max_seq = 0
+    for eid in existing:
+        suffix = eid[0][len(prefix):] if isinstance(eid, tuple) else str(eid)[len(prefix):]
+        if suffix.isdigit():
+            max_seq = max(max_seq, int(suffix))
+    entry_id = "{}{:03d}".format(prefix, max_seq + 1)
+
+    entry = JournalEntry(
+        entry_id=entry_id,
+        description=str(description)[:500],
+        posted_date=period_date,
+        reference="ACCRUAL-{}".format(result.get("accrual_id", "")),
+        debit_account=str(debit_account),
+        debit_amount=amount,
+        credit_account=str(credit_account),
+        credit_amount=amount,
+        status="posted",
+    )
+    db.add(entry)
+    result["entry_id"] = entry_id
+    result["status"] = "posted"
+
 # Tools that ALWAYS require human approval before execution, even when the
 # caller does not pass needs_approval=true. Mirrors the `approval: true` flags
 # in frontend/src/components/agentsData.ts.
@@ -129,7 +193,6 @@ def approve_or_execute(
         exc = e
         result = {"error": str(e)}
 
-    entry.result = json.dumps(result, default=str)
     entry.status = EDITED if edited_params is not None and edited_params != original_params else APPROVED
     entry.resolved_at = datetime.utcnow()
 
@@ -144,6 +207,13 @@ def approve_or_execute(
                 {"status": "approved"}
             )
 
+    # post_accrual_entry only RETURNS a suggested entry (needs_approval=True).
+    # On human approval, actually post it as a journal entry so it shows up in
+    # the general ledger / cash position. Mirrors the fixed-asset pattern above.
+    if entry.tool_name == "post_accrual_entry" and isinstance(result, dict):
+        _post_accrual_to_journal(db, result, params_to_run)
+
+    entry.result = json.dumps(result, default=str)
     db.commit()
     db.refresh(entry)
 

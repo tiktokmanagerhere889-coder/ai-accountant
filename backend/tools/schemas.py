@@ -147,7 +147,7 @@ class BankTransactionResponse(BankTransactionBase):
 class RecordBankTransactionInput(BaseModel):
     date: datetime.date = Field(..., description="Transaction date")
     description: str = Field(..., min_length=1, max_length=500, description="Transaction description")
-    amount: Decimal = Field(..., gt=Decimal("0"), description="Transaction amount")
+    amount: Decimal = Field(..., gt=Decimal("-999999999"), description="Transaction amount (negative for bank charges/fees, positive for deposits/withdrawals)")
     type: str = Field(..., description="'debit' or 'credit'")
     status: str = Field(default="cleared", description="'cleared' or 'pending'")
     reference: Optional[str] = Field(default=None, max_length=100, description="Reference (cheque no, invoice)")
