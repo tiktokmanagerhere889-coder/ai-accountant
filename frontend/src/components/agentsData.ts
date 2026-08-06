@@ -52,12 +52,12 @@ export const AGENTS_DATA: AgentDef[] = [
       },
       {
         name: "process_receipt_image",
-        description: "Vision extraction of amount/vendor from receipt photo",
+        description: "Gemini vision OCR — extracts vendor/amount/date from receipt photo",
         approval: true,
         aiOnly: true,
         inputs: [
           { name: "image_filename", type: "text", placeholder: "Filename (e.g. receipt.png)", required: true },
-          { name: "image_data", type: "textarea", placeholder: "Base64 string data or mock prefix", required: true },
+          { name: "image_data", type: "textarea", placeholder: "Paste image base64 here (or upload in chat)", required: true },
           { name: "suggested_account", type: "text", placeholder: "e.g. Office Rent", required: false }
         ]
       },

@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
 import { Send, Check, X, ShieldAlert, Loader2, Sparkles, Wand2, Plus, Trash2, MessageSquare, ImagePlus } from "lucide-react";
 
+// Import tool descriptions from agentsData
+import { AGENTS_DATA } from "./agentsData";
+
 interface ToolCallInfo {
   toolName: string;
   recordId?: string;
@@ -12,6 +15,7 @@ interface ToolCallInfo {
 interface Message {
   sender: "user" | "ai";
   text: string;
+  image?: { data: string; filename: string; mime?: string };
   toolCalls?: ToolCallInfo[];
   suggestions?: string[];
   approvalCard?: {
@@ -121,6 +125,7 @@ export default function ChatPanel({ onTransactionLogged, fullPage = false }: Cha
         {
           sender: "user",
           text: `📷 ${file.name}${file.type.startsWith("image/") ? "" : " (attachment)"}`,
+          image: { data: base64, filename: file.name, mime: file.type },
         },
       ]);
       setLoading(true);
@@ -140,9 +145,28 @@ export default function ChatPanel({ onTransactionLogged, fullPage = false }: Cha
           localStorage.setItem("chat-conversation-id", data.conversation_id);
         }
         const toolCalls = (data.tool_calls?.length ? data.tool_calls : extractToolCalls(data.response)) as ToolCallInfo[];
+        // Build the approval card for queued tools (same as handleSend), so the
+        // image upload surfaces an inline Approve/Reject in the chat thread.
+        let approvalData: { toolName: string; description: string; params: Record<string, any>; approvalId: string } | null = null;
+        const queuedTool = toolCalls.find((tc) => tc.status === "queued");
+        if (queuedTool) {
+          const idMatch = queuedTool.summary.match(/\(([A-Za-z0-9-]+)\)/);
+          const toolInfo = AGENTS_DATA.flatMap((a) => a.tools).find((t) => t.name === queuedTool.toolName);
+          approvalData = {
+            toolName: queuedTool.toolName,
+            description: toolInfo?.description || queuedTool.summary,
+            params: {},
+            approvalId: idMatch ? idMatch[1] : uuidv4(),
+          };
+        }
         setMessages((prev) => [
           ...prev,
-          { sender: "ai", text: cleanMarkdownJSON(data.response), toolCalls: toolCalls.length ? toolCalls : undefined },
+          {
+            sender: "ai",
+            text: cleanMarkdownJSON(data.response),
+            toolCalls: toolCalls.length ? toolCalls : undefined,
+            approvalCard: approvalData || undefined,
+          },
         ]);
         if (data.response.includes("JE-")) onTransactionLogged?.();
       } catch (error: any) {
@@ -193,9 +217,11 @@ export default function ChatPanel({ onTransactionLogged, fullPage = false }: Cha
       const queuedTool = toolCalls.find((tc) => tc.status === "queued");
       if (queuedTool) {
         const idMatch = queuedTool.summary.match(/\(([A-Za-z0-9-]+)\)/);
+        // Get the actual tool description from agentsData
+        const toolInfo = AGENTS_DATA.flatMap((a) => a.tools).find((t) => t.name === queuedTool.toolName);
         approvalData = {
           toolName: queuedTool.toolName,
-          description: queuedTool.summary,
+          description: toolInfo?.description || queuedTool.summary, // Use actual tool description
           params: {},
           approvalId: idMatch ? idMatch[1] : uuidv4(),
         };
@@ -362,12 +388,30 @@ export default function ChatPanel({ onTransactionLogged, fullPage = false }: Cha
         ? (data?.status === "executed" ? "executed" : "approved")
         : "rejected";
 
+      // Build a readable result block from the tool output so the user sees
+      // what actually happened (e.g. receipt vendor/amount/date), not just
+      // "approved and executed".
+      const resultBlock = (() => {
+        const r = data?.result;
+        if (!r || typeof r !== "object") return "";
+        const parts: string[] = [];
+        if (r.vendor_name) parts.push(`Vendor: ${r.vendor_name}`);
+        if (r.total_amount !== undefined && r.total_amount !== null) parts.push(`Amount: ${r.total_amount}`);
+        if (r.date) parts.push(`Date: ${r.date}`);
+        if (r.currency) parts.push(`Currency: ${r.currency}`);
+        if (r.extraction_id) parts.push(`Extraction ID: ${r.extraction_id}`);
+        if (r.status) parts.push(`Status: ${r.status}`);
+        if (r.entry_id) parts.push(`Entry ID: ${r.entry_id}`);
+        if (r.message) parts.push(String(r.message));
+        return parts.length ? `\n\n${parts.join("\n")}` : "";
+      })();
+
       setMessages((prev) => [
         ...prev,
         {
           sender: "ai",
           text: approved
-            ? `✅ Approved action: ${cardData.toolName}.\n\n${data?.message || data?.response || data?.detail || "The action was approved and executed."}`
+            ? `✅ Approved action: ${cardData.toolName}.\n\n${data?.message || data?.response || data?.detail || "The action was approved and executed."}${resultBlock}`
             : `❌ Rejected action: ${cardData.toolName}.`,
         }
       ]);
@@ -487,6 +531,15 @@ export default function ChatPanel({ onTransactionLogged, fullPage = false }: Cha
                   : "bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-300 rounded-bl-none border border-gray-200 dark:border-gray-700/50"
               }`}
             >
+              {msg.image && (
+                <div className="mb-2 flex items-center gap-2">
+                  <img
+                    src={`data:${msg.image.mime || "image/png"};base64,${msg.image.data}`}
+                    alt={msg.image.filename}
+                    className="max-h-56 max-w-full rounded border border-gray-300 dark:border-gray-600"
+                  />
+                </div>
+              )}
               {msg.text}
             </div>
 
