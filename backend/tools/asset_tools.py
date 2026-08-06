@@ -33,11 +33,24 @@ def _load_configs(db: Session) -> dict:
         return {}
 
 
+# Common synonyms for each depreciation config key, so natural asset names
+# ("delivery truck", "office laptop") match the seeded config keys
+# ("vehicle", "computer", ...) instead of failing with "no config found".
+_CONFIG_SYNONYMS = {
+    "vehicle": ["vehicle", "truck", "van", "car", "lorry", "pickup", "suv", "bus", "motorcycle", "bike"],
+    "computer": ["computer", "laptop", "desktop", "server", "notebook", "pc", "tablet", "monitor", "printer"],
+    "furniture": ["furniture", "desk", "chair", "table", "cabinet", "sofa", "shelf", "workstation"],
+    "building": ["building", "property", "warehouse", "office building", "factory", "shop", "premises"],
+}
+
+
 def _detect_category(asset_name: str, asset_category: Optional[str], configs: dict):
     """Detect asset category from explicit category or by matching keywords.
 
-    configs: parsed JSON like {"vehicle": {"useful_life": 10, "method": "...",
-    "residual_pct": 0.10, "label": "Vehicle"}, ...}
+    Matches the asset name/category against the config key AND a synonym list
+    (e.g. "delivery truck" -> "vehicle"), so a naturally-worded asset name maps
+    to the right depreciation config. configs: parsed JSON like
+    {"vehicle": {"useful_life": 10, "method": "...", "residual_pct": 0.10, "label": "Vehicle"}, ...}
     """
     if not configs:
         raise ValueError(
@@ -52,6 +65,10 @@ def _detect_category(asset_name: str, asset_category: Optional[str], configs: di
         if key.lower() in search:
             label = cfg.get("label", key)
             return label, cfg
+        for synonym in _CONFIG_SYNONYMS.get(key, []):
+            if synonym in search:
+                label = cfg.get("label", key)
+                return label, cfg
     return None, None
 
 
