@@ -117,7 +117,7 @@ def _params_year(text: str) -> dict:
 
 
 def _params_year_period(text: str) -> dict:
-    return {"fiscal_year": _extract_year(text), "period": _extract_period(text)}
+    return {"fiscal_year": _extract_year(text) or date.today().year, "period": _extract_period(text)}
 
 
 def _extract_date_pair(text: str) -> tuple[Optional[date], Optional[date]]:
@@ -544,6 +544,30 @@ def _params_period(text: str) -> dict:
     }
 
 
+def _params_period_date(text: str) -> dict:
+    """Map '<Month> [<YYYY>]' to a single as_of/period date for month-end tools.
+
+    Depreciation/amortization/prepaid run "for July" — the tool takes a single
+    period_date/as_of_date, so use the LAST day of the named month (the close
+    date). Falls back to today when no month is given.
+    """
+    pd = _extract_period_dates(text)
+    return {"period_date": pd[1] if pd else date.today()}
+
+
+def _params_prepaid(text: str) -> dict:
+    """as_of_date for prepaid adjustment — the named month's last day."""
+    pd = _extract_period_dates(text)
+    return {"as_of_date": pd[1] if pd else date.today()}
+
+
+def _params_loan(text: str) -> dict:
+    """loan_id + as_of_date for the loan/debt schedule tool."""
+    m = re.search(r"\b(?:LN|LOAN)[-\s]?\d+", text, re.I)
+    loan_id = m.group(0).upper().replace("LOAN", "LN") if m else None
+    return {"loan_id": loan_id, "as_of_date": _extract_date(text)}
+
+
 def _extract_bank_account(text: str) -> str:
     """Resolve a bank reference to an account_id, defaulting to 1100-Bank.
 
@@ -832,6 +856,9 @@ ROUTES: list[tuple[list[str], str, callable]] = [
     (["chart of account", "suggest chart", "chart of accounts"], "suggest_chart_of_accounts", lambda t: {"business_type": _extract_business_type(t) or "service_based"}),
     (["ap subledger", "accounts payable", "payable", "ap sub-ledger", "vendor ledger", "we owe", "owed to", "owe vendor", "owe suppliers"], "get_ap_subledger", _params_dates),
     (["ar subledger", "accounts receivable", "receivable", "ar sub-ledger", "customer ledger", "customers owe", "customer owe", "owed by customers", "owing", "owe us"], "get_ar_subledger", _params_dates),
+    # reconcile_payroll must precede get_payroll_ledger (whose "payroll" keyword
+    # matches first) so "reconcile payroll" reaches the month-end tool.
+    (["reconcile payroll", "payroll recon", "payroll reconciliation"], "reconcile_payroll", _params_period),
     (["payroll ledger", "payroll", "salary ledger", "wage ledger"], "get_payroll_ledger", _params_dates),
     (["general ledger", "ledger", "show ledger"], "get_general_ledger", _params_dates),
     (["fixed asset", "depreciation scheme", "categorize asset", "add asset"], "categorize_fixed_asset", _params_record_transaction),
@@ -848,15 +875,14 @@ ROUTES: list[tuple[list[str], str, callable]] = [
 
     # --- Month-End ---
     (["unpaid bill", "unpaid", "overdue bill", "bills review"], "review_unpaid_bills", _params_aging),
-    (["prepaid", "prepaid adjustment", "prepaid expense"], "calculate_prepaid_adjustment", _params_year),
-    (["depreciation", "depreciate"], "calculate_depreciation", _params_year),
-    (["amortization", "amortize"], "calculate_amortization", _params_year),
-    (["reconcile payroll", "payroll recon"], "reconcile_payroll", _params_dates),
+    (["prepaid", "prepaid adjustment", "prepaid expense"], "calculate_prepaid_adjustment", _params_prepaid),
+    (["depreciation", "depreciate"], "calculate_depreciation", _params_period_date),
+    (["amortization", "amortize"], "calculate_amortization", _params_period_date),
     (["ar aging", "receivable aging", "aging report ar", "receivable report"], "get_ar_aging_report", _params_aging),
     (["ap aging", "payable aging", "aging report ap", "payable report"], "get_ap_aging_report", _params_aging),
     (["budget variance", "variance analysis", "variance"], "analyze_budget_variance", _params_year_period),
     (["cash flow forecast", "forecast cash flow", "cash flow projection"], "forecast_cash_flow", _params_forecast),
-    (["loan schedule", "debt schedule", "loan", "debt"], "get_loan_debt_schedule", _params_year),
+    (["loan schedule", "debt schedule", "loan", "debt"], "get_loan_debt_schedule", _params_loan),
 
     # --- Year-End / Financial Statements ---
     (["trial balance"], "generate_trial_balance", _params_trial_balance),
