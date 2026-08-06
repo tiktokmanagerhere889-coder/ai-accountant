@@ -132,6 +132,18 @@ def approve_or_execute(
     entry.result = json.dumps(result, default=str)
     entry.status = EDITED if edited_params is not None and edited_params != original_params else APPROVED
     entry.resolved_at = datetime.utcnow()
+
+    # categorize_fixed_asset saves the asset as "pending_approval" and returns
+    # asset_id. On human approval, promote it to "approved" so downstream tools
+    # (calculate_depreciation filters status in ["approved","active"]) can see it.
+    if entry.tool_name == "categorize_fixed_asset" and isinstance(result, dict):
+        asset_id = result.get("asset_id")
+        if asset_id:
+            from db.models import FixedAsset
+            db.query(FixedAsset).filter(FixedAsset.asset_id == asset_id).update(
+                {"status": "approved"}
+            )
+
     db.commit()
     db.refresh(entry)
 
