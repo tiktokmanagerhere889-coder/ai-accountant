@@ -508,11 +508,11 @@ ROUTES: list[tuple[list[str], str, callable]] = [
 
     # --- Ledger ---
     (["journal entry", "create journal", "post journal", "debit ", "credit ", "journalise", "journalize"], "create_journal_entry", _params_journal_entry),
-    (["general ledger", "ledger", "show ledger"], "get_general_ledger", _params_dates),
     (["chart of account", "suggest chart", "chart of accounts"], "suggest_chart_of_accounts", lambda t: {"business_type": _extract_business_type(t) or "service_based"}),
-    (["ap subledger", "accounts payable", "payable", "ap sub-ledger", "vendor ledger"], "get_ap_subledger", _params_dates),
-    (["ar subledger", "accounts receivable", "receivable", "ar sub-ledger", "customer ledger"], "get_ar_subledger", _params_dates),
-    (["payroll ledger", "payroll"], "get_payroll_ledger", _params_dates),
+    (["ap subledger", "accounts payable", "payable", "ap sub-ledger", "vendor ledger", "we owe", "owed to", "owe vendor", "owe suppliers"], "get_ap_subledger", _params_dates),
+    (["ar subledger", "accounts receivable", "receivable", "ar sub-ledger", "customer ledger", "customers owe", "customer owe", "owed by customers", "owing", "owe us"], "get_ar_subledger", _params_dates),
+    (["payroll ledger", "payroll", "salary ledger", "wage ledger"], "get_payroll_ledger", _params_dates),
+    (["general ledger", "ledger", "show ledger"], "get_general_ledger", _params_dates),
     (["fixed asset", "depreciation scheme", "categorize asset", "add asset"], "categorize_fixed_asset", _params_record_transaction),
     (["add vendor", "new vendor", "vendor master", "add customer", "new customer", "customer master", "manage contact", "add contact", "add supplier", "find vendor", "search vendor", "search customer", "update vendor", "update customer", "delete vendor", "delete customer"], "manage_contact", _params_manage_contact),
 
