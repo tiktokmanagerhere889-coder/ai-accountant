@@ -107,6 +107,116 @@ def _fmt_aging(result: dict) -> str:
     return f"Aging report as of {result.get('as_of_date')}: total outstanding {_money(total)}."
 
 
+def _fmt_unpaid_bills(result: dict) -> str:
+    """Plain-English unpaid-bills summary: per-bill lines + totals."""
+    items = result.get("items") or []
+    fd = result.get("as_of_date") or "today"
+    if not items:
+        return f"No unpaid bills as of {fd}."
+    lines = []
+    for b in items[:15]:
+        vendor = b.get("vendor_name") or b.get("reference") or "Unknown"
+        due = b.get("due_date", "")
+        overdue = b.get("days_overdue")
+        od = f", {overdue} days overdue" if overdue else ""
+        lines.append(f"  - {vendor}: {_money(b.get('outstanding_balance', b.get('invoice_amount', 0)))} (due {due}{od})")
+    more = f"\n  ... and {len(items) - 15} more" if len(items) > 15 else ""
+    over = result.get("total_overdue")
+    over_s = f", {_money(over)} overdue" if over else ""
+    return f"Unpaid bills as of {fd}: {_money(result.get('total_unpaid', 0))}{over_s}.\n" + "\n".join(lines) + more
+
+
+def _fmt_prepaid(result: dict) -> str:
+    """Plain-English prepaid-adjustment summary: per-item + total."""
+    items = result.get("items") or []
+    fd = result.get("as_of_date") or "today"
+    if not items:
+        return f"No active prepaid expenses as of {fd}."
+    lines = []
+    for p in items[:15]:
+        lines.append(
+            f"  - {p.get('prepaid_id')} {p.get('description')}: {_money(p.get('monthly_amount', 0))}/mo, "
+            f"{p.get('months_elapsed', 0)} months elapsed, {_money(p.get('amount_amortized', 0))} amortized, "
+            f"{_money(p.get('remaining_balance', 0))} remaining"
+        )
+    return (
+        f"Prepaid adjustment as of {fd}: total {_money(result.get('total_adjustment', 0))}.\n"
+        + "\n".join(lines)
+    )
+
+
+def _fmt_depreciation(result: dict) -> str:
+    """Plain-English depreciation summary: per-asset + total."""
+    items = result.get("items") or []
+    period = result.get("period_date") or "the period"
+    method = result.get("method") or "straight_line"
+    if not items:
+        return f"No depreciation for {period}."
+    lines = []
+    for d in items[:15]:
+        lines.append(
+            f"  - {d.get('asset_name')} ({d.get('asset_id')}): {_money(d.get('monthly_depreciation', 0))}, "
+            f"accumulated {_money(d.get('accumulated_depreciation', 0))}, "
+            f"book value {_money(d.get('book_value', 0))}"
+        )
+    return (
+        f"Depreciation for {period} ({method}): total {_money(result.get('total_depreciation', 0))}.\n"
+        + "\n".join(lines)
+    )
+
+
+def _fmt_amortization(result: dict) -> str:
+    """Plain-English amortization summary: per-asset + total."""
+    items = result.get("items") or []
+    period = result.get("period_date") or "the period"
+    if not items:
+        return f"No amortization for {period}."
+    lines = []
+    for d in items[:15]:
+        lines.append(
+            f"  - {d.get('asset_name')} ({d.get('asset_id')}): {_money(d.get('monthly_amortization', 0))}, "
+            f"accumulated {_money(d.get('accumulated_amortization', 0))}, "
+            f"book value {_money(d.get('book_value', 0))}"
+        )
+    return (
+        f"Amortization for {period}: total {_money(result.get('total_amortization', 0))}.\n"
+        + "\n".join(lines)
+    )
+
+
+def _fmt_payroll_recon(result: dict) -> str:
+    """Plain-English payroll reconciliation summary."""
+    total = _money(result.get('total_salary', 0))
+    ded = _money(result.get('total_deductions', 0))
+    net = _money(result.get('total_net_pay', 0))
+    disc = result.get('discrepancies', 0)
+    disc_s = "No discrepancies." if not disc else f"{disc} discrepancy(ies) found."
+    return (
+        f"Payroll reconciliation ({result.get('period_from')} to {result.get('period_to')}): "
+        f"salary {total}, deductions {ded}, net pay {net}. {disc_s}"
+    )
+
+
+def _fmt_budget_variance(result: dict) -> str:
+    """Plain-English budget-variance summary: per-account + flagged."""
+    items = result.get("items") or []
+    if not items:
+        return f"Budget variance for FY {result.get('fiscal_year')} P{result.get('period')}: no budget rows."
+    lines = []
+    for v in items[:15]:
+        flag = " [FLAGGED]" if v.get("flagged") else ""
+        lines.append(
+            f"  - {v.get('account_code')}: budget {_money(v.get('budget_amount', 0))}, "
+            f"actual {_money(v.get('actual_amount', 0))}, variance {_money(v.get('variance', 0))} "
+            f"({v.get('variance_pct', 0)}%){flag}"
+        )
+    return (
+        f"Budget variance FY {result.get('fiscal_year')} period {result.get('period')}: "
+        f"{result.get('flagged_count', 0)} flagged of {len(items)}.\n"
+        + "\n".join(lines)
+    )
+
+
 def _fmt_general_ledger(result: dict) -> str:
     """Plain-English general ledger summary with per-account rows.
 
@@ -241,6 +351,12 @@ _FORMATTERS = {
     "get_ar_aging_report": _fmt_aging,
     "get_ap_aging_report": _fmt_aging,
     "get_general_ledger": _fmt_general_ledger,
+    "review_unpaid_bills": _fmt_unpaid_bills,
+    "calculate_prepaid_adjustment": _fmt_prepaid,
+    "calculate_depreciation": _fmt_depreciation,
+    "calculate_amortization": _fmt_amortization,
+    "reconcile_payroll": _fmt_payroll_recon,
+    "analyze_budget_variance": _fmt_budget_variance,
     "detect_anomaly_transactions": _fmt_anomaly,
     "calculate_withholding_tax": _fmt_withholding,
     "calculate_eobi_deductions": _fmt_eobi,

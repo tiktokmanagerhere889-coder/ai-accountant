@@ -392,6 +392,10 @@ export default function ChatPanel({ onTransactionLogged, fullPage = false }: Cha
       // what actually happened (e.g. receipt vendor/amount/date), not just
       // "approved and executed".
       const resultBlock = (() => {
+        // Prefer the backend's plain-English formatter output (covers forecast,
+        // loan schedule, and any approval tool with a dedicated formatter).
+        const formatted = data?.approval?.formatted_result || data?.formatted_result;
+        if (formatted && typeof formatted === "string") return `\n\n${formatted}`;
         const r = data?.result;
         if (!r || typeof r !== "object") return "";
         const parts: string[] = [];
