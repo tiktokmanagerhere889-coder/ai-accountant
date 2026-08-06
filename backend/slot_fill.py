@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from intent_router import _extract_amount
+from intent_router import _extract_amount, parse_petty_cash
 
 # Tools that write to the DB and benefit from slot-filling when fields are missing.
 WRITE_TOOLS = {
@@ -89,6 +89,22 @@ def describe_missing(tool_name: str, params: dict) -> Optional[str]:
             f"Almost there — which accounts should I debit and credit for {amount}? "
             "(e.g. debit Office Rent, credit Cash)"
         )
+    if tool_name == "manage_petty_cash":
+        parsed = parse_petty_cash(str(params.get("description", "") or ""))
+        missing: list[str] = []
+        if not params.get("action"):
+            missing.append("what you want to do (add funds, record an expense, or check the balance)")
+        if not params.get("fund_id"):
+            missing.append("which petty cash fund (e.g. PC-001)")
+        if not params.get("amount") and parsed.get("action") in ("add_fund", "expense"):
+            missing.append("the amount")
+        if missing:
+            return (
+                "I can help with that. I need a few more details:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+            )
+        return None
+
     # Other write tools: generic clarifying question.
     return (
         "I need a bit more detail to complete that. Can you give me the amount, "
@@ -112,7 +128,15 @@ def merge_answer(pending: dict, answer: str) -> dict:
     params["description"] = merged
 
     # For non-transaction tools, keep the answer as the description field too.
-    if tool_name in ("manage_contact", "manage_petty_cash"):
+    if tool_name == "manage_petty_cash":
+        # Merge the answer into the description, then re-parse the whole message
+        # so action/fund_id/amount are derived from everything the user said.
+        merged = f"{description} {answer.strip()}".strip() if answer else description
+        parsed = parse_petty_cash(merged)
+        params = {**params, **parsed}
+        params["description"] = merged
+        return params
+    if tool_name == "manage_contact":
         params["description"] = answer.strip()
     return params
 
@@ -129,4 +153,14 @@ def is_complete(tool_name: str, params: dict) -> bool:
     if tool_name == "create_journal_entry":
         # Router provides description/posted_date; a real amount is required.
         return bool(_extract_amount(params.get("description", "")))
+    if tool_name == "manage_petty_cash":
+        # Require the pieces the implementation needs: an action + a fund.
+        if not params.get("action"):
+            return False
+        if not params.get("fund_id"):
+            return False
+        # add_fund/expense also need an amount.
+        if params.get("action") in ("add_fund", "expense") and not params.get("amount"):
+            return False
+        return True
     return True

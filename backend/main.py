@@ -99,9 +99,15 @@ class BackupTriggerResponse(BaseModel):
     message: str
 
 
+class ChatImage(BaseModel):
+    data: str  # base64
+    filename: str
+
+
 class ChatRequest(BaseModel):
     message: str
     conversation_id: Optional[str] = None
+    image: Optional[ChatImage] = None
 
 
 class ChatResponse(BaseModel):
@@ -359,21 +365,6 @@ async def _finish_routed(tool_name: str, result, message: str, conv_id: Optional
     from result_formatter import format_tool_result
 
     tool_call = _tool_call_info(tool_name, result, message)
-    if is_approval_required(tool_name):
-        # Approval-required tools still queue via the queue service
-        from approval_service import queue_for_approval
-        db = get_session()
-        try:
-            entry = queue_for_approval(tool_name, result, db, submitted_by="chat-router")
-        finally:
-            db.close()
-        tool_call.status = "queued"
-        tool_call.summary = f"Action queued for approval ({entry.approval_id})"
-        return ChatResponse(
-            response=f"[Queued for approval: {entry.approval_id}] The action '{tool_name}' requires your approval. Open the Approvals panel to review and approve.",
-            tool_calls=[tool_call],
-            conversation_id=conv_id,
-        )
     text = format_tool_result(tool_name, result)
     # LLM polish re-formats presentation only. It runs for EVERY routed
     # tool so answers read naturally, but a verification step rejects
@@ -398,6 +389,26 @@ async def _chat_impl(request: ChatRequest) -> ChatResponse:
         from tool_registry import execute_tool, REGISTRY
         import slot_fill
 
+        # ---- 0. Image attachment? Process it as a receipt (approval-required). ----
+        if request.image is not None and request.image.data and request.image.filename:
+            from approval_service import queue_for_approval
+            receipt_params = {
+                "image_data": request.image.data,
+                "image_filename": request.image.filename,
+            }
+            entry = queue_for_approval(
+                "process_receipt_image", receipt_params, get_session(), submitted_by="chat-image"
+            )
+            return ChatResponse(
+                response=f"[Queued for approval: {entry.approval_id}] Receipt '{request.image.filename}' uploaded. It will be extracted with Google Document AI and must be approved before posting.",
+                conversation_id=conv_id,
+                tool_calls=[ToolCallInfo(
+                    toolName="process_receipt_image",
+                    summary=f"Action queued for approval ({entry.approval_id})",
+                    status="queued",
+                )],
+            )
+
         # ---- 1. Pending intent? Merge the user's answer ----
         pending = slot_fill.PENDING_INTENTS.get(conv_id)
         if pending is not None:
@@ -411,6 +422,24 @@ async def _chat_impl(request: ChatRequest) -> ChatResponse:
                 pending["params"] = params
                 if slot_fill.is_complete(pending["tool_name"], params):
                     slot_fill.PENDING_INTENTS.pop(conv_id, None)
+                    # Approval-required tools queue instead of executing.
+                    from intent_router import is_approval_required
+                    if is_approval_required(pending["tool_name"]):
+                        from approval_service import queue_for_approval
+                        db = get_session()
+                        try:
+                            entry = queue_for_approval(pending["tool_name"], params, db, submitted_by="chat-router")
+                        finally:
+                            db.close()
+                        return ChatResponse(
+                            response=f"[Queued for approval: {entry.approval_id}] The action '{pending['tool_name']}' requires your approval. Approve it from the chat bubble or the Approvals panel.",
+                            conversation_id=conv_id,
+                            tool_calls=[ToolCallInfo(
+                                toolName=pending["tool_name"],
+                                summary=f"Action queued for approval ({entry.approval_id})",
+                                status="queued",
+                            )],
+                        )
                     try:
                         result = execute_tool(pending["tool_name"], params)
                     except Exception as exc:
@@ -450,6 +479,26 @@ async def _chat_impl(request: ChatRequest) -> ChatResponse:
                             tool_name=tool_name, question=question, conversation_id=conv_id
                         ),
                     )
+            # Approval-required tools queue FIRST (no execution yet). On approve,
+            # execute_tool re-runs with these exact params.
+            from intent_router import is_approval_required
+            if is_approval_required(tool_name):
+                from approval_service import queue_for_approval
+                db = get_session()
+                try:
+                    entry = queue_for_approval(tool_name, params, db, submitted_by="chat-router")
+                finally:
+                    db.close()
+                tool_call = ToolCallInfo(
+                    toolName=tool_name,
+                    summary=f"Action queued for approval ({entry.approval_id})",
+                    status="queued",
+                )
+                return ChatResponse(
+                    response=f"[Queued for approval: {entry.approval_id}] The action '{tool_name}' requires your approval. Approve it from the chat bubble or the Approvals panel.",
+                    tool_calls=[tool_call],
+                    conversation_id=conv_id,
+                )
             try:
                 result = execute_tool(tool_name, params)
             except Exception as route_err:

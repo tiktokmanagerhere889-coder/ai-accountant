@@ -211,6 +211,29 @@ def _seed_chart_of_accounts() -> None:
         logger.info("Seeded %s standard chart of accounts", len(DEFAULT_CHART_OF_ACCOUNTS))
 
 
+def _seed_petty_cash_fund() -> None:
+    """Seed the default petty cash fund PC-001 if it does not exist (idempotent).
+
+    Without this, manage_petty_cash can never run: the tool requires a fund_id
+    and there was no way to create a fund from the chat. This makes the tool
+    usable out of the box.
+    """
+    with engine.begin() as conn:
+        existing = conn.execute(
+            text("SELECT COUNT(*) FROM petty_cash_funds WHERE fund_id = 'PC-001'")
+        ).scalar()
+        if existing and existing > 0:
+            return
+        conn.execute(
+            text(
+                "INSERT INTO petty_cash_funds (fund_id, fund_name, current_balance) "
+                "VALUES ('PC-001', 'Main Petty Cash', 15000) "
+                "ON CONFLICT (fund_id) DO NOTHING"
+            )
+        )
+        logger.info("Seeded petty cash fund PC-001")
+
+
 def run_migrations() -> None:
     """Run all idempotent migrations + seeds. Safe to call every startup."""
     _ensure_fetched_at_column()
@@ -219,6 +242,7 @@ def run_migrations() -> None:
     _seed_eobi_rates()
     _seed_asset_configs()
     _seed_chart_of_accounts()
+    _seed_petty_cash_fund()
     logger.info("DB migrations + seed complete")
 
 

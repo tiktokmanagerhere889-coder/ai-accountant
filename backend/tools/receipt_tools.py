@@ -44,18 +44,34 @@ def _validate_image_format(image_data: str, image_filename: str) -> None:
 
 
 def _get_document_ai_client():
-    """Create and return a Document AI client using service account credentials."""
+    """Create and return a Document AI client.
+
+    Supports both:
+      1. GOOGLE_APPLICATION_CREDENTIALS pointing at a local service-account JSON
+         (dev), and
+      2. Inline JSON in GOOGLE_APPLICATION_CREDENTIALS_JSON (Railway secret, so
+         no credential file needs to live on the box).
+    """
+    import google.auth.exceptions
+    from google.oauth2 import service_account
     from google.cloud import documentai
 
-    credentials_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-    if not credentials_path or not os.path.exists(credentials_path):
-        raise ValueError(
-            "GOOGLE_APPLICATION_CREDENTIALS not set or file not found. "
-            "Set GOOGLE_APPLICATION_CREDENTIALS to the path of your service account JSON."
+    creds_json = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_JSON")
+    if creds_json:
+        creds = service_account.Credentials.from_service_account_info(
+            json.loads(creds_json),
+            scopes=["https://www.googleapis.com/auth/cloud-platform"],
         )
+        return documentai.DocumentProcessorServiceClient(credentials=creds)
 
-    client = documentai.DocumentProcessorServiceClient()
-    return client
+    credentials_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+    if credentials_path and os.path.exists(credentials_path):
+        return documentai.DocumentProcessorServiceClient()
+
+    raise ValueError(
+        "No Document AI credentials configured. Set either GOOGLE_APPLICATION_CREDENTIALS "
+        "(path to a service-account JSON) or GOOGLE_APPLICATION_CREDENTIALS_JSON (the JSON body)."
+    )
 
 
 def _get_processor_name() -> str:
@@ -79,7 +95,7 @@ def _extract_receipt_data(image_data: str, image_filename: str) -> dict:
 
     Returns dict with: vendor_name, total_amount, date, confidence
     """
-    # Decode base64 image
+    # Decode base64 to raw bytes
     image_bytes = base64.b64decode(image_data)
 
     # Determine MIME type from filename
@@ -90,27 +106,12 @@ def _extract_receipt_data(image_data: str, image_filename: str) -> dict:
         "jpeg": "image/jpeg",
     }.get(ext, "image/jpeg")
 
-    # Get Document AI client and processor
+    # Get Document AI client
     client = _get_document_ai_client()
-    processor_name = _get_processor_name()
-
-    # Prepare the request
-    from google.cloud import documentai
-    raw_document = documentai.RawDocument(content=image_data, mime_type="image/jpeg")
-
-    # Determine MIME type from filename for the raw document
-    ext = image_filename.rsplit(".", 1)[-1].lower() if "." in image_filename else ""
-    mime_type = {
-        "png": "image/png",
-        "jpg": "image/jpeg",
-        "jpeg": "image/jpeg",
-    }.get(ext, "image/jpeg")
-
-    # Decode base64 to raw bytes
-    image_bytes = base64.b64decode(image_data)
-    raw_document = documentai.RawDocument(content=image_bytes, mime_type=mime_type)
 
     from google.cloud import documentai_v1
+    raw_document = documentai_v1.RawDocument(content=image_bytes, mime_type=mime_type)
+
     request = documentai_v1.ProcessRequest(name=_get_processor_name(), raw_document=raw_document)
 
     # Process the document

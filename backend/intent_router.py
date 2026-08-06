@@ -215,6 +215,73 @@ def _params_record_transaction(text: str) -> dict:
     }
 
 
+# ---------------------------------------------------------------------------
+# Petty cash natural-language parsing
+# ---------------------------------------------------------------------------
+
+_PC_ADD_RE = re.compile(r"\b(add|deposit|top\s*-?\s*up|put\s+in|inject|fund\s+it)\b", re.I)
+_PC_EXPENSE_RE = re.compile(r"\b(expense|spent|paid|used|withdrew|withdraw|purchase|bought|took\s+out)\b", re.I)
+_PC_CHECK_RE = re.compile(r"\b(check|status|balance|remaining|how\s+much|need|due)\b", re.I)
+_PC_FUND_RE = re.compile(r"\b(PC-\d+)\b", re.I)
+_PC_DESC_NOISE = re.compile(
+    r"\b(rs|pkr|rupees?|today|yesterday|now|this|month|date|dated|is|on|for|to|the|a|an|and|fund|funds|petty|cash|record)\b",
+    re.I,
+)
+
+
+def parse_petty_cash(text: str) -> dict:
+    """Extract action / fund_id / amount / description from a petty-cash message.
+
+    Returns a tool-ready params dict (values are strings; execute_tool coerces
+    via the Pydantic input model). Only fields actually found are included, so
+    callers can slot-fill the rest.
+    """
+    t = text.strip()
+    if not t:
+        return {}
+    out: dict = {}
+
+    # Action precedence: explicit add/deposit > expense/spend > status/check.
+    if _PC_ADD_RE.search(t):
+        out["action"] = "add_fund"
+    elif _PC_EXPENSE_RE.search(t):
+        out["action"] = "expense"
+    elif _PC_CHECK_RE.search(t):
+        out["action"] = "check_replenishment"
+
+    # Fund: explicit PC-XXX id, else "fund <name>".
+    m = _PC_FUND_RE.search(t)
+    if m:
+        out["fund_id"] = m.group(1).upper()
+    else:
+        m2 = re.search(r"\b(?:fund|funds?)\s+(?:called|named|id\s*[:=]?\s*)?([A-Za-z0-9_-]{2,})", t, re.I)
+        if m2:
+            out["fund_id"] = m2.group(1)
+
+    # Amount — skip PC-XXX fund ids (which look like numbers) and 4-digit years.
+    amount = _extract_amount(re.sub(r"PC-\d+", " ", t, flags=re.I))
+    if amount:
+        out["amount"] = amount
+
+    # Description: strip action/fund/amount/date/currency noise words.
+    desc = t
+    desc = _PC_ADD_RE.sub(" ", desc)
+    desc = _PC_EXPENSE_RE.sub(" ", desc)
+    desc = _PC_CHECK_RE.sub(" ", desc)
+    desc = _PC_FUND_RE.sub(" ", desc)
+    desc = re.sub(r"\b(PC-\d+)\b", " ", desc, flags=re.I)
+    desc = _PC_DESC_NOISE.sub(" ", desc)
+    desc = re.sub(r"\d[\d,]*(?:\.\d{1,2})?", " ", desc)
+    desc = re.sub(r"\s+", " ", desc).strip().strip(",-")
+    if desc:
+        out["description"] = desc[:200]
+    return out
+
+
+def _params_petty_cash(text: str) -> dict:
+    return parse_petty_cash(text)
+
+
 # Routes: each is (keywords: list, tool_name: str, extractor: callable)
 ROUTES: list[tuple[list[str], str, callable]] = [
     # --- Daily Entry ---
@@ -223,7 +290,7 @@ ROUTES: list[tuple[list[str], str, callable]] = [
     (["receipt", "scan receipt", "ocr", "process receipt"], "process_receipt_image", _params_none),
     (["bank transaction", "bank statement", "check bank", "list bank"], "check_bank_transactions", _params_dates),
     (["record bank", "bank register", "add bank transaction"], "record_bank_transaction", _params_record_transaction),
-    (["petty cash"], "manage_petty_cash", _params_none),
+    (["petty cash"], "manage_petty_cash", _params_petty_cash),
 
     # --- Ledger ---
     (["journal entry", "create journal", "post journal"], "create_journal_entry", _params_record_transaction),
@@ -363,6 +430,7 @@ def execute_route(message: str, db: Session) -> Optional[tuple[str, dict]]:
 def is_approval_required(tool_name: str) -> bool:
     """Check if a tool needs human approval (mirror of frontend approval flags)."""
     APPROVAL_TOOLS = {
+        "process_receipt_image",
         "run_bank_reconciliation", "post_accrual_entry", "reconcile_vendor_statement",
         "reconcile_customer_statement", "track_lc_bank_guarantee", "forecast_cash_flow",
         "close_fiscal_year", "categorize_fixed_asset", "calculate_standard_costing_variance",

@@ -56,15 +56,30 @@ def _categorize_description(description: str, db: Session) -> str:
     """Map a description to the most appropriate expense account.
 
     Resolution order (dynamic, nothing forced):
-      1. Look up the user's chart_of_accounts for an expense account whose name
-         contains a keyword from the description (e.g. "home" + "rent" -> an
-         account named "Home Rent" if present).
-      2. Fall back to the keyword map.
-      3. Derive the account name from the description itself (e.g. "laptop rent"
-         -> "Laptop Rent"), preferring the user's own wording over a hardcoded
-         "Office Rent".
+      1. Exact match: a chart expense account whose NAME matches the full
+         description (e.g. "Home Rent" exists and user says "paid home rent").
+      2. Chart descriptor+category match: account name contains both the category
+         keyword and a descriptor word (e.g. "Rent - Home", "Electricity - Office").
+      3. Category-only chart match when the description carries no descriptor
+         (e.g. plain "rent" -> the chart's rent account).
+      4. Derive from the user's own wording when no chart account fits (e.g.
+         "home rent" -> "6000-Home Rent"), preserving distinct sub-accounts
+         instead of forcing everything into "Office Rent".
+      5. Last resort: the keyword map for the category, else Miscellaneous.
+
+    Uses the user's wording first, the seed chart second, the keyword map last.
     """
     desc_lower = description.lower()
+
+    # Clean the description: drop leading verbs and stopwords so "paid home rent"
+    # becomes the descriptor phrase "home rent".
+    words = desc_lower.replace("paid", "").replace("purchase", "").replace("bought", "").split()
+    content_words = [
+        w for w in words
+        if w.isalpha() and len(w) > 2
+        and w not in ("the", "with", "for", "and", "cash", "bank", "today", "yesterday", "now")
+    ]
+    phrase = " ".join(content_words)
 
     # Find the category keyword (rent, salary, utilities, ...) present in description
     category = None
@@ -73,47 +88,49 @@ def _categorize_description(description: str, db: Session) -> str:
             category = keyword
             break
 
-    if category:
-        descriptor_words = [
-            w for w in desc_lower
-            .replace("paid", "").replace("purchase", "").replace("bought", "").split()
-            if w.isalpha() and len(w) > 2
-            and w not in (category, "the", "with", "for", "and", "cash", "bank")
-        ]
-        chart_accounts = db.query(ChartOfAccount).filter(
-            ChartOfAccount.account_type == "expense"
-        ).all()
+    chart_accounts = db.query(ChartOfAccount).filter(
+        ChartOfAccount.account_type == "expense"
+    ).all()
 
-        # 1. Descriptor + category exact match in chart (e.g. "Home Rent" exists)
+    if category:
+        # 1. Exact chart-name match against the cleaned phrase (order-insensitive).
         for acc in chart_accounts:
-            acc_lower = acc.account_name.lower()
-            if category in acc_lower and any(d in acc_lower for d in descriptor_words):
+            acc_words = set(acc.account_name.lower().split())
+            if acc_words and acc_words.issubset(content_words):
                 return acc.account_code
 
-        # 2. Category-only chart match ONLY when no descriptor word present
-        #    (e.g. plain "rent" -> the chart's rent account)
-        if not descriptor_words:
+        # 2. Descriptor + category match in chart (e.g. "Home Rent" exists).
+        for acc in chart_accounts:
+            acc_lower = acc.account_name.lower()
+            if category in acc_lower and any(d in acc_lower for d in content_words):
+                return acc.account_code
+
+        # 3. Category-only chart match ONLY when no descriptor word present.
+        if not content_words:
             for acc in chart_accounts:
                 if category in acc.account_name.lower():
                     return acc.account_code
 
-        # 3. Derive the account from the user's own wording - this preserves
-        #    "home rent" / "laptop rent" as distinct sub-accounts instead of
-        #    forcing everything into "Office Rent". Code prefix from the chart
-        #    account for the category if one exists, else the keyword map.
+        # 4. Derive the account from the user's own wording. Code prefix from
+        #    the chart account for the category if one exists, else the keyword map.
         mapped = EXPENSE_ACCOUNTS.get(category)
         if mapped:
             prefix = mapped.split("-")[0]
-            # Use chart account code if a category account exists
             for acc in chart_accounts:
                 if category in acc.account_name.lower():
                     prefix = acc.account_code.split("-")[0]
                     break
-            if descriptor_words:
-                derived_name = " ".join(descriptor_words).title()
+            if content_words:
+                derived_name = " ".join(dict.fromkeys(content_words)).title()
                 return f"{prefix}-{derived_name}"
             return mapped
 
+    # 5. No category keyword: fall back to exact/first chart match on the phrase,
+    #    else Miscellaneous.
+    for acc in chart_accounts:
+        acc_words = set(acc.account_name.lower().split())
+        if acc_words and acc_words.issubset(content_words):
+            return acc.account_code
     return "7200-Miscellaneous"
 
 

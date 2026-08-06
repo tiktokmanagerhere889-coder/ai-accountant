@@ -22,6 +22,7 @@ from tool_registry import execute_tool
 # caller does not pass needs_approval=true. Mirrors the `approval: true` flags
 # in frontend/src/components/agentsData.ts.
 APPROVAL_REQUIRED_TOOLS = {
+    "process_receipt_image",
     "run_bank_reconciliation",
     "post_accrual_entry",
     "reconcile_vendor_statement",

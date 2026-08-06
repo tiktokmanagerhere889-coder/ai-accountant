@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { Send, Check, X, ShieldAlert, Loader2, Sparkles, Wand2, Plus, Trash2, MessageSquare } from "lucide-react";
+import { Send, Check, X, ShieldAlert, Loader2, Sparkles, Wand2, Plus, Trash2, MessageSquare, ImagePlus } from "lucide-react";
 
 interface ToolCallInfo {
   toolName: string;
@@ -106,8 +106,65 @@ export default function ChatPanel({ onTransactionLogged, fullPage = false }: Cha
     return `conv-${Date.now()}`;
   });
   const [conversations, setConversations] = useState<any[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+
+  // Send an image message (receipt/query image) as an attachment to /chat.
+  const sendImage = async (file: File) => {
+    if (loading) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = String(reader.result || "").split(",")[1] || "";
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: "user",
+          text: `📷 ${file.name}${file.type.startsWith("image/") ? "" : " (attachment)"}`,
+        },
+      ]);
+      setLoading(true);
+      try {
+        const response = await axios.post(
+          `${apiBase}/chat`,
+          {
+            message: "",
+            conversation_id: conversationId,
+            image: { data: base64, filename: file.name },
+          },
+          { timeout: 60000 }
+        );
+        const data = response.data;
+        if (data.conversation_id) {
+          setConversationId(data.conversation_id);
+          localStorage.setItem("chat-conversation-id", data.conversation_id);
+        }
+        const toolCalls = (data.tool_calls?.length ? data.tool_calls : extractToolCalls(data.response)) as ToolCallInfo[];
+        setMessages((prev) => [
+          ...prev,
+          { sender: "ai", text: cleanMarkdownJSON(data.response), toolCalls: toolCalls.length ? toolCalls : undefined },
+        ]);
+        if (data.response.includes("JE-")) onTransactionLogged?.();
+      } catch (error: any) {
+        console.error(error);
+        setMessages((prev) => [
+          ...prev,
+          { sender: "ai", text: `Error processing image: ${error.response?.data?.detail || error.message || "Unknown error"}` },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      sendImage(file);
+      e.target.value = "";
+    }
+  };
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -521,11 +578,27 @@ export default function ChatPanel({ onTransactionLogged, fullPage = false }: Cha
       {/* Input */}
       <div className="p-3 border-t border-gray-200 dark:border-gray-800 flex gap-2">
         <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/png,image/jpeg,.png,.jpg,.jpeg"
+          className="hidden"
+          onChange={handleFileSelect}
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={loading}
+          aria-label="Attach receipt image"
+          title="Upload receipt image"
+          className="p-2.5 rounded bg-gray-200/70 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-accent-light/15 hover:text-accent-light transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <ImagePlus className="w-4 h-4" />
+        </button>
+        <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSend()}
-          placeholder="Ask AI Accountant..."
+          placeholder="Ask AI Accountant... (or attach a receipt)"
           className="flex-1 px-3 py-2 text-sm rounded bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-light focus:border-accent-light"
         />
         <button
