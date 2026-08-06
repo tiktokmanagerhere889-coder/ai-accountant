@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from intent_router import _extract_amount, parse_petty_cash
+from intent_router import _extract_amount, parse_petty_cash, _params_journal_entry
 
 # Tools that write to the DB and benefit from slot-filling when fields are missing.
 WRITE_TOOLS = {
@@ -76,19 +76,25 @@ def describe_missing(tool_name: str, params: dict) -> Optional[str]:
             )
         return None
     if tool_name == "create_journal_entry":
-        # Needs debit/credit accounts + amount. The router passes only description.
-        desc = params.get("description", "")
-        amount = _extract_amount(desc)
-        if not amount:
+        # Needs debit/credit accounts + amounts. The router parses them when
+        # present ("debiting 6000-Office Rent 50000 and crediting 1000-Cash 50000"),
+        # otherwise ask for what's missing.
+        missing: list[str] = []
+        if not params.get("debit_account"):
+            missing.append("the debit account (e.g. Office Rent)")
+        if not params.get("debit_amount"):
+            missing.append("the debit amount")
+        if not params.get("credit_account"):
+            missing.append("the credit account (e.g. Cash)")
+        if not params.get("credit_amount"):
+            missing.append("the credit amount")
+        if missing:
             return (
-                "To post a journal entry I need: the amount, the debit account, "
-                "and the credit account. What are they? (e.g. 50000 debit Office Rent, "
-                "credit Cash)"
+                "To post a journal entry I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + "\n(e.g. debit Office Rent 50000, credit Cash 50000)"
             )
-        return (
-            f"Almost there — which accounts should I debit and credit for {amount}? "
-            "(e.g. debit Office Rent, credit Cash)"
-        )
+        return None
     if tool_name == "manage_petty_cash":
         parsed = parse_petty_cash(str(params.get("description", "") or ""))
         missing: list[str] = []
@@ -136,6 +142,14 @@ def merge_answer(pending: dict, answer: str) -> dict:
         params = {**params, **parsed}
         params["description"] = merged
         return params
+    if tool_name == "create_journal_entry":
+        # Re-parse the full merged message so "debit Office Rent 50000, credit
+        # Cash 50000" fills the account/amount fields, not just the description.
+        merged = f"{description} {answer.strip()}".strip() if answer else description
+        parsed = _params_journal_entry(merged)
+        params = {**params, **parsed}
+        params["description"] = merged
+        return params
     if tool_name == "manage_contact":
         params["description"] = answer.strip()
     return params
@@ -151,8 +165,14 @@ def is_complete(tool_name: str, params: dict) -> bool:
             return False
         return True
     if tool_name == "create_journal_entry":
-        # Router provides description/posted_date; a real amount is required.
-        return bool(_extract_amount(params.get("description", "")))
+        # Need the debit + credit accounts AND amounts, not just any number in
+        # the message (an account code like "6000-" was being read as the amount).
+        return bool(
+            params.get("debit_account")
+            and params.get("debit_amount")
+            and params.get("credit_account")
+            and params.get("credit_amount")
+        )
     if tool_name == "manage_petty_cash":
         # Require the pieces the implementation needs: an action + a fund.
         if not params.get("action"):

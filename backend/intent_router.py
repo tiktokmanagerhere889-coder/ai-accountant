@@ -216,6 +216,167 @@ def _params_record_transaction(text: str) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Journal entry (Agent 2) natural-language parsing
+# ---------------------------------------------------------------------------
+
+_ACCOUNT_ALIASES = {
+    "cash": "1000-Cash",
+    "bank": "1100-Bank",
+    "rent": "6000-Office Rent",
+    "office rent": "6000-Office Rent",
+    "salary": "6100-Salary",
+    "wage": "6100-Salary",
+    "utilities": "6200-Utilities",
+    "electric": "6200-Utilities",
+    "electricity": "6200-Utilities",
+    "office supplies": "6300-Office Supplies",
+    "supplies": "6300-Office Supplies",
+    "stationery": "6300-Office Supplies",
+    "travel": "6400-Travel",
+    "transport": "6400-Travel",
+    "fuel": "6400-Travel",
+    "meals": "6500-Meals",
+    "entertainment": "6600-Entertainment",
+    "advertising": "6700-Advertising",
+    "insurance": "6800-Insurance",
+    "maintenance": "6900-Maintenance",
+    "repair": "6900-Maintenance",
+    "tax": "7000-Tax",
+    "professional fees": "7100-Professional Fees",
+    "professional fee": "7100-Professional Fees",
+    "consultant": "7100-Professional Fees",
+    "miscellaneous": "7200-Miscellaneous",
+    "accounts receivable": "1200-Accounts Receivable",
+    "accounts payable": "2000-Payables",
+    "revenue": "4000-Revenue",
+    "sales": "4000-Revenue",
+    "service income": "4100-Service Income",
+}
+
+# A journal entry like: "debiting 6000-Office Rent 50000 and crediting 1000-Cash 50000"
+# or "debit Office Rent 50000, credit Cash 50000".
+_JOURNAL_DEBIT_RE = re.compile(
+    r"(?:debit(?:ing)?|dr)\b[\s:=-]*([0-9A-Za-z&.\- ]+?)\s+(\d[\d,]*(?:\.\d{1,2})?)",
+    re.I,
+)
+_JOURNAL_CREDIT_RE = re.compile(
+    r"(?:credit(?:ing)?|cr)\b[\s:=-]*([0-9A-Za-z&.\- ]+?)\s+(\d[\d,]*(?:\.\d{1,2})?)",
+    re.I,
+)
+
+
+def _resolve_account_code(name: str) -> Optional[str]:
+    """Resolve a possibly name-only account reference to 'code-Name'.
+
+    - Already coded ('6000-Office Rent') -> unchanged.
+    - Plain name ('office rent', 'cash') -> alias map, else derive 'code-Name'
+      from the category prefix (rent=6..., cash=1...).
+    """
+    name = (name or "").strip().rstrip("- ").strip()
+    if not name:
+        return None
+    if re.match(r"^\d+-", name):
+        return name
+    lower = name.lower()
+    if lower in _ACCOUNT_ALIASES:
+        return _ACCOUNT_ALIASES[lower]
+    # Substring alias: "office rent" matches the rent key.
+    for key, code in _ACCOUNT_ALIASES.items():
+        if key in lower:
+            return code
+    # Default expense prefix; keep the user's wording as the account name.
+    prefix = "6"
+    if any(k in lower for k in ("cash", "bank", "receivable")):
+        prefix = "1"
+    elif any(k in lower for k in ("payable", "loan")):
+        prefix = "2"
+    elif any(k in lower for k in ("revenue", "income", "sale")):
+        prefix = "4"
+    return f"{prefix}-{name.title()}"
+
+
+def _params_journal_entry(text: str) -> dict:
+    """Parse debit/credit accounts + amounts from a journal-entry message.
+
+    Handles "debiting X 50000 and crediting Y 50000" and
+    "debit X 50000, credit Y 50000". Falls back to _params_record_transaction
+    when no structured debit/credit is present (slot-fill asks the user).
+    """
+    m = _JOURNAL_DEBIT_RE.search(text)
+    if not m:
+        return _params_record_transaction(text)
+    debit_acct = _resolve_account_code(m.group(1))
+    debit_amt = m.group(2).replace(",", "")
+    credit_acct = None
+    credit_amt = None
+    c = _JOURNAL_CREDIT_RE.search(text[m.end():])
+    if c:
+        credit_acct = _resolve_account_code(c.group(1))
+        credit_amt = c.group(2).replace(",", "")
+    params = {
+        "description": text,
+        "posted_date": _extract_date(text) or date.today(),
+    }
+    if debit_acct and debit_amt:
+        params["debit_account"] = debit_acct
+        params["debit_amount"] = debit_amt
+    if credit_acct and credit_amt:
+        params["credit_account"] = credit_acct
+        params["credit_amount"] = credit_amt
+    return params
+
+
+# ---------------------------------------------------------------------------
+# Fixed asset (Agent 2) natural-language parsing
+# ---------------------------------------------------------------------------
+
+_FIXED_ASSET_NOUNS = [
+    "truck", "vehicle", "van", "car", "machinery", "machine", "equipment",
+    "computer", "laptop", "server", "furniture", "building", "land",
+    "generator", "furnace", "boiler", "fixture",
+]
+
+# "bought a delivery truck for 2M", "purchased new laptop", "add a fixed asset"
+_FIXED_ASSET_RE = re.compile(
+    r"(?:\b(?:bought|purchased|purchase|acquired|invested\s+in|added|registered|capitalized)\b"
+    r"|\bfixed\s+asset\b|\badd\s+asset\b|\bcategorize\s+asset\b)"
+    r".{0,50}?"
+    r"\b(?:truck|vehicle|van|car|machinery|machine|equipment|computer|laptop|server|furniture|building|land|generator|furnace|boiler|fixture)\b",
+    re.I,
+)
+
+
+def _is_fixed_asset_intent(text: str) -> bool:
+    t = text.lower()
+    if "fixed asset" in t or "add asset" in t or "categorize asset" in t or "depreciation scheme" in t:
+        return True
+    return bool(_FIXED_ASSET_RE.search(text))
+
+
+def _params_fixed_asset(text: str) -> dict:
+    """Extract asset_name / purchase_cost / purchase_date from chat."""
+    cost = _extract_amount(text)
+    asset_name = None
+    for noun in _FIXED_ASSET_NOUNS:
+        m = re.search(r"\b" + re.escape(noun) + r"\b", text, re.I)
+        if m:
+            prefix = text[: m.start()]
+            words = [
+                w for w in re.findall(r"[A-Za-z]+", prefix)
+                if w.lower() not in ("we", "i", "bought", "purchased", "purchase", "acquired", "a", "an", "the", "our", "my", "for", "of", "new", "us", "capital", "expense")
+            ]
+            asset_name = " ".join(words[-2:] + [noun]).title()
+            break
+    if not asset_name:
+        asset_name = (text[:40].strip() or "Fixed Asset").title()
+    return {
+        "asset_name": asset_name,
+        "purchase_cost": cost or "1000000",
+        "purchase_date": _extract_date(text) or date.today(),
+    }
+
+
+# ---------------------------------------------------------------------------
 # Petty cash natural-language parsing
 # ---------------------------------------------------------------------------
 
@@ -293,7 +454,7 @@ ROUTES: list[tuple[list[str], str, callable]] = [
     (["petty cash"], "manage_petty_cash", _params_petty_cash),
 
     # --- Ledger ---
-    (["journal entry", "create journal", "post journal"], "create_journal_entry", _params_record_transaction),
+    (["journal entry", "create journal", "post journal", "debit ", "credit ", "journalise", "journalize"], "create_journal_entry", _params_journal_entry),
     (["general ledger", "ledger", "show ledger"], "get_general_ledger", _params_dates),
     (["chart of account", "suggest chart", "chart of accounts"], "suggest_chart_of_accounts", lambda t: {"business_type": _extract_business_type(t) or "service_based"}),
     (["ap subledger", "accounts payable", "payable", "ap sub-ledger", "vendor ledger"], "get_ap_subledger", _params_dates),
@@ -393,6 +554,11 @@ def _kw_in(kw: str, msg: str) -> bool:
 def route_tool(message: str) -> Optional[tuple[str, dict]]:
     """Match a message to a (tool_name, params) tuple, or None if no match."""
     msg = message.lower().strip()
+    # Asset purchases ("we bought a delivery truck for 2M") must win over the
+    # generic "bought " record_transaction route so they reach the fixed-asset
+    # categorizer instead of being treated as an ordinary expense.
+    if _is_fixed_asset_intent(msg):
+        return "categorize_fixed_asset", _params_fixed_asset(message)
     has_unpaid = "unpaid" in msg
     for keywords, tool_name, extractor in ROUTES:
         for kw in keywords:
