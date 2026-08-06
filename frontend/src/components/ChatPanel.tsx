@@ -26,9 +26,18 @@ interface Message {
   };
 }
 
+interface ApprovalResolvedEvent {
+  approvalId: string;
+  toolName: string;
+  message?: string;
+  result?: any;
+  formatted_result?: string | null;
+}
+
 interface ChatPanelProps {
   onTransactionLogged?: () => void;
   fullPage?: boolean;
+  externalApproval?: ApprovalResolvedEvent | null;
 }
 
 // Quick-suggestion chips shown before any message is sent
@@ -92,7 +101,7 @@ function followUpSuggestions(userMessage: string, toolCalls: ToolCallInfo[]): st
   return pool.slice(0, 3);
 }
 
-export default function ChatPanel({ onTransactionLogged, fullPage = false }: ChatPanelProps) {
+export default function ChatPanel({ onTransactionLogged, fullPage = false, externalApproval = null }: ChatPanelProps) {
   const [messages, setMessages] = useState<Message[]>([
     {
       sender: "ai",
@@ -257,6 +266,37 @@ export default function ChatPanel({ onTransactionLogged, fullPage = false }: Cha
       setLoading(false);
     }
   };
+
+  // When an approval is resolved from the Notifications panel (not the inline
+  // chat card), append the result to the active chat thread so it shows in
+  // chat, not only in the panel's history. Consume each event exactly once.
+  const consumedExternal = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    if (!externalApproval) return;
+    if (consumedExternal.current.has(externalApproval.approvalId)) return;
+    consumedExternal.current.add(externalApproval.approvalId);
+    const formatted =
+      externalApproval.formatted_result ||
+      (externalApproval.result && typeof externalApproval.result === "object"
+        ? (externalApproval.result as any).formatted_result
+        : null);
+    const resultBlock =
+      formatted && typeof formatted === "string"
+        ? `\n\n${formatted}`
+        : externalApproval.result && typeof externalApproval.result === "object"
+          ? `\n\n${JSON.stringify(externalApproval.result, null, 2)}`
+          : "";
+    setMessages((prev) => [
+      ...prev,
+      {
+        sender: "ai",
+        text: `✅ Approved action: ${externalApproval.toolName}.\n\n${
+          externalApproval.message || "The action was approved and executed."
+        }${resultBlock}`,
+      },
+    ]);
+    onTransactionLogged?.();
+  }, [externalApproval]);
 
   // Load conversation list once (for the full-page ChatGPT-style sidebar)
   useEffect(() => {

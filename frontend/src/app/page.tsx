@@ -11,7 +11,7 @@ import DirectFeatures from "@/components/DirectFeatures";
 import SettingsModal from "@/components/SettingsModal";
 import AgentCards, { downloadExport } from "@/components/AgentCards";
 import ApprovalBadge from "@/components/ApprovalBadge";
-import ApprovalsPanel from "@/components/ApprovalsPanel";
+import ApprovalsPanel, { type ApprovalResolvedEvent } from "@/components/ApprovalsPanel";
 import { AGENTS_DATA } from "@/components/agentsData";
 
 class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasError: boolean}> {
@@ -46,6 +46,9 @@ export default function Home() {
   const [approvalsOpen, setApprovalsOpen] = useState(false);
   const [pendingApprovalCount, setPendingApprovalCount] = useState(0);
   const [approvalRefreshTick, setApprovalRefreshTick] = useState(0);
+  // Last approval resolved from the Notifications panel — forwarded to ChatPanel
+  // so the result also appears in the chat thread (not only panel history).
+  const [lastApproval, setLastApproval] = useState<ApprovalResolvedEvent | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -196,6 +199,7 @@ export default function Home() {
           <main className="flex-1 overflow-hidden flex">
             <ChatPanel
               fullPage
+              externalApproval={lastApproval}
               onTransactionLogged={() => setRefreshTrigger((prev) => prev + 1)}
             />
           </main>
@@ -239,6 +243,7 @@ export default function Home() {
         open={approvalsOpen}
         onClose={() => setApprovalsOpen(false)}
         onPendingCountChange={setPendingApprovalCount}
+        onApproved={(evt) => setLastApproval(evt)}
       />
     </div>
     </ErrorBoundary>

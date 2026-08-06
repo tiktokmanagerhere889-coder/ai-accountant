@@ -30,10 +30,19 @@ interface ApprovalRecord {
   formatted_result?: string | null;
 }
 
+export interface ApprovalResolvedEvent {
+  approvalId: string;
+  toolName: string;
+  message?: string;
+  result?: any;
+  formatted_result?: string | null;
+}
+
 interface ApprovalsPanelProps {
   open: boolean;
   onClose: () => void;
   onPendingCountChange?: (count: number) => void;
+  onApproved?: (evt: ApprovalResolvedEvent) => void;
 }
 
 const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -74,7 +83,7 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export default function ApprovalsPanel({ open, onClose, onPendingCountChange }: ApprovalsPanelProps) {
+export default function ApprovalsPanel({ open, onClose, onPendingCountChange, onApproved }: ApprovalsPanelProps) {
   const [approvals, setApprovals] = useState<ApprovalRecord[]>([]);
   const [history, setHistory] = useState<ApprovalRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -140,12 +149,22 @@ export default function ApprovalsPanel({ open, onClose, onPendingCountChange }: 
     setActioning((prev) => ({ ...prev, [approval.approval_id]: "approving" }));
     setError(null);
     try {
-      await axios.post(
+      const res = await axios.post(
         `${apiBase}/approvals/${approval.approval_id}/approve`,
         { edited_params: editedParams },
         { timeout: 60000 }
       );
       await refresh();
+      // Bridge to the active chat so the result also appears as a chat message,
+      // not only in this panel's history.
+      const payload = res.data;
+      onApproved?.({
+        approvalId: approval.approval_id,
+        toolName: approval.tool_name,
+        message: payload?.message,
+        result: payload?.result,
+        formatted_result: payload?.approval?.formatted_result ?? payload?.formatted_result ?? null,
+      });
     } catch (err: any) {
       setError(err.response?.data?.detail || err.message || "Approval failed");
     } finally {
