@@ -362,7 +362,7 @@ async def _finish_routed(tool_name: str, result, message: str, conv_id: Optional
     """Turn an executed tool's result into a ChatResponse (approval queue /
     LLM polish / tool_calls). Shared by the direct route and slot-fill paths."""
     from intent_router import is_approval_required
-    from result_formatter import format_tool_result
+    from result_formatter import format_tool_result, has_dedicated_formatter
 
     tool_call = _tool_call_info(tool_name, result, message)
     text = format_tool_result(tool_name, result)
@@ -370,14 +370,19 @@ async def _finish_routed(tool_name: str, result, message: str, conv_id: Optional
     # tool so answers read naturally, but a verification step rejects
     # output that introduces numbers absent from the real result — so
     # Groq can reformat but never change the values.
-    try:
-        import json as _json
-        raw_json = _json.dumps(result, default=str) if isinstance(result, dict) else str(result)
-        polished = await _format_with_llm(message, text, raw_json)
-        if polished:
-            text = polished
-    except Exception:
-        pass
+    #
+    # Tools with a dedicated deterministic formatter (has_dedicated_formatter)
+    # are skipped — the deterministic text is already readable and Groq has
+    # hallucinated numbers over correct data in the past.
+    if not has_dedicated_formatter(tool_name):
+        try:
+            import json as _json
+            raw_json = _json.dumps(result, default=str) if isinstance(result, dict) else str(result)
+            polished = await _format_with_llm(message, text, raw_json)
+            if polished:
+                text = polished
+        except Exception:
+            pass
     return ChatResponse(response=text, tool_calls=[tool_call], conversation_id=conv_id)
 
 

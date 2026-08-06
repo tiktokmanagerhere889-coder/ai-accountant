@@ -102,6 +102,37 @@ def _fmt_aging(result: dict) -> str:
     return f"Aging report as of {result.get('as_of_date')}: total outstanding {_money(result.get('total_outstanding'))}."
 
 
+def _fmt_general_ledger(result: dict) -> str:
+    """Plain-English general ledger summary with per-account rows.
+
+    The result is a period + list of account rows (code/name/type, opening,
+    debits, credits, net movement, closing). Show each account on its own line
+    with the closing balance, then the period totals.
+    """
+    accounts = result.get("accounts") or []
+    fd = result.get("period_from") or result.get("from_date") or "start"
+    td = result.get("period_to") or result.get("to_date") or "end"
+    if not accounts:
+        return f"General ledger ({fd} to {td}): no account activity found."
+    lines = []
+    for a in accounts[:15]:
+        name = a.get("account_name") or a.get("account_code") or "?"
+        code = a.get("account_code")
+        label = f"{code} {name}".strip()
+        lines.append(
+            f"  - {label}: opening {_money(a.get('opening_balance', 0))}, "
+            f"dr {_money(a.get('total_debits', 0))}, cr {_money(a.get('total_credits', 0))}, "
+            f"closing {_money(a.get('closing_balance', a.get('net_movement', 0)))}"
+        )
+    more = f"\n  ... and {len(accounts) - 15} more accounts" if len(accounts) > 15 else ""
+    total_dr = result.get("total_debits")
+    total_cr = result.get("total_credits")
+    totals = ""
+    if total_dr is not None or total_cr is not None:
+        totals = f"\nTotals: {_money(total_dr)} debits, {_money(total_cr)} credits."
+    return f"General ledger ({fd} to {td}), {len(accounts)} account(s):\n" + "\n".join(lines) + more + totals
+
+
 def _fmt_anomaly(result: dict) -> str:
     n = result.get("total_anomalies", 0)
     status = result.get("status", "clean")
@@ -204,6 +235,7 @@ _FORMATTERS = {
     "generate_cash_flow_statement": _fmt_cash_flow,
     "get_ar_aging_report": _fmt_aging,
     "get_ap_aging_report": _fmt_aging,
+    "get_general_ledger": _fmt_general_ledger,
     "detect_anomaly_transactions": _fmt_anomaly,
     "calculate_withholding_tax": _fmt_withholding,
     "calculate_eobi_deductions": _fmt_eobi,
