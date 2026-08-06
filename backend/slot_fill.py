@@ -31,6 +31,7 @@ from intent_router import (
     _params_cheque,
     _params_lcbg,
     _params_bank_charges,
+    _params_record_bank_transaction,
 )
 
 # Tools that write to the DB and benefit from slot-filling when fields are missing.
@@ -159,6 +160,18 @@ def describe_missing(tool_name: str, params: dict) -> Optional[str]:
                 "To manage a contact I need:\n"
                 + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
                 + "\n(e.g. add vendor AL-MADINA GENERAL STORE)"
+            )
+        return None
+    if tool_name == "record_bank_transaction":
+        # Needs amount + type + account. Router defaults account to 1100-Bank
+        # and type to debit; only amount is truly required. A complete message
+        # must return None (NOT the generic question) so it executes.
+        if not params.get("amount"):
+            return (
+                "I can record that bank transaction. I need a couple more details:\n"
+                "1. What amount? (e.g. 50000)\n"
+                "2. Is it a debit or a credit?\n"
+                "3. What bank account? (e.g. 1100-Bank)"
             )
         return None
     if tool_name == "run_bank_reconciliation":
@@ -317,6 +330,12 @@ def merge_answer(pending: dict, answer: str) -> dict:
         params = {**params, **parsed}
         params["description"] = merged
         return params
+    if tool_name == "record_bank_transaction":
+        merged = f"{description} {answer.strip()}".strip() if answer else description
+        parsed = _params_record_bank_transaction(merged)
+        params = {**params, **parsed}
+        params["description"] = merged
+        return params
     return params
 
 
@@ -356,6 +375,9 @@ def is_complete(tool_name: str, params: dict) -> bool:
             and params.get("contact_type")
             and params.get("contact_name")
         )
+    if tool_name == "record_bank_transaction":
+        # Amount is the only truly required field (type/account have defaults).
+        return bool(params.get("amount"))
     if tool_name == "run_bank_reconciliation":
         return bool(
             params.get("bank_account_id")
