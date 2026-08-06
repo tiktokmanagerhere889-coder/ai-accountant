@@ -198,6 +198,15 @@ def approve_or_execute(
         entry.edited_params = json.dumps(edited_params, default=str)
     params_to_run = edited_params if edited_params is not None else original_params
 
+    # Safety net: filing tools refuse to run without confirm=True (they never
+    # auto-submit - the human approval IS the consent). If a queued filing call
+    # lacks the flag (e.g. queued via the LLM orchestrator before the router's
+    # _params_filing_* parsers, or via direct /tools/execute), inject it so the
+    # approval succeeds instead of raising ValueError("confirm=True required").
+    if entry.tool_name in ("prepare_sales_tax_filing", "prepare_income_tax_filing"):
+        params_to_run = dict(params_to_run)
+        params_to_run["confirm"] = True
+
     exc: Optional[Exception] = None
     result: Any = None
     try:

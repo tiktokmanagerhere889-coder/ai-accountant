@@ -335,7 +335,9 @@ def _fmt_forecast(result: dict) -> str:
 
 
 def _fmt_filing(result: dict) -> str:
-    return f"{result.get('message') or result.get('summary') or 'Filing prepared.'} (filing ID {result.get('filing_id') or result.get('report_id')})"
+    filing_id = result.get("filing_id") or result.get("report_id")
+    id_s = f"\nFiling ID: {filing_id}" if filing_id else ""
+    return f"{result.get('message') or result.get('summary') or 'Filing prepared.'}{id_s}"
 
 
 def _fmt_amt(result: dict) -> str:
