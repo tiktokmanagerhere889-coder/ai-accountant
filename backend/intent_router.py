@@ -443,6 +443,59 @@ def _params_petty_cash(text: str) -> dict:
     return parse_petty_cash(text)
 
 
+def _params_manage_contact(text: str) -> dict:
+    """Extract action / contact_type / contact_name / phone / email / tax_id
+    from a contact-management message, e.g. "add vendor AL-MADINA, phone 0300-1234567".
+
+    Only fields actually found are included; slot-fill asks for the rest.
+    """
+    t = text.strip()
+    if not t:
+        return {}
+    tl = t.lower()
+    out: dict = {}
+
+    # Action precedence: delete > update > search > add (default).
+    if re.search(r"\b(delete|remove|del)\b", tl):
+        out["action"] = "delete"
+    elif re.search(r"\b(update|change|edit|modify)\b", tl):
+        out["action"] = "update"
+    elif re.search(r"\b(search|find|lookup|list)\b", tl):
+        out["action"] = "search"
+    else:
+        out["action"] = "add"
+
+    # Contact type.
+    if re.search(r"\b(vendor|supplier)\b", tl):
+        out["contact_type"] = "vendor"
+    elif re.search(r"\b(customer|client|buyer)\b", tl):
+        out["contact_type"] = "customer"
+
+    # Contact name: capture the token(s) after vendor/customer/contact, up to
+    # a comma, a phone/email marker, or the end of the string.
+    m = re.search(
+        r"(?:vendor|supplier|customer|client|contact)\s+"
+        r"([A-Za-z0-9][A-Za-z0-9 .&'\-]{1,79})",
+        t,
+        re.IGNORECASE,
+    )
+    if m:
+        out["contact_name"] = m.group(1).strip().rstrip(".,").strip()
+
+    # Optional fields: phone, email, tax id.
+    pm = re.search(r"(\+?\d[\d\s\-]{7,}\d)", t)
+    if pm:
+        out["phone"] = pm.group(1).strip()
+    em = re.search(r"([\w.+-]+@[\w.-]+\.[A-Za-z]{2,})", t)
+    if em:
+        out["email"] = em.group(1)
+    tm = re.search(r"\b(?:tax\s*id|ntn)\s*[:#]?\s*([A-Za-z0-9\-]{5,20})", t, re.IGNORECASE)
+    if tm:
+        out["tax_id"] = tm.group(1)
+
+    return out
+
+
 # Routes: each is (keywords: list, tool_name: str, extractor: callable)
 ROUTES: list[tuple[list[str], str, callable]] = [
     # --- Daily Entry ---
@@ -461,7 +514,7 @@ ROUTES: list[tuple[list[str], str, callable]] = [
     (["ar subledger", "accounts receivable", "receivable", "ar sub-ledger", "customer ledger"], "get_ar_subledger", _params_dates),
     (["payroll ledger", "payroll"], "get_payroll_ledger", _params_dates),
     (["fixed asset", "depreciation scheme", "categorize asset", "add asset"], "categorize_fixed_asset", _params_record_transaction),
-    (["add vendor", "new vendor", "vendor master", "add customer", "new customer", "customer master", "manage contact", "add contact"], "manage_contact", _params_record_transaction),
+    (["add vendor", "new vendor", "vendor master", "add customer", "new customer", "customer master", "manage contact", "add contact", "add supplier", "find vendor", "search vendor", "search customer", "update vendor", "update customer", "delete vendor", "delete customer"], "manage_contact", _params_manage_contact),
 
     # --- Reconciliation ---
     (["bank reconciliation", "reconcile bank", "reconcile statement"], "run_bank_reconciliation", _params_dates),

@@ -19,7 +19,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Optional
 
-from intent_router import _extract_amount, parse_petty_cash, _params_journal_entry
+from intent_router import _extract_amount, parse_petty_cash, _params_journal_entry, _params_manage_contact
 
 # Tools that write to the DB and benefit from slot-filling when fields are missing.
 WRITE_TOOLS = {
@@ -110,6 +110,24 @@ def describe_missing(tool_name: str, params: dict) -> Optional[str]:
                 + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
             )
         return None
+    if tool_name == "manage_contact":
+        # Needs action + contact_type + contact_name. Router parses them from
+        # natural phrasing ("add vendor AL-MADINA GENERAL STORE"), otherwise
+        # ask for what's missing.
+        missing: list[str] = []
+        if not params.get("action"):
+            missing.append("what you want to do (add, update, delete, or search a contact)")
+        if not params.get("contact_type"):
+            missing.append("whether it's a vendor or a customer")
+        if not params.get("contact_name"):
+            missing.append("the contact name")
+        if missing:
+            return (
+                "To manage a contact I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + "\n(e.g. add vendor AL-MADINA GENERAL STORE)"
+            )
+        return None
 
     # Other write tools: generic clarifying question.
     return (
@@ -151,7 +169,13 @@ def merge_answer(pending: dict, answer: str) -> dict:
         params["description"] = merged
         return params
     if tool_name == "manage_contact":
-        params["description"] = answer.strip()
+        # Re-parse the full merged message so "vendor AL-MADINA GENERAL STORE"
+        # fills contact_type/contact_name (plus phone/email/tax_id if given).
+        merged = f"{description} {answer.strip()}".strip() if answer else description
+        parsed = _params_manage_contact(merged)
+        params = {**params, **parsed}
+        params["description"] = merged
+        return params
     return params
 
 
@@ -183,4 +207,12 @@ def is_complete(tool_name: str, params: dict) -> bool:
         if params.get("action") in ("add_fund", "expense") and not params.get("amount"):
             return False
         return True
+    if tool_name == "manage_contact":
+        # Require action + contact_type + contact_name (all three are required
+        # by ManageContactInput). Without them the tool raises validation errors.
+        return bool(
+            params.get("action")
+            and params.get("contact_type")
+            and params.get("contact_name")
+        )
     return True
