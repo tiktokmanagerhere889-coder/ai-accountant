@@ -116,6 +116,17 @@ def test_related_party_parser():
     assert p["fiscal_year"] == 2026
 
 
+def test_related_party_route_beats_paid():
+    # The "paid " keyword in record_transaction_nl matches "paid to ABC Trading"
+    # and previously swallowed the flag into a junk journal entry. The "related
+    # party" guard must win.
+    msg = "flag JE-20260715-001 of 500000 paid to ABC Trading as a related party in fiscal year 2026"
+    tool, params = route_tool(msg)
+    assert tool == "flag_related_party_transaction", f"got {tool}"
+    assert params["entry_id"] == "JE-20260715-001"
+    assert params["counterparty_name"] == "ABC Trading"
+
+
 def test_cost_tools_in_write_tools():
     for t in (
         "calculate_standard_costing_variance",

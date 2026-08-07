@@ -1263,6 +1263,11 @@ def route_tool(message: str) -> Optional[tuple[str, dict]]:
     # check_bank_transactions route (its "bank statement" keyword matches first).
     if "reconcile" in msg and "bank statement" in msg:
         return "run_bank_reconciliation", _params_bank_reconciliation(message)
+    # "flag ... as a related party" must reach the related-party tool, not the
+    # Daily Entry record_transaction route (its "paid " keyword matches "paid to
+    # <name>" in the flag message and swallows the flag).
+    if "related party" in msg:
+        return "flag_related_party_transaction", _params_related_party(message)
     has_unpaid = "unpaid" in msg
     for keywords, tool_name, extractor in ROUTES:
         for kw in keywords:
