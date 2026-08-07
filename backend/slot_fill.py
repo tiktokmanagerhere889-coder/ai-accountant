@@ -43,6 +43,8 @@ from intent_router import (
     _params_provision,
     _params_related_party,
     _params_statutory_registers,
+    _params_system_preferences,
+    _params_system_task,
 )
 
 # Tools that write to the DB and benefit from slot-filling when fields are missing.
@@ -78,6 +80,10 @@ WRITE_TOOLS = {
     # Agent 8 (Audit & Registers): statutory-register writes need action +
     # register_type + date + description; never queue with only a description.
     "maintain_statutory_registers",
+    # Agent 10 (System Admin): write/approval tools. manage_system_preferences
+    # needs action (+ settings for update); schedule_system_task needs task_type.
+    "manage_system_preferences",
+    "schedule_system_task",
 }
 
 # In-memory pending intents: conversation_id -> PendingIntent dict
@@ -113,6 +119,11 @@ _COST_PARSE_TOOLS = {
 
 _AUDIT_PARSE_TOOLS = {
     "maintain_statutory_registers": _params_statutory_registers,
+}
+
+_SYSTEM_PARSE_TOOLS = {
+    "manage_system_preferences": _params_system_preferences,
+    "schedule_system_task": _params_system_task,
 }
 
 
@@ -466,6 +477,24 @@ def describe_missing(tool_name: str, params: dict) -> Optional[str]:
             )
         return None
 
+    if tool_name == "manage_system_preferences":
+        action = params.get("action")
+        if action == "update" and not params.get("settings"):
+            return (
+                "Which setting do you want to update? "
+                "\n(e.g. change company name to ABC Corp, set default currency to USD)"
+            )
+        if action == "reset" and not params.get("setting_key"):
+            return (
+                "Which setting do you want to reset? "
+                "\n(e.g. reset retention_days)"
+            )
+        return None
+
+    if tool_name == "schedule_system_task":
+        # task_type always defaults to backup; fine to proceed.
+        return None
+
     # Other write tools: generic clarifying question.
     return (
         "I need a bit more detail to complete that. Can you give me the amount, "
@@ -553,6 +582,15 @@ def merge_answer(pending: dict, answer: str) -> dict:
         # "add director register entry ..." fills action/register_type/date.
         merged = f"{description} {answer.strip()}".strip() if answer else description
         parser = _AUDIT_PARSE_TOOLS[tool_name]
+        parsed = parser(merged)
+        params = {**params, **parsed}
+        params["description"] = merged
+        return params
+    if tool_name in _SYSTEM_PARSE_TOOLS:
+        # Same for system-admin tools: re-parse the merged message so
+        # "change company name to ABC Corp" fills action + settings.
+        merged = f"{description} {answer.strip()}".strip() if answer else description
+        parser = _SYSTEM_PARSE_TOOLS[tool_name]
         parsed = parser(merged)
         params = {**params, **parsed}
         params["description"] = merged
@@ -703,4 +741,13 @@ def is_complete(tool_name: str, params: dict) -> bool:
             and params.get("entry_date")
             and (action == "view" or params.get("description"))
         )
+    if tool_name == "manage_system_preferences":
+        action = params.get("action")
+        if action == "update":
+            return bool(params.get("settings"))
+        if action == "reset":
+            return bool(params.get("setting_key"))
+        return bool(action)  # view
+    if tool_name == "schedule_system_task":
+        return bool(params.get("task_type"))
     return True

@@ -215,6 +215,70 @@ def _params_custom_report(text: str) -> dict:
     }
 
 
+_SETTING_ACTION_KEYWORDS = {
+    "view": "view", "show": "view", "display": "view", "list": "view", "what": "view",
+    "update": "update", "change": "update", "set": "update", "edit": "update", "add": "update",
+    "reset": "reset", "delete": "reset", "remove": "reset", "clear": "reset",
+}
+
+
+def _params_system_preferences(text: str) -> dict:
+    """Params for manage_system_preferences. action inferred (view/update/reset,
+    default view). For update, extract key=value or 'key to value' settings."""
+    t = text.lower()
+    action = next(
+        (v for k, v in _SETTING_ACTION_KEYWORDS.items() if re.search(rf"\b{k}\b", t)),
+        "view",
+    )
+    p: dict = {"action": action}
+    # Extract settings like 'company_name = ABC Corp' or 'company name to ABC Corp'
+    settings: dict[str, str] = {}
+    # strip leading verbs so 'change company name to X' -> key 'company name'
+    _VERBS = re.compile(
+        r"^(?:change|set|update|edit|add|modify|the|a|an)\s+", re.I
+    )
+    for m in re.finditer(r"([a-z][a-z_ ]{2,40}?)\s*(?:=|to)\s*([A-Za-z0-9][^,;.\n]{1,50})", t):
+        key = _VERBS.sub("", m.group(1).strip()).strip("_")  # strip verbs FIRST (on spaced text)
+        key = re.sub(r"\s+", "_", key).strip("_")
+        val = m.group(2).strip()
+        if key and key not in ("schedule", "scheduled", "backup", "usage", "system",
+                               "company_settings"):
+            settings[key] = val
+    if action in ("update", "reset"):
+        if settings:
+            p["settings"] = settings
+        # single-key setting names: 'update the retention days' -> retention_days
+        for kw in ("company_name", "fiscal_year_end", "default_currency", "default_timezone",
+                   "backup_enabled", "retention_days"):
+            if kw.replace("_", " ") in t or kw in t:
+                p["setting_key"] = kw
+                break
+    return p
+
+
+_TASK_TYPE_KEYWORDS = {
+    "backup": "backup", "export": "export_data", "data export": "export_data",
+    "maintenance": "maintenance", "cleanup": "cleanup", "clean up": "cleanup",
+    "purge": "cleanup",
+}
+
+
+def _params_system_task(text: str) -> dict:
+    """Params for schedule_system_task. task_type inferred (backup/export_data/
+    maintenance/cleanup, default backup)."""
+    t = text.lower()
+    task_type = next(
+        (v for k, v in _TASK_TYPE_KEYWORDS.items() if re.search(rf"\b{k}\b", t)),
+        "backup",
+    )
+    p: dict = {"task_type": task_type}
+    if "off-peak" in t or "off peak" in t or "off_peak" in t:
+        p["schedule_time"] = "off_peak"
+    elif "now" in t or "immediately" in t:
+        p["schedule_time"] = "now"
+    return p
+
+
 def _params_trial_balance(text: str) -> dict:
     return {"as_of_date": _extract_date(text) or date.today()}
 
@@ -1333,8 +1397,8 @@ ROUTES: list[tuple[list[str], str, callable]] = [
     # --- System Admin ---
     (["system status", "health check", "is everything working", "system health", "status check"], "check_system_status", _params_none),
     (["usage statistics", "usage stats", "usage analytics"], "get_usage_statistics", _params_dates),
-    (["system preference", "company setting", "system setting", "configuration"], "manage_system_preferences", _params_none),
-    (["schedule task", "schedule backup", "backup data", "system task", "maintenance"], "schedule_system_task", lambda t: {"task_type": "backup"}),
+    (["system preference", "company setting", "company name", "default currency", "fiscal year end", "backup enabled", "retention", "system setting", "configuration", "change setting", "update setting", "reset"], "manage_system_preferences", _params_system_preferences),
+    (["schedule task", "schedule backup", "backup data", "system task", "maintenance", "schedule"], "schedule_system_task", _params_system_task),
 ]
 
 

@@ -508,6 +508,78 @@ def _fmt_amt(result: dict) -> str:
     )
 
 
+def _fmt_system_status(result: dict) -> str:
+    """Plain-English system health summary."""
+    overall = result.get("overall_status")
+    head = f"System status: {overall.upper()}." if overall else "System status."
+    checks = result.get("checks") or []
+    lines = []
+    for c in checks[:10]:
+        if isinstance(c, dict):
+            latency = c.get("latency_ms")
+            lat_s = f" ({latency}ms)" if latency not in (None, 0, "0") else ""
+            lines.append(f"  - {c.get('name', '?')}: {c.get('status', '?')}{lat_s} — {c.get('detail', '')}")
+    if lines:
+        return head + "\n" + "\n".join(lines)
+    return result.get("summary") or head
+
+
+def _fmt_usage_stats(result: dict) -> str:
+    """Plain-English usage statistics summary."""
+    head = (
+        f"Usage statistics ({result.get('period', '')}): "
+        f"{result.get('total_requests', 0)} operations, "
+        f"{result.get('success_count', 0)} success, "
+        f"{result.get('failure_count', 0)} failures."
+    )
+    breakdown = result.get("breakdown") or []
+    lines = []
+    if isinstance(breakdown, list):
+        for b in breakdown[:8]:
+            if isinstance(b, dict):
+                lines.append(
+                    f"  - {b.get('dimension', '?')}: {b.get('requests', 0)} ops "
+                    f"({b.get('successes', 0)} ok / {b.get('failures', 0)} fail)"
+                )
+    recs = result.get("recommendations") or []
+    if lines:
+        head += "\n" + "\n".join(lines)
+    if recs:
+        head += "\n" + "\n".join(f"  > {r}" for r in recs[:3])
+    return head
+
+
+def _fmt_system_prefs(result: dict) -> str:
+    """Plain-English system preferences result."""
+    action = result.get("action_performed", "")
+    settings = result.get("settings") or {}
+    parts = []
+    if isinstance(settings, dict) and settings:
+        items = list(settings.items())[:10]
+        parts.extend(f"  - {k}: {v}" for k, v in items)
+    changed = result.get("changed_keys") or []
+    if action == "view":
+        head = f"System preferences ({len(settings)} setting(s)):"
+        if not parts:
+            head += "\n  (no settings configured)"
+    elif action == "reset":
+        head = f"Setting reset: {', '.join(changed) if changed else 'done'}."
+    else:
+        head = result.get("message") or f"Settings updated: {', '.join(changed) if changed else 'no changes'}."
+    if parts:
+        return head + "\n" + "\n".join(parts)
+    return head
+
+
+def _fmt_scheduled_task(result: dict) -> str:
+    """Plain-English scheduled-task confirmation."""
+    return (
+        f"Task {result.get('task_id')}: {result.get('task_type')} scheduled "
+        f"for {result.get('scheduled_for', 'now')}. "
+        f"Estimated completion: {result.get('estimated_completion', '')}."
+    )
+
+
 def _fmt_sales_tax_adjust(result: dict) -> str:
     """Plain-English sales-tax input/output adjustment summary."""
     refund = result.get("refund_amount")
@@ -608,6 +680,10 @@ _FORMATTERS = {
     "analyze_spending_patterns": _fmt_spending,
     "generate_custom_report": _fmt_custom_report,
     "generate_cost_cutting_recommendations": _fmt_cost_cutting,
+    "check_system_status": _fmt_system_status,
+    "get_usage_statistics": _fmt_usage_stats,
+    "manage_system_preferences": _fmt_system_prefs,
+    "schedule_system_task": _fmt_scheduled_task,
     "forecast_cash_flow": _fmt_forecast,
     "get_loan_debt_schedule": _fmt_loan,
     "prepare_income_tax_filing": _fmt_filing,
