@@ -83,6 +83,36 @@ def test_ratios_formatter():
     assert "1.8" in out
 
 
+def test_spending_formatter_real_keys():
+    """Match the actual AnalyzeSpendingPatternsOutput shape (period, total_spending,
+    CategorySpend.name/amount/percentage, insights)."""
+    out = format_tool_result("analyze_spending_patterns", {
+        "period": "2026-04-01 to 2026-06-30",
+        "total_spending": 977500,
+        "categories": [
+            {"name": "Operating Expenses", "amount": 977500, "percentage": 100.0, "count": 3},
+        ],
+        "insights": ["'Operating Expenses' is the largest expense category at 100.0% of total spending (977500)."],
+        "entry_count": 3,
+    })
+    assert "2026-04-01 to 2026-06-30" in out
+    assert "Operating Expenses" in out
+    assert "977,500" in out
+    assert "largest expense category" in out
+
+
+def test_cost_cutting_without_fiscal_year():
+    """Tool output has no fiscal_year key - must not render 'FY None'."""
+    out = format_tool_result("generate_cost_cutting_recommendations", {
+        "total_expenses": 977500,
+        "top_expense_categories": [{"name": "Operating Expenses", "amount": 977500, "percentage": 100.0}],
+        "recommendations": [{"area": "Operating Expenses", "potential_savings": 146625, "suggestion": "Review operational expenses", "priority": "high"}],
+        "estimated_total_savings": 146625,
+    })
+    assert "FY None" not in out
+    assert "146,625" in out
+
+
 if __name__ == "__main__":
     fns = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0

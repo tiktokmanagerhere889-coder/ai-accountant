@@ -410,16 +410,32 @@ def _fmt_ratios(result: dict) -> str:
 
 def _fmt_spending(result: dict) -> str:
     cats = result.get("categories") or result.get("items") or []
-    fd = result.get("from_date") or result.get("period_from") or "start"
-    td = result.get("to_date") or result.get("period_to") or "end"
+    period = result.get("period")
+    if not period:
+        fd = result.get("from_date") or result.get("period_from") or "start"
+        td = result.get("to_date") or result.get("period_to") or "end"
+        period = f"{fd} to {td}"
+    total = result.get("total_spending", result.get("total_spent", result.get("total", 0)))
+    lines = []
     if isinstance(cats, list) and cats:
-        parts = [f"{c.get('account_name', c.get('category', '?'))}: {_money(c.get('total', c.get('amount', 0)))}" for c in cats[:8]]
-        total = result.get("total_spent", result.get("total", 0))
-        return f"Spending analysis ({fd} to {td}):\n" + "\n".join(f"  - {p}" for p in parts) + f"\nTotal: {_money(total)}"
-    total = result.get("total_spent", result.get("total", 0))
+        for c in cats[:8]:
+            name = c.get("name") or c.get("category") or c.get("account_name") or "?"
+            amt = c.get("amount", c.get("total", 0))
+            pct = c.get("percentage")
+            pct_s = f" ({pct}%)" if pct is not None else ""
+            lines.append(f"  - {name}: {_money(amt)}{pct_s}")
+    insights = result.get("insights") or []
+    if insights:
+        lines.append("Insights:")
+        lines.extend(f"  - {i}" for i in insights[:4])
+    head = f"Spending analysis ({period})"
     if total:
-        return f"Spending analysis ({fd} to {td}): Total {_money(total)}."
-    return f"No spending data found for the period ({fd} to {td})."
+        head += f": total {_money(total)}"
+    if lines:
+        return head + "\n" + "\n".join(lines)
+    if total:
+        return head + "."
+    return f"No spending data found for the period ({period})."
 
 
 def _fmt_custom_report(result: dict) -> str:
@@ -445,7 +461,8 @@ def _fmt_cost_cutting(result: dict) -> str:
                 f"  - {r.get('area', '?')}: save ~{_money(r.get('potential_savings', 0))} "
                 f"({r.get('suggestion', '')}) [{r.get('priority', '')}]"
             )
-    head = f"Cost cutting for FY {result.get('fiscal_year')}"
+    fy = result.get("fiscal_year")
+    head = f"Cost cutting for FY {fy}" if fy else "Cost cutting analysis"
     if total:
         head += f" — total expenses {_money(total)}"
     savings = result.get("estimated_total_savings")
