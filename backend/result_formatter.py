@@ -376,7 +376,22 @@ def _fmt_budget_forecast(result: dict) -> str:
 
 def _fmt_health(result: dict) -> str:
     score = result.get("score")
-    return f"Financial health score: {score}/100." if score is not None else "Financial health assessment complete."
+    head = f"Financial health: {result.get('health_assessment') or 'N/A'} — {score}/100." if score is not None else "Financial health assessment complete."
+    parts = []
+    metrics = result.get("key_metrics") or []
+    if isinstance(metrics, list):
+        for m in metrics[:6]:
+            if isinstance(m, dict):
+                parts.append(f"  - {m.get('name', '?')}: {m.get('value', '?')} ({m.get('rating', '')})")
+    if isinstance(result.get("strengths"), list) and result["strengths"]:
+        parts.append("Strengths: " + "; ".join(result["strengths"][:3]))
+    if isinstance(result.get("weaknesses"), list) and result["weaknesses"]:
+        parts.append("Weaknesses: " + "; ".join(result["weaknesses"][:3]))
+    if isinstance(result.get("recommendations"), list) and result["recommendations"]:
+        parts.append("Recommendations: " + "; ".join(result["recommendations"][:3]))
+    if parts:
+        return head + "\n" + "\n".join(parts)
+    return head
 
 
 def _fmt_ratios(result: dict) -> str:
@@ -409,6 +424,37 @@ def _fmt_spending(result: dict) -> str:
 
 def _fmt_custom_report(result: dict) -> str:
     return f"Report '{result.get('report_title')}' generated ({result.get('report_type')}): {result.get('summary', '')}"
+
+
+def _fmt_cost_cutting(result: dict) -> str:
+    """Plain-English cost-cutting recommendation summary."""
+    recs = result.get("recommendations") or []
+    cats = result.get("top_expense_categories") or []
+    total = result.get("total_expenses")
+    lines = []
+    if cats:
+        lines.append("Top expense categories:")
+        for c in cats[:5]:
+            lines.append(
+                f"  - {c.get('name', '?')}: {_money(c.get('amount', 0))} ({c.get('percentage', 0)}%)"
+            )
+    if recs:
+        lines.append("Recommendations:")
+        for r in recs[:6]:
+            lines.append(
+                f"  - {r.get('area', '?')}: save ~{_money(r.get('potential_savings', 0))} "
+                f"({r.get('suggestion', '')}) [{r.get('priority', '')}]"
+            )
+    head = f"Cost cutting for FY {result.get('fiscal_year')}"
+    if total:
+        head += f" — total expenses {_money(total)}"
+    savings = result.get("estimated_total_savings")
+    if savings:
+        head += f", estimated savings {_money(savings)}"
+    if lines:
+        return head + ":\n" + "\n".join(lines)
+    return result.get("summary") or (head + ".")
+
 
 
 def _fmt_loan(result: dict) -> str:
@@ -544,6 +590,7 @@ _FORMATTERS = {
     "calculate_financial_ratios": _fmt_ratios,
     "analyze_spending_patterns": _fmt_spending,
     "generate_custom_report": _fmt_custom_report,
+    "generate_cost_cutting_recommendations": _fmt_cost_cutting,
     "forecast_cash_flow": _fmt_forecast,
     "get_loan_debt_schedule": _fmt_loan,
     "prepare_income_tax_filing": _fmt_filing,
