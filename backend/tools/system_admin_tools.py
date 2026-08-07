@@ -225,18 +225,27 @@ def get_usage_statistics(inp: GetUsageStatisticsInput, db: Session) -> GetUsageS
 # ---------------------------------------------------------------------------
 
 def _seed_defaults(db: Session):
-    """Seed default settings if system_config table is empty."""
-    count = db.query(func.count(SystemConfig.id)).scalar()
-    if count == 0:
-        today = date.today()
-        for key, value in _DEFAULT_SETTINGS.items():
-            db.add(SystemConfig(
-                config_key=key,
-                config_value=value,
-                description=_DEFAULT_DESCRIPTIONS.get(key, ""),
-                updated_at=today,
-            ))
-        db.commit()
+    """Seed default settings that are missing (idempotent per-key).
+
+    Only seeds keys absent from system_config. The old 'if table empty'
+    check meant the 6 defaults were never inserted once seed_and_migrate.py
+    put asset_depreciation_configs into system_config — so 'reset
+    retention_days' failed with "Setting not found" and 'show company
+    settings' listed a single config key.
+    """
+    today = date.today()
+    existing_keys = {r[0] for r in db.query(SystemConfig.config_key).all()}
+    for key, value in _DEFAULT_SETTINGS.items():
+        if key in existing_keys:
+            continue
+        db.add(SystemConfig(
+            config_key=key,
+            config_value=value,
+            description=_DEFAULT_DESCRIPTIONS.get(key, ""),
+            updated_at=today,
+        ))
+        existing_keys.add(key)
+    db.commit()
 
 
 _DEFAULT_DESCRIPTIONS = {

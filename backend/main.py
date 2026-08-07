@@ -429,7 +429,7 @@ async def _chat_impl(request: ChatRequest) -> ChatResponse:
                     slot_fill.PENDING_INTENTS.pop(conv_id, None)
                     # Approval-required tools queue instead of executing.
                     from intent_router import is_approval_required
-                    if is_approval_required(pending["tool_name"]):
+                    if is_approval_required(pending["tool_name"], params):
                         from approval_service import queue_for_approval
                         db = get_session()
                         try:
@@ -487,7 +487,7 @@ async def _chat_impl(request: ChatRequest) -> ChatResponse:
             # Approval-required tools queue FIRST (no execution yet). On approve,
             # execute_tool re-runs with these exact params.
             from intent_router import is_approval_required
-            if is_approval_required(tool_name):
+            if is_approval_required(tool_name, params):
                 from approval_service import queue_for_approval
                 db = get_session()
                 try:

@@ -31,6 +31,15 @@ def test_prefs_update_routes():
     assert tool == "manage_system_preferences", f"got {tool}"
     assert params["action"] == "update"
     assert params.get("settings")
+    # value keeps its case ('ABC Corp', not 'abc corp')
+    assert params["settings"]["company_name"] == "ABC Corp"
+
+
+def test_prefs_view_exempt_from_approval():
+    """view is read-only - must not be queued for approval."""
+    assert is_approval_required("manage_system_preferences", {"action": "view"}) is False
+    assert is_approval_required("manage_system_preferences", {"action": "update", "settings": {"x": "y"}}) is True
+    assert is_approval_required("manage_system_preferences") is True  # no params -> approval set default
 
 
 def test_prefs_reset_routes():

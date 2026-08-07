@@ -231,13 +231,15 @@ def _params_system_preferences(text: str) -> dict:
         "view",
     )
     p: dict = {"action": action}
-    # Extract settings like 'company_name = ABC Corp' or 'company name to ABC Corp'
+    # Extract settings like 'company_name = ABC Corp' or 'company name to ABC Corp'.
+    # Run against the ORIGINAL text (case-preserving) so values keep their case
+    # ('ABC Corp', not 'abc corp').
     settings: dict[str, str] = {}
     # strip leading verbs so 'change company name to X' -> key 'company name'
     _VERBS = re.compile(
         r"^(?:change|set|update|edit|add|modify|the|a|an)\s+", re.I
     )
-    for m in re.finditer(r"([a-z][a-z_ ]{2,40}?)\s*(?:=|to)\s*([A-Za-z0-9][^,;.\n]{1,50})", t):
+    for m in re.finditer(r"([A-Za-z][A-Za-z_ ]{2,40}?)\s*(?:=|to)\s*([A-Za-z0-9][^,;.\n]{1,50})", text):
         key = _VERBS.sub("", m.group(1).strip()).strip("_")  # strip verbs FIRST (on spaced text)
         key = re.sub(r"\s+", "_", key).strip("_")
         val = m.group(2).strip()
@@ -1469,8 +1471,14 @@ def execute_route(message: str, db: Session) -> Optional[tuple[str, dict]]:
     return tool_name, result
 
 
-def is_approval_required(tool_name: str) -> bool:
-    """Check if a tool needs human approval (mirror of frontend approval flags)."""
+def is_approval_required(tool_name: str, params: Optional[dict] = None) -> bool:
+    """Check if a tool needs human approval (mirror of frontend approval flags).
+
+    Params-aware exceptions:
+      - manage_system_preferences with action='view' is a read-only listing of
+        settings; it must NOT be queued for approval (spec says view is free,
+        update/reset are the approval actions).
+    """
     APPROVAL_TOOLS = {
         "process_receipt_image",
         "run_bank_reconciliation", "post_accrual_entry", "reconcile_vendor_statement",
@@ -1483,4 +1491,6 @@ def is_approval_required(tool_name: str) -> bool:
         "maintain_statutory_registers", "manage_system_preferences", "schedule_system_task",
         "generate_custom_report",
     }
+    if tool_name == "manage_system_preferences" and params and params.get("action") == "view":
+        return False
     return tool_name in APPROVAL_TOOLS
