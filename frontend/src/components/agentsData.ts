@@ -698,6 +698,16 @@ export const AGENTS_DATA: AgentDef[] = [
           { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true },
           { name: "period", type: "number", placeholder: "Month 1-12 (optional)", required: false }
         ]
+      },
+      {
+        name: "list_tax_filings",
+        description: "List saved sales/income tax filings",
+        approval: false,
+        aiOnly: false,
+        inputs: [
+          { name: "filing_type", type: "text", placeholder: "sales or income (optional)", required: false },
+          { name: "fiscal_year", type: "number", placeholder: "e.g. 2026 (optional)", required: false }
+        ]
       }
     ]
   },
