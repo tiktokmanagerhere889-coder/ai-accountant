@@ -37,6 +37,11 @@ from intent_router import (
     _params_eobi,
     _params_year_period,
     _params_filing_sales,
+    _params_standard_costing,
+    _params_overhead,
+    _params_revenue_recognition,
+    _params_provision,
+    _params_related_party,
 )
 
 # Tools that write to the DB and benefit from slot-filling when fields are missing.
@@ -62,6 +67,13 @@ WRITE_TOOLS = {
     "calculate_eobi_deductions",
     "adjust_sales_tax_input_output",
     "prepare_sales_tax_filing",
+    # Agent 7 (Cost & Budgeting): structured-field tools. Missing fields must
+    # be asked for, never executed/queued with a bare {"fiscal_year": ...}.
+    "calculate_standard_costing_variance",
+    "allocate_overhead_cost",
+    "calculate_revenue_recognition",
+    "flag_provision_contingent_liability",
+    "flag_related_party_transaction",
 }
 
 # In-memory pending intents: conversation_id -> PendingIntent dict
@@ -85,6 +97,14 @@ _TAX_PARSE_TOOLS = {
     "calculate_eobi_deductions": _params_eobi,
     "adjust_sales_tax_input_output": _params_year_period,
     "prepare_sales_tax_filing": _params_filing_sales,
+}
+
+_COST_PARSE_TOOLS = {
+    "calculate_standard_costing_variance": _params_standard_costing,
+    "allocate_overhead_cost": _params_overhead,
+    "calculate_revenue_recognition": _params_revenue_recognition,
+    "flag_provision_contingent_liability": _params_provision,
+    "flag_related_party_transaction": _params_related_party,
 }
 
 
@@ -336,6 +356,87 @@ def describe_missing(tool_name: str, params: dict) -> Optional[str]:
             )
         return None
 
+    # --- Agent 7 (Cost & Budgeting) ---
+    if tool_name == "calculate_standard_costing_variance":
+        missing: list[str] = []
+        if not params.get("account_code"):
+            missing.append("the expense account code (e.g. 6000)")
+        if not params.get("period"):
+            missing.append("the period (1-12 or month name)")
+        if not params.get("standard_cost"):
+            missing.append("the standard/budgeted cost")
+        if missing:
+            return (
+                "To calculate the standard costing variance I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + "\n(e.g. calculate standard costing variance for account 6000 period 7 fiscal year 2026 with standard cost 50000)"
+            )
+        return None
+    if tool_name == "allocate_overhead_cost":
+        missing: list[str] = []
+        if not params.get("total_overhead"):
+            missing.append("the total overhead cost")
+        if not params.get("allocation_basis"):
+            missing.append("the allocation basis (sq_ft, headcount, revenue_pct, or custom)")
+        if not params.get("allocation_pool"):
+            missing.append("the departments to allocate across, each with a value (e.g. sales 2000, hr 1500, production 3000)")
+        if not params.get("period"):
+            missing.append("the period (1-12 or month name)")
+        if missing:
+            return (
+                "To allocate overhead cost I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + "\n(e.g. allocate 100000 overhead by revenue to sales 2000, hr 1500, production 3000 for period 7 fiscal year 2026)"
+            )
+        return None
+    if tool_name == "calculate_revenue_recognition":
+        missing: list[str] = []
+        if not params.get("contract_id"):
+            missing.append("the contract ID")
+        if not params.get("contract_value"):
+            missing.append("the total contract value")
+        if not params.get("completion_percentage"):
+            missing.append("the percentage of completion (e.g. 60%)")
+        if not params.get("period"):
+            missing.append("the period (1-12 or month name)")
+        if missing:
+            return (
+                "To calculate revenue recognition I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + "\n(e.g. recognize revenue for contract CON-001 value 500000 at 60% completion for period 7 fiscal year 2026)"
+            )
+        return None
+    if tool_name == "flag_provision_contingent_liability":
+        missing: list[str] = []
+        if not params.get("description") or len(params.get("description", "")) < 5:
+            missing.append("a description of the contingent event")
+        if not params.get("estimated_amount"):
+            missing.append("the estimated financial impact")
+        if not params.get("probability"):
+            missing.append("the probability (probable, possible, or remote)")
+        if missing:
+            return (
+                "To flag a provision/contingent liability I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + "\n(e.g. flag a probable provision of 200000 for an ongoing lawsuit in fiscal year 2026)"
+            )
+        return None
+    if tool_name == "flag_related_party_transaction":
+        missing: list[str] = []
+        if not params.get("entry_id"):
+            missing.append("the journal entry ID (e.g. JE-20260715-001)")
+        if not params.get("amount"):
+            missing.append("the transaction amount")
+        if not params.get("counterparty_name"):
+            missing.append("the counterparty name")
+        if missing:
+            return (
+                "To flag a related-party transaction I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + "\n(e.g. flag JE-20260715-001 of 500000 paid to ABC Trading as a related party transaction in fiscal year 2026)"
+            )
+        return None
+
     # Other write tools: generic clarifying question.
     return (
         "I need a bit more detail to complete that. Can you give me the amount, "
@@ -404,6 +505,16 @@ def merge_answer(pending: dict, answer: str) -> dict:
         # amount and withholding_type).
         merged = f"{description} {answer.strip()}".strip() if answer else description
         parser = _TAX_PARSE_TOOLS[tool_name]
+        parsed = parser(merged)
+        params = {**params, **parsed}
+        params["description"] = merged
+        return params
+    if tool_name in _COST_PARSE_TOOLS:
+        # Re-parse the merged message through the Cost & Budgeting tool's own
+        # parser so the answer fills the structured fields (account code,
+        # overhead amount + pool, contract id + %, description, etc.).
+        merged = f"{description} {answer.strip()}".strip() if answer else description
+        parser = _COST_PARSE_TOOLS[tool_name]
         parsed = parser(merged)
         params = {**params, **parsed}
         params["description"] = merged
@@ -502,4 +613,42 @@ def is_complete(tool_name: str, params: dict) -> bool:
         return bool(params.get("gross_salary") and params.get("period"))
     if tool_name in ("adjust_sales_tax_input_output", "prepare_sales_tax_filing"):
         return bool(params.get("period") and params.get("fiscal_year"))
+    if tool_name == "calculate_standard_costing_variance":
+        return bool(
+            params.get("account_code")
+            and params.get("period")
+            and params.get("fiscal_year")
+            and params.get("standard_cost")
+        )
+    if tool_name == "allocate_overhead_cost":
+        return bool(
+            params.get("total_overhead")
+            and params.get("allocation_basis")
+            and params.get("allocation_pool")
+            and params.get("period")
+            and params.get("fiscal_year")
+        )
+    if tool_name == "calculate_revenue_recognition":
+        return bool(
+            params.get("contract_id")
+            and params.get("contract_value")
+            and params.get("completion_percentage")
+            and params.get("period")
+            and params.get("fiscal_year")
+        )
+    if tool_name == "flag_provision_contingent_liability":
+        return bool(
+            params.get("description")
+            and params.get("estimated_amount")
+            and params.get("probability")
+            and params.get("fiscal_year")
+        )
+    if tool_name == "flag_related_party_transaction":
+        return bool(
+            params.get("entry_id")
+            and params.get("transaction_description")
+            and params.get("amount")
+            and params.get("counterparty_name")
+            and params.get("fiscal_year")
+        )
     return True

@@ -287,6 +287,29 @@ def _fmt_breakeven(result: dict) -> str:
     return f"Break-even: {_num(result.get('breakeven_units'))} units, {_money(result.get('breakeven_revenue'))} revenue. Contribution margin/unit {_money(result.get('contribution_margin_per_unit'))}."
 
 
+def _fmt_budget_forecast(result: dict) -> str:
+    items = result.get("forecast_items") or []
+    fy = result.get("fiscal_year")
+    total = result.get("total_forecast", 0)
+    conf = result.get("confidence", "low")
+    if isinstance(items, list) and items:
+        parts = []
+        for it in items[:10]:
+            name = it.get("account_name") or it.get("account_code", "?")
+            code = it.get("account_code")
+            basis = it.get("basis", "")
+            fa = it.get("forecast_amount", it.get("historical_avg", 0))
+            parts.append(f"  - {name} ({code}): {_money(fa)}" + (f" [{basis}]" if basis else ""))
+        more = "" if len(items) <= 10 else f"\n  … and {len(items) - 10} more accounts"
+        return (
+            f"Budget forecast for FY {fy}: {_num(result.get('data_months', 0))} months of data, "
+            f"total {_money(total)} (confidence: {conf}).\n"
+            + "\n".join(parts)
+            + more
+        )
+    return f"Budget forecast for FY {fy}: total {_money(total)} (confidence: {conf})."
+
+
 def _fmt_health(result: dict) -> str:
     score = result.get("score")
     return f"Financial health score: {score}/100." if score is not None else "Financial health assessment complete."
@@ -460,6 +483,6 @@ _FORMATTERS = {
     "prepare_sales_tax_filing": _fmt_filing,
     "list_tax_filings": _fmt_tax_filings,
     "draft_notes_to_financials": _fmt_notes,
-    "prepare_budget_forecast": _fmt_generic_report,
+    "prepare_budget_forecast": _fmt_budget_forecast,
     "get_tax_planning_advice": lambda r: r.get("advice") or "Tax planning advice generated.",
 }

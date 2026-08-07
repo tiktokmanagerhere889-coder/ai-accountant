@@ -318,6 +318,191 @@ def _params_breakeven(text: str) -> dict:
     return {}
 
 
+def _params_standard_costing(text: str) -> dict:
+    """Calculate-standard-costing route: account code, period, year, standard cost."""
+    p = _params_year_period(text)
+    p["description"] = text  # base for slot-fill re-merge (like record_transaction_nl)
+    # Standard cost named explicitly ("standard cost 50000" / "standard 50000")
+    # else first amount.
+    sc = re.search(
+        r"standard\s*(?:cost|budget)?\s*[:=]?\s*(\d[\d,]*(?:\.\d{1,2})?)", text, re.I
+    )
+    if sc:
+        p["standard_cost"] = sc.group(1)
+    else:
+        p["standard_cost"] = _extract_amount(text)
+    # Account code: "account 6000" / "account code 6000" / a bare 4-digit.
+    ac = re.search(r"account(?:\s*code)?\s*[:=]?\s*(\d{3,5})", text, re.I)
+    if ac:
+        p["account_code"] = ac.group(1)
+    else:
+        m = re.search(r"\b(\d{4})\b", text)
+        if m and not (2020 <= int(m.group(1)) <= 2035):
+            p["account_code"] = m.group(1)
+    return p
+
+
+_ALLOCATION_BASIS = {
+    "sq_ft": ("sq ft", "square foot", "square feet"),
+    "headcount": ("headcount", "employees", "employee count", "staff count"),
+    "revenue_pct": ("revenue", "sales"),
+    "custom": ("custom",),
+}
+
+# Words that must never become a department name (period/year/filler), so
+# "for period 7" or "fiscal year 2026" are not read as pool entries.
+_ALLOCATION_BANNED = {
+    "period", "fiscal", "year", "month", "quarter", "standard", "overhead",
+    "cost", "the", "to", "for", "by", "of", "at", "on", "in", "and", "across",
+}
+
+
+def _extract_allocation_pool(text: str, total_overhead: Optional[str] = None) -> Optional[list[dict]]:
+    """Parse '<name> <value>, <name> <value>' pairs into allocation pool items.
+
+    Names are 1-2 letter words (digits excluded) so the overhead total, the
+    year, and filler like "for period 7" can never become a department. The
+    match starting at a filler preposition is blocked, and any number equal to
+    the overhead total (or a 4-digit year) is dropped.
+    """
+    pool = []
+    total = total_overhead.replace(",", "") if total_overhead else None
+    for m in re.finditer(
+        r"(?<![\w-])(?!(?:the|to|for|by|of|at|on|in|and|across|into|with|from)\s+[A-Za-z])"
+        r"((?:[A-Za-z][A-Za-z'-]*)(?:\s+[A-Za-z][A-Za-z'-]*)?)"
+        r"\s+(\d[\d,]*(?:\.\d{1,2})?)(?![\w-])",
+        text,
+    ):
+        name, num = m.group(1).strip(), m.group(2)
+        n2 = num.replace(",", "")
+        if not n2.replace(".", "", 1).isdigit():
+            continue  # not a real number (e.g. trailing garbage)
+        if n2.isdigit() and len(n2) == 4 and 2020 <= int(n2) <= 2035:
+            continue  # year, not a pool value
+        if total and n2 == total:
+            continue  # the overhead total, not a department
+        toks = {t.lower() for t in name.split()}
+        if toks & _ALLOCATION_BANNED:
+            continue
+        if len(name) >= 2 and not any(p["name"] == name for p in pool):
+            pool.append({"name": name, "value": n2})
+    return pool or None
+
+
+def _params_overhead(text: str) -> dict:
+    """Allocate-overhead route: amount, basis, department pool, period, year."""
+    p = _params_year_period(text)
+    p["description"] = text  # base for slot-fill re-merge
+    total = _extract_amount(text)
+    p["total_overhead"] = total
+    t = text.lower()
+    for basis, words in _ALLOCATION_BASIS.items():
+        if any(w in t for w in words):
+            p["allocation_basis"] = basis
+            break
+    pool = _extract_allocation_pool(text, total_overhead=total)
+    if pool:
+        p["allocation_pool"] = pool
+    return p
+
+
+def _params_revenue_recognition(text: str) -> dict:
+    """Revenue-recognition route: contract id, value, completion %, period, year."""
+    p = _params_year_period(text)
+    p["description"] = text  # base for slot-fill re-merge
+    cid = re.search(
+        r"(?:contract|project)\s*[:=#]?\s*([A-Za-z0-9][A-Za-z0-9_-]*)", text, re.I
+    )
+    if cid:
+        p["contract_id"] = cid.group(1)
+    # Value: prefer a number near 'value'/'worth'; else first amount, ignoring
+    # the contract id (so "CON-001" is not read as the contract value).
+    stripped = text
+    if cid:
+        stripped = re.sub(re.escape(cid.group(0)), " ", text)
+    val = re.search(
+        r"(?:contract\s*value|value|worth)\s*[:=]?\s*(\d[\d,]*(?:\.\d{1,2})?)",
+        stripped,
+        re.I,
+    )
+    p["contract_value"] = val.group(1) if val else _extract_amount(stripped)
+    pct = re.search(r"(\d{1,3})\s*%", text) or re.search(
+        r"(?:completion|complete|progress)\s*(?:of|at|:)?\s*(\d{1,3})(?:\s*%|\s*percent|\s*pct)?",
+        text,
+        re.I,
+    )
+    if pct:
+        p["completion_percentage"] = min(int(pct.group(1)), 100)
+    prev = re.search(
+        r"(?:already|previously)\s*(?:recognized|recognised)\s*(?:revenue)?\s*(?:of)?\s*(\d[\d,]*(?:\.\d{1,2})?)",
+        text,
+        re.I,
+    )
+    if prev:
+        p["previous_recognized"] = prev.group(1)
+    return p
+
+
+_PROBABILITIES = (
+    ("probable", ("probable", "likely", "high probability")),
+    ("possible", ("possible", "maybe", "uncertain")),
+    ("remote", ("remote", "unlikely", "very low")),
+)
+
+
+def _params_provision(text: str) -> dict:
+    """Provision/contingent-liability route: description, amount, probability, year."""
+    p = _params_year(text)
+    p["description"] = text  # description field is required by the tool schema
+    p["estimated_amount"] = _extract_amount(text)
+    t = text.lower()
+    for prob, words in _PROBABILITIES:
+        if any(w in t for w in words):
+            p["probability"] = prob
+            break
+    rp = re.search(
+        r"(?:related party|party)\s*[:=]?\s*([A-Za-z][A-Za-z0-9 .&-]{1,40})",
+        text,
+        re.I,
+    )
+    if rp:
+        p["related_party"] = rp.group(1).strip()
+    return p
+
+
+def _params_related_party(text: str) -> dict:
+    """Flag-related-party route: entry id, description, amount, counterparty, year."""
+    p = _params_year(text)
+    p["transaction_description"] = text  # description field is required by the tool schema
+    p["description"] = text  # base for slot-fill re-merge
+    eid = re.search(r"\b(JE-[\w-]+)\b", text, re.I) or re.search(
+        r"(?:entry|journal)\s*[:=]?\s*([A-Za-z][A-Za-z0-9_-]*)", text, re.I
+    )
+    if eid:
+        p["entry_id"] = eid.group(1)
+    # Amount: prefer an explicit 'amount N' / 'worth N'; else the first amount
+    # after any entry-id tokens are stripped (so JE-20260715-001's digits don't
+    # become the amount).
+    amt = re.search(r"(?:amount|worth|for)\s*[:=]?\s*(\d[\d,]*(?:\.\d{1,2})?)", text, re.I)
+    if amt:
+        p["amount"] = amt.group(1)
+    else:
+        stripped = re.sub(r"\bJE-[\w-]+\b", " ", text, flags=re.I)
+        p["amount"] = _extract_amount(stripped)
+    cp = re.search(r"(?:from|to|paid to|received from)\s+([A-Z][A-Za-z0-9 .&-]{2,40})", text)
+    if cp:
+        # Truncate at stop words so "paid to ABC Trading as a related party"
+        # yields just "ABC Trading".
+        name = cp.group(1).strip()
+        for stop in (" as ", " in ", " during ", " for ", " of "):
+            idx = name.lower().find(stop)
+            if idx != -1:
+                name = name[:idx]
+                break
+        p["counterparty_name"] = name.strip()
+    return p
+
+
 def _params_record_transaction(text: str) -> dict:
     return {
         "description": text,
@@ -990,6 +1175,9 @@ ROUTES: list[tuple[list[str], str, callable]] = [
     (["amortization", "amortize"], "calculate_amortization", _params_period_date),
     (["ar aging", "receivable aging", "aging report ar", "receivable report"], "get_ar_aging_report", _params_aging),
     (["ap aging", "payable aging", "aging report ap", "payable report"], "get_ap_aging_report", _params_aging),
+    # Costing variance must precede the bare "variance" keyword below so
+    # "standard costing variance" reaches calculate_standard_costing_variance.
+    (["standard costing variance", "costing variance", "cost variance", "standard cost"], "calculate_standard_costing_variance", _params_standard_costing),
     (["budget variance", "variance analysis", "variance"], "analyze_budget_variance", _params_year_period),
     (["cash flow forecast", "forecast cash flow", "cash flow projection"], "forecast_cash_flow", _params_forecast),
     (["loan schedule", "debt schedule", "loan", "debt"], "get_loan_debt_schedule", _params_loan),
@@ -1008,11 +1196,12 @@ ROUTES: list[tuple[list[str], str, callable]] = [
     (["breakeven", "break even", "break-even", "cvp", "cost volume"], "calculate_breakeven", _params_breakeven),
     (["convert currency", "currency conversion", "exchange rate", "usd to", "to pkr", "convert "], "convert_foreign_currency", _params_convert_currency),
     (["budget forecast", "budget preparation", "prepare budget", "budget for"], "prepare_budget_forecast", _params_year),
-    (["standard costing", "costing variance", "cost variance"], "calculate_standard_costing_variance", _params_year),
-    (["overhead", "allocate overhead", "cost allocation", "apportion"], "allocate_overhead_cost", _params_year),
-    (["revenue recognition", "percentage of completion", "recognize revenue"], "calculate_revenue_recognition", _params_year),
-    (["provision", "contingent liability", "ias 37", "provision for"], "flag_provision_contingent_liability", _params_record_transaction),
-    (["related party", "related-party", "insider"], "flag_related_party_transaction", _params_record_transaction),
+    # calculate_standard_costing_variance route lives in the Month-End section
+    # (it must precede the bare "variance" keyword); no duplicate route here.
+    (["allocate overhead", "overhead allocation", "overhead cost", "overhead ", "cost allocation", "apportion"], "allocate_overhead_cost", _params_overhead),
+    (["revenue recognition", "percentage of completion", "recognize revenue", "recognise revenue", "revenue recognized", "revenue recognised"], "calculate_revenue_recognition", _params_revenue_recognition),
+    (["contingent liability", "provision", "ias 37", "provision for"], "flag_provision_contingent_liability", _params_provision),
+    (["related party", "related-party", "insider", "related party transaction"], "flag_related_party_transaction", _params_related_party),
 
     # --- Tax ---
     (["withholding", "wht", "withholding tax"], "calculate_withholding_tax", _params_withholding),
