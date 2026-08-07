@@ -267,6 +267,70 @@ def _fmt_anomaly(result: dict) -> str:
     return f"Anomaly scan: {n} anomaly(ies) found.\n" + "\n".join(lines) + more
 
 
+def _fmt_compliance(result: dict) -> str:
+    """Compliance deadline dashboard: upcoming/overdue with days remaining."""
+    items = result.get("deadlines") or []
+    summary = result.get("summary") or ""
+    if not items:
+        return f"Compliance deadlines: {summary}"
+    lines = []
+    for d in items[:10]:
+        due = d.get("due_date", "?")
+        days = d.get("days_remaining", 0)
+        when = f"{days} days" if days >= 0 else f"{abs(days)} days overdue"
+        lines.append(
+            f"  - {d.get('description', '?')} (due {due}, {when}, "
+            f"{d.get('status', '')})"
+        )
+    more = "" if len(items) <= 10 else f"\n  … and {len(items) - 10} more"
+    return (
+        f"Compliance deadlines: {result.get('overdue_count', 0)} overdue, "
+        f"{result.get('upcoming_count', 0)} upcoming.\n"
+        + "\n".join(lines)
+        + more
+        + (f"\n{summary}" if summary else "")
+    )
+
+
+def _fmt_audit(result: dict) -> str:
+    """Internal audit result: per-flagged-entry summary + severity counts."""
+    flags = result.get("flagged_entries") or []
+    n = result.get("total_flagged", 0)
+    if n == 0:
+        return f"Internal audit ({result.get('audit_id', '')}): {result.get('summary', 'No issues found.')}"
+    lines = []
+    for f in flags[:8]:
+        lines.append(
+            f"  - {f.get('flag_type')} [{f.get('severity', '')}]: {f.get('entry_id')} "
+            f"({_money(f.get('amount'))}) - {f.get('reason', '')}"
+        )
+    more = "" if len(flags) <= 8 else f"\n  … and {len(flags) - 8} more"
+    return (
+        f"Internal audit ({result.get('audit_id', '')}): {n} issue(s) flagged.\n"
+        + "\n".join(lines)
+        + more
+        + f"\n{result.get('summary', '')}"
+    )
+
+
+def _fmt_statutory(result: dict) -> str:
+    """Statutory register result: action + register type + description/message."""
+    action = result.get("action_performed", "")
+    reg = result.get("register_type", "")
+    rid = result.get("register_id", "")
+    msg = result.get("message", "")
+    desc = result.get("description", "")
+    if action == "view" and result.get("status") == "empty":
+        return f"Statutory register '{reg}': {msg}"
+    if action == "view":
+        return (
+            f"Statutory register '{reg}': {msg}\n"
+            f"  Latest: {desc} (ref {result.get('reference_number', '')}, "
+            f"{_money(result.get('amount', 0))}, {result.get('status', '')})"
+        )
+    return f"Statutory register {action}: '{reg}' ({rid}) - {desc}. {msg}"
+
+
 def _fmt_withholding(result: dict) -> str:
     return f"Withholding tax ({result.get('withholding_type')}): gross {_money(result.get('gross_amount'))}, rate {result.get('rate_applied')}%, tax {_money(result.get('tax_amount'))}, net {_money(result.get('net_amount'))}."
 
@@ -465,6 +529,9 @@ _FORMATTERS = {
     "reconcile_payroll": _fmt_payroll_recon,
     "analyze_budget_variance": _fmt_budget_variance,
     "detect_anomaly_transactions": _fmt_anomaly,
+    "get_compliance_deadlines": _fmt_compliance,
+    "support_internal_audit": _fmt_audit,
+    "maintain_statutory_registers": _fmt_statutory,
     "calculate_withholding_tax": _fmt_withholding,
     "calculate_advance_minimum_tax": _fmt_amt,
     "adjust_sales_tax_input_output": _fmt_sales_tax_adjust,

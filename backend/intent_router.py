@@ -470,6 +470,67 @@ def _params_provision(text: str) -> dict:
     return p
 
 
+_REGISTER_TYPES = {
+    "director": "directors",
+    "directors": "directors",
+    "member": "members",
+    "members": "members",
+    "charge": "charges",
+    "charges": "charges",
+    "contract": "contracts",
+    "contracts": "contracts",
+    "beneficial owner": "beneficial_owners",
+    "beneficial owners": "beneficial_owners",
+    "beneficial_owner": "beneficial_owners",
+    "beneficial": "beneficial_owners",
+}
+
+
+def _params_statutory_registers(text: str) -> dict:
+    """Maintain-statutory-registers route: action, register type, date, description.
+
+    Derives the four schema-required fields (action/register_type/entry_date/
+    description) from natural phrasing. When the action is missing (a bare
+    "register of directors" ask), defaults to view; write actions ("add/update/
+    delete") stay explicit so slot-fill can ask for what's missing.
+    """
+    t = text.lower()
+    # Action: explicit verb wins; "view/show/list/check" -> view; a bare
+    # register-type mention (no verb) -> view.
+    if re.search(r"\b(add|create|new|record|enter)\b", t):
+        action = "add"
+    elif re.search(r"\b(update|edit|modify|amend)\b", t):
+        action = "update"
+    elif re.search(r"\b(delete|remove)\b", t):
+        action = "delete"
+    else:
+        action = "view"
+    reg = None
+    for word, kind in _REGISTER_TYPES.items():
+        if word in t:
+            reg = kind
+            break
+    p = {
+        "action": action,
+        "register_type": reg,
+        "description": text,
+        "entry_date": _extract_date(text) or date.today(),
+    }
+    ref = re.search(r"\b([A-Z]{2,4}-[A-Za-z0-9-]+)\b", text) or re.search(r"\b([A-Z]{2,4}-?\d+)\b", text)
+    if ref:
+        p["reference_number"] = ref.group(1)
+    amt = _extract_amount(text)
+    if amt:
+        p["amount"] = amt
+    # update/delete act on an existing register_id (REG-<TYPE>-<HEX>); capture
+    # a REG- token so the tool runs without a slot-fill round-trip.
+    if action in ("update", "delete"):
+        rid = re.search(r"\b(REG-[A-Za-z0-9-]+)\b", text, re.I)
+        if rid:
+            p["register_id"] = rid.group(1).upper()
+    return p
+
+
 def _params_related_party(text: str) -> dict:
     """Flag-related-party route: entry id, description, amount, counterparty, year."""
     p = _params_year(text)
@@ -1215,10 +1276,10 @@ ROUTES: list[tuple[list[str], str, callable]] = [
     (["income tax filing", "file income tax", "income tax return"], "prepare_income_tax_filing", _params_filing_income),
 
     # --- Audit ---
-    (["anomaly", "fraud detection", "detect fraud", "suspicious", "anomaly detection", "check anomaly"], "detect_anomaly_transactions", _params_dates),
+    (["detect anomaly", "detect anomalies", "anomaly", "anomalies", "fraud detection", "detect fraud", "suspicious", "anomaly detection", "check anomaly"], "detect_anomaly_transactions", _params_period),
     (["compliance", "deadline", "filing deadline", "due date", "compliance calendar", "reminder"], "get_compliance_deadlines", _params_compliance),
     (["internal audit", "audit support"], "support_internal_audit", _params_year),
-    (["statutory register", "register of director", "maintain register", "statutory"], "maintain_statutory_registers", _params_record_transaction),
+    (["statutory register", "register of director", "register of directors", "register of member", "register of members", "register of charge", "register of charges", "register of contract", "register of contracts", "director register", "member register", "charge register", "contract register", "beneficial owner", "beneficial owner register", "maintain register", "register entry", "register record", "statutory"], "maintain_statutory_registers", _params_statutory_registers),
 
     # --- Advisory ---
     (["spending pattern", "spending analysis", "spending", "spend analysis", "expense pattern"], "analyze_spending_patterns", _params_dates),

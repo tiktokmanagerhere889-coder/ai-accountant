@@ -234,6 +234,42 @@ def _seed_petty_cash_fund() -> None:
         logger.info("Seeded petty cash fund PC-001")
 
 
+def _seed_compliance_deadlines() -> None:
+    """Seed standard compliance deadlines if the table is empty (idempotent).
+
+    Gives the get_compliance_deadlines tool real data instead of always
+    returning "No compliance deadlines configured". Due dates are anchored to
+    fiscal_year 2026; the tool still works for any year via filters.
+    """
+    from datetime import date
+
+    defaults = [
+        # (deadline_id, deadline_type, description, due_date, responsible, status, reminder_days, fiscal_year)
+        ("DLN-SALES-Q3-2026", "tax_filing", "Q3 2026 Sales Tax (ST-06) filing due", date(2026, 7, 20), "Accounts", "upcoming", 5, 2026),
+        ("DLN-ITR-2026", "tax_filing", "FY2026 Income Tax Return (ITR) filing", date(2026, 9, 30), "Tax Advisor", "upcoming", 14, 2026),
+        ("DLN-ANNRET-2026", "annual_return", "Annual Return / Form A filing", date(2026, 12, 31), "Company Secretary", "upcoming", 30, 2026),
+        ("DLN-WHT-2026", "statutory_filing", "WHT monthly statement filing", date(2026, 8, 10), "Accounts", "upcoming", 3, 2026),
+        ("DLN-AUDIT-2026", "audit", "Annual statutory audit completion", date(2026, 11, 30), "External Auditor", "upcoming", 30, 2026),
+    ]
+    with engine.begin() as conn:
+        existing = conn.execute(text("SELECT COUNT(*) FROM compliance_deadlines")).scalar()
+        if existing and existing > 0:
+            logger.info("compliance_deadlines already has %s rows - skip", existing)
+            return
+        for (did, dtype, desc, due, resp, status, remind, fy) in defaults:
+            conn.execute(
+                text(
+                    "INSERT INTO compliance_deadlines (deadline_id, deadline_type, description, "
+                    "due_date, responsible_person, status, reminder_days, fiscal_year) "
+                    "VALUES (:did, :dtype, :desc, :due, :resp, :status, :remind, :fy) "
+                    "ON CONFLICT (deadline_id) DO NOTHING"
+                ),
+                {"did": did, "dtype": dtype, "desc": desc, "due": due,
+                 "resp": resp, "status": status, "remind": remind, "fy": fy},
+            )
+        logger.info("Seeded %s compliance deadlines", len(defaults))
+
+
 def run_migrations() -> None:
     """Run all idempotent migrations + seeds. Safe to call every startup."""
     _ensure_fetched_at_column()
@@ -243,6 +279,7 @@ def run_migrations() -> None:
     _seed_asset_configs()
     _seed_chart_of_accounts()
     _seed_petty_cash_fund()
+    _seed_compliance_deadlines()
     logger.info("DB migrations + seed complete")
 
 

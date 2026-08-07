@@ -42,6 +42,7 @@ from intent_router import (
     _params_revenue_recognition,
     _params_provision,
     _params_related_party,
+    _params_statutory_registers,
 )
 
 # Tools that write to the DB and benefit from slot-filling when fields are missing.
@@ -74,6 +75,9 @@ WRITE_TOOLS = {
     "calculate_revenue_recognition",
     "flag_provision_contingent_liability",
     "flag_related_party_transaction",
+    # Agent 8 (Audit & Registers): statutory-register writes need action +
+    # register_type + date + description; never queue with only a description.
+    "maintain_statutory_registers",
 }
 
 # In-memory pending intents: conversation_id -> PendingIntent dict
@@ -105,6 +109,10 @@ _COST_PARSE_TOOLS = {
     "calculate_revenue_recognition": _params_revenue_recognition,
     "flag_provision_contingent_liability": _params_provision,
     "flag_related_party_transaction": _params_related_party,
+}
+
+_AUDIT_PARSE_TOOLS = {
+    "maintain_statutory_registers": _params_statutory_registers,
 }
 
 
@@ -436,6 +444,27 @@ def describe_missing(tool_name: str, params: dict) -> Optional[str]:
                 + "\n(e.g. flag JE-20260715-001 of 500000 paid to ABC Trading as a related party transaction in fiscal year 2026)"
             )
         return None
+    if tool_name == "maintain_statutory_registers":
+        # A bare "register of directors" is a view (safe read); only write
+        # actions (add/update/delete) need the extra fields asked for.
+        action = params.get("action")
+        if action in ("update", "delete") and not params.get("register_id"):
+            return (
+                f"To {action} a statutory register entry I need the register ID. "
+                "\n(e.g. update register entry REG-202607-001 ...)"
+            )
+        missing: list[str] = []
+        if not params.get("register_type"):
+            missing.append("the register type (directors, members, charges, contracts, beneficial owners)")
+        if not params.get("description") or len(params.get("description", "")) < 5:
+            missing.append("a description of the entry")
+        if missing:
+            return (
+                "To maintain a statutory register I need:\n"
+                + "\n".join(f"{i+1}. {m}" for i, m in enumerate(missing))
+                + "\n(e.g. add director register entry: Ali Khan appointed 2026-07-01, reference DIR-001)"
+            )
+        return None
 
     # Other write tools: generic clarifying question.
     return (
@@ -515,6 +544,15 @@ def merge_answer(pending: dict, answer: str) -> dict:
         # overhead amount + pool, contract id + %, description, etc.).
         merged = f"{description} {answer.strip()}".strip() if answer else description
         parser = _COST_PARSE_TOOLS[tool_name]
+        parsed = parser(merged)
+        params = {**params, **parsed}
+        params["description"] = merged
+        return params
+    if tool_name in _AUDIT_PARSE_TOOLS:
+        # Same for statutory-register actions: re-parse the merged message so
+        # "add director register entry ..." fills action/register_type/date.
+        merged = f"{description} {answer.strip()}".strip() if answer else description
+        parser = _AUDIT_PARSE_TOOLS[tool_name]
         parsed = parser(merged)
         params = {**params, **parsed}
         params["description"] = merged
@@ -650,5 +688,19 @@ def is_complete(tool_name: str, params: dict) -> bool:
             and params.get("amount")
             and params.get("counterparty_name")
             and params.get("fiscal_year")
+        )
+    if tool_name == "maintain_statutory_registers":
+        action = params.get("action")
+        if action in ("update", "delete"):
+            # update/delete need the register_id; the other fields come from
+            # the stored row.
+            return bool(params.get("register_id"))
+        # add/view need action + register_type + date + description (all four
+        # are schema-required; add also wants a description).
+        return bool(
+            action
+            and params.get("register_type")
+            and params.get("entry_date")
+            and (action == "view" or params.get("description"))
         )
     return True
