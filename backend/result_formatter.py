@@ -364,7 +364,7 @@ def _fmt_sales_tax_adjust(result: dict) -> str:
 
 
 def _fmt_tax_filings(result: dict) -> str:
-    """Plain-English list of persisted tax filings."""
+    """Plain-English list of persisted tax filings (with save dates)."""
     items = result.get("items") or []
     if not items:
         return result.get("message") or "No tax filings on record."
@@ -373,11 +373,12 @@ def _fmt_tax_filings(result: dict) -> str:
         period_s = ""
         if f.get("period"):
             period_s = "/P%02d" % int(f.get("period"))
+        created_s = f" (saved {f.get('created_at')})" if f.get("created_at") else ""
         lines.append(
             f"  - {f.get('filing_id')} {f.get('filing_type')} FY {f.get('fiscal_year')}{period_s}: "
             f"net payable {_money(f.get('net_payable', 0))} (revenue {_money(f.get('total_revenue', 0))}, "
             f"expenses {_money(f.get('total_expenses', 0))}, tax {_money(f.get('tax_liability', 0))}) "
-            f"[{f.get('status', '')}]"
+            f"[{f.get('status', '')}]{created_s}"
         )
     more = f"\n  ... and {len(items) - 20} more" if len(items) > 20 else ""
     return f"{len(items)} tax filing(s) on record:\n" + "\n".join(lines) + more
