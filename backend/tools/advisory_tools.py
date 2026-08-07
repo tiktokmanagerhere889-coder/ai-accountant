@@ -176,7 +176,7 @@ def _prefix_label(prefix: str) -> str:
     """Map account prefix to human-readable label."""
     labels = {
         "1": "Assets", "2": "Liabilities", "3": "Equity",
-        "4": "Revenue", "5": "COGS", "6": "Operating Expenses", "8": "Other Expenses",
+        "4": "Revenue", "5": "COGS", "6": "Operating Expenses", "7": "Tax", "8": "Other Expenses",
     }
     return labels.get(prefix, f"Prefix {prefix}")
 

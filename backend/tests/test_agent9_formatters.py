@@ -18,6 +18,15 @@ def test_cost_cutting_routes_with_year():
 def test_spending_routes():
     tool, params = route_tool("show my spending patterns for Q2 2026")
     assert tool == "analyze_spending_patterns", f"got {tool}"
+    assert params["from_date"] == date(2026, 4, 1)
+    assert params["to_date"] == date(2026, 6, 30)
+
+
+def test_spending_q4_routes():
+    tool, params = route_tool("spending analysis for Q4 2026")
+    assert tool == "analyze_spending_patterns"
+    assert params["from_date"] == date(2026, 10, 1)
+    assert params["to_date"] == date(2026, 12, 31)
 
 
 def test_ratios_routes():
@@ -40,6 +49,23 @@ def test_custom_report_routes_and_approval():
     assert params["report_type"]
     from intent_router import is_approval_required
     assert is_approval_required("generate_custom_report")
+
+
+def test_custom_report_title_stripped():
+    """report_title must not be the raw chat message: strip trigger verbs,
+    articles, and the year, but keep the meaningful name."""
+    tool, params = route_tool("generate a custom management report for 2026")
+    assert tool == "generate_custom_report"
+    title = params["report_title"].lower()
+    assert "generate" not in title
+    assert "2026" not in title
+    assert title == "custom management report"
+
+
+def test_custom_report_trend_type():
+    tool, params = route_tool("generate a trend report for 2026")
+    assert tool == "generate_custom_report"
+    assert params["report_type"] == "trend"
 
 
 def test_cost_cutting_has_formatter():

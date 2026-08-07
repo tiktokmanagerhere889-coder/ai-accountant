@@ -173,6 +173,48 @@ def _params_dates(text: str) -> dict:
     }
 
 
+def _params_spending(text: str) -> dict:
+    """Date-range params for spending analysis. Handles quarters like
+    'Q2 2026' -> Apr 1 - Jun 30; otherwise delegates to _params_dates."""
+    m = re.search(r"\bQ([1-4])\b[,\s]*(20\d{2})", text, re.I)
+    if m:
+        q, yr = int(m.group(1)), int(m.group(2))
+        start_month = {1: 1, 2: 4, 3: 7, 4: 10}[q]
+        end_month = {1: 3, 2: 6, 3: 9, 4: 12}[q]
+        from_d = date(yr, start_month, 1)
+        to_d = date(yr, end_month, 30)  # 31st month end handled below
+        if end_month in (3, 12):
+            to_d = date(yr, end_month, 31)
+        return {"from_date": from_d, "to_date": to_d}
+    return _params_dates(text)
+
+
+_REPORT_TYPE_KEYWORDS = {
+    "summary": "summary", "detailed": "detailed", "comparative": "comparative", "trend": "trend",
+}
+
+
+def _params_custom_report(text: str) -> dict:
+    """Params for generate_custom_report. report_title = the message with
+    trigger words/verbs stripped (was raw message, e.g. 'generate a custom
+    management report for 2026'). report_type inferred from keywords, default
+    summary."""
+    rtype = next(
+        (k for k in _REPORT_TYPE_KEYWORDS if re.search(rf"\b{k}\b", text.lower())),
+        "summary",
+    )
+    title = re.sub(r"\b(generate|create|make|give|for|a|an|the|my)\b", "", text, flags=re.I)
+    title = re.sub(r"\bQ[1-4]\b", "", title, flags=re.I)
+    title = re.sub(r"20\d{2}", "", title)
+    title = re.sub(r"\s+", " ", title).strip(" -:.,")
+    title = title[:50] or "Management Report"
+    return {
+        "report_title": title,
+        "fiscal_year": _extract_year(text) or date.today().year,
+        "report_type": rtype,
+    }
+
+
 def _params_trial_balance(text: str) -> dict:
     return {"as_of_date": _extract_date(text) or date.today()}
 
@@ -1282,11 +1324,11 @@ ROUTES: list[tuple[list[str], str, callable]] = [
     (["statutory register", "register of director", "register of directors", "register of member", "register of members", "register of charge", "register of charges", "register of contract", "register of contracts", "director register", "member register", "charge register", "contract register", "beneficial owner", "beneficial owner register", "maintain register", "register entry", "register record", "statutory"], "maintain_statutory_registers", _params_statutory_registers),
 
     # --- Advisory ---
-    (["spending pattern", "spending analysis", "spending", "spend analysis", "expense pattern"], "analyze_spending_patterns", _params_dates),
+    (["spending pattern", "spending analysis", "spending", "spend analysis", "expense pattern"], "analyze_spending_patterns", _params_spending),
     (["financial ratio", "ratio analysis", "ratios", "liquidity ratio", "profitability"], "calculate_financial_ratios", _params_year),
     (["financial health", "health score", "health assessment"], "assess_financial_health", _params_year),
     (["cost cutting", "reduce expenses", "cost reduction", "save money", "cut cost"], "generate_cost_cutting_recommendations", _params_year),
-    (["custom report", "generate report", "management report"], "generate_custom_report", lambda t: {"report_title": t[:50], "fiscal_year": _extract_year(t) or date.today().year, "report_type": "summary"}),
+    (["custom report", "generate report", "management report", "generate a report", "trend report", "comparative report", "detailed report", "summary report"], "generate_custom_report", _params_custom_report),
 
     # --- System Admin ---
     (["system status", "health check", "is everything working", "system health", "status check"], "check_system_status", _params_none),
