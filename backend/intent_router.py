@@ -153,7 +153,18 @@ def _extract_date_pair(text: str) -> tuple[Optional[date], Optional[date]]:
 
 
 def _params_dates(text: str) -> dict:
+    """Date-range params. Prefers explicit dates in the message.
+
+    If the message names only a bare year (e.g. "for 2026"), the range is that
+    whole calendar year - otherwise it falls back to the current month, which
+    keeps "this month" prompts correct.
+    """
     from_d, to_d = _extract_date_pair(text)
+    if from_d is None:
+        yr = _extract_year(text)
+        if yr:
+            from_d = date(yr, 1, 1)
+            to_d = date(yr, 12, 31)
     today = date.today()
     first_of_month = today.replace(day=1)
     return {
@@ -252,6 +263,18 @@ def _params_filing_sales(text: str) -> dict:
 
 
 def _params_filing_income(text: str) -> dict:
+    p = _params_year(text)
+    p["confirm"] = True
+    return p
+
+
+def _params_fiscal_close(text: str) -> dict:
+    """Close-fiscal-year route: year from the message, always confirm=True.
+
+    close_fiscal_year refuses to run without confirm=True (it is irreversible).
+    The router injects it the same way the filing parsers do - the human
+    approval is the consent, and the tool must never run without it.
+    """
     p = _params_year(text)
     p["confirm"] = True
     return p
@@ -979,7 +1002,7 @@ ROUTES: list[tuple[list[str], str, callable]] = [
     (["retained earning", "transfer retained"], "transfer_retained_earnings", _params_year),
     (["carry forward", "carry-forward", "carry forward balance"], "carry_forward_balances", lambda t: {"from_fiscal_year": (_extract_year(t) or date.today().year) - 1, "to_fiscal_year": _extract_year(t) or date.today().year}),
     (["notes to financial", "notes to financials", "financial notes"], "draft_notes_to_financials", _params_year),
-    (["close fiscal year", "close year", "close the books", "year end close", "year-end close"], "close_fiscal_year", _params_year),
+    (["close fiscal year", "close year", "close the books", "year end close", "year-end close"], "close_fiscal_year", _params_fiscal_close),
 
     # --- Cost & Budgeting / Advanced ---
     (["breakeven", "break even", "break-even", "cvp", "cost volume"], "calculate_breakeven", _params_breakeven),

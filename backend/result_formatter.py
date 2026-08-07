@@ -95,7 +95,14 @@ def _fmt_balance_sheet(result: dict) -> str:
 
 
 def _fmt_cash_flow(result: dict) -> str:
-    return f"Cash flow statement from {result.get('from_date')} to {result.get('to_date')}: {_money(result.get('net_cash_flow', 0))} net cash flow."
+    return (
+        f"Cash flow statement from {result.get('from_date')} to {result.get('to_date')}: "
+        f"{_money(result.get('net_change_in_cash', 0))} net change "
+        f"(opening {_money(result.get('opening_cash', 0))}, closing {_money(result.get('closing_cash', 0))}). "
+        f"Operating {_money(result.get('net_operating', 0))}, "
+        f"investing {_money(result.get('net_investing', 0))}, "
+        f"financing {_money(result.get('net_financing', 0))}."
+    )
 
 
 def _fmt_aging(result: dict) -> str:
@@ -406,6 +413,19 @@ def _fmt_generic_report(result: dict) -> str:
     return f"Report generated: {result.get('report_title')} - {result.get('summary', '')}"
 
 
+def _fmt_notes(result: dict) -> str:
+    """Plain-English notes-to-financials: per-note title + content."""
+    notes = result.get("notes") or []
+    if not notes:
+        return f"Notes to financial statements for FY {result.get('fiscal_year')}: no notes generated."
+    lines = []
+    for n in notes[:10]:
+        content = str(n.get("content", "")).strip()
+        lines.append(f"  - {n.get('title', 'Note')}: {content[:220]}")
+    more = f"\n  ... and {len(notes) - 10} more" if len(notes) > 10 else ""
+    return f"Notes to financial statements FY {result.get('fiscal_year')} ({len(notes)} note(s)):\n" + "\n".join(lines) + more
+
+
 _FORMATTERS = {
     "check_cash_position": _fmt_cash,
     "generate_trial_balance": _fmt_trial_balance,
@@ -439,7 +459,7 @@ _FORMATTERS = {
     "prepare_income_tax_filing": _fmt_filing,
     "prepare_sales_tax_filing": _fmt_filing,
     "list_tax_filings": _fmt_tax_filings,
-    "draft_notes_to_financials": _fmt_generic_report,
+    "draft_notes_to_financials": _fmt_notes,
     "prepare_budget_forecast": _fmt_generic_report,
     "get_tax_planning_advice": lambda r: r.get("advice") or "Tax planning advice generated.",
 }

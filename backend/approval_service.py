@@ -203,7 +203,9 @@ def approve_or_execute(
     # lacks the flag (e.g. queued via the LLM orchestrator before the router's
     # _params_filing_* parsers, or via direct /tools/execute), inject it so the
     # approval succeeds instead of raising ValueError("confirm=True required").
-    if entry.tool_name in ("prepare_sales_tax_filing", "prepare_income_tax_filing"):
+    if entry.tool_name in (
+        "prepare_sales_tax_filing", "prepare_income_tax_filing", "close_fiscal_year",
+    ):
         params_to_run = dict(params_to_run)
         params_to_run["confirm"] = True
 
