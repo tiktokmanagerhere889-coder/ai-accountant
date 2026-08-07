@@ -1,6 +1,6 @@
 # 🧾 AI Accountant
 
-> An AI-powered accounting assistant that automates the full range of daily, monthly, and yearly accounting tasks for a business owner or office admin — built on an Orchestrator + 10 specialist agents + 67 tools architecture.
+> An AI-powered accounting assistant that automates the full range of daily, monthly, and yearly accounting tasks for a business owner or office admin — built on an Orchestrator + 10 specialist agents + 69 tools architecture.
 
 [![FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688?style=flat-square&logo=fastapi)](https://fastapi.tiangolo.com)
 [![Next.js](https://img.shields.io/badge/Frontend-Next.js%2014-black?style=flat-square&logo=next.js)](https://nextjs.org)
@@ -27,7 +27,7 @@ The research paper documenting automation mapping for 67 accounting tasks, frame
 
 ## 🏗️ What It Does
 
-The system orchestrates **1 Orchestrator + 10 specialist agents** over **67 tools** to handle the complete accounting lifecycle:
+The system orchestrates **1 Orchestrator + 10 specialist agents** over **69 tools** to handle the complete accounting lifecycle:
 
 | Domain | Agent | Tools |
 |--------|-------|-------|
@@ -37,7 +37,7 @@ The system orchestrates **1 Orchestrator + 10 specialist agents** over **67 tool
 | Reporting | Month-End Reporting Agent | Unpaid bills, depreciation, amortization, aging reports, budget variance, cash flow forecast |
 | Financials | Year-End Close Agent | Trial balance, P&L, balance sheet, cash flow statement, year-end close, retained earnings |
 | Cost Accounting | Cost & Budgeting Agent | Breakeven analysis, currency conversion, budget forecast, overhead allocation, revenue recognition |
-| Tax | Tax Agent | WHT, EOBI, AMT, sales tax filing, income tax filing, tax planning advisory |
+| Tax | Tax Agent | WHT, EOBI, AMT, sales tax filing, income tax filing, tax planning advisory, list tax filings |
 | Compliance | Audit & Regulatory Agent | Anomaly detection, compliance deadlines, internal audit support, statutory registers |
 | Advisory | Advisory Agent | Spending analysis, financial ratios, health assessment, cost-cutting recommendations |
 | System | System Admin Agent | System health, usage statistics, preferences, scheduled maintenance |
