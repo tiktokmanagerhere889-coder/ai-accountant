@@ -157,7 +157,8 @@ def analyze_spending_patterns(inp: AnalyzeSpendingPatternsInput, db: Session) ->
             pct = _round((last.amount - first.amount) / first.amount * 100) if first.amount else Decimal("0")
             if pct > 20:
                 insights.append(f"Spending trend: month-over-month increase of {pct}% from {first.month} to {last.month}.")
-    insights.append(f"Total of {len(entries)} transactions analyzed across {len(categories)} categories.")
+    ncats = len(categories)
+    insights.append(f"Total of {len(entries)} transactions analyzed across {ncats} categor{'y' if ncats == 1 else 'ies'}.")
 
     period_str = f"{inp.from_date.isoformat()} to {inp.to_date.isoformat()}"
 
