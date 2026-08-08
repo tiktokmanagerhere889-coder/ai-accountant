@@ -617,18 +617,74 @@ def _fmt_sales_tax_adjust(result: dict) -> str:
 
 
 def _fmt_fbr_audit_risk(result: dict) -> str:
-    """Plain-English FBR audit-risk assessment summary."""
+    """Plain-English FBR audit-risk assessment summary with full parameter breakdown."""
     score = result.get("risk_score", "0")
     band = result.get("risk_band", "unknown")
-    triggered = result.get("triggered_count", 0)
+    triggered_count = result.get("triggered_count", 0)
     exclusions = result.get("exclusions_applied") or []
-    excl_s = f" Exclusions: {', '.join(exclusions)}." if exclusions else ""
-    return (
-        f"FBR audit risk for FY {result.get('fiscal_year')}: "
-        f"score {score}/100 ({band} risk), {triggered} "
-        f"parameter(s) triggered.{excl_s} "
-        f"Disclaimer: {result.get('disclaimer', 'See full report.')}"
-    )
+    excl_s = f"\n\n**Exclusions applied:** {', '.join(exclusions)}." if exclusions else ""
+
+    lines = [
+        f"FBR audit risk for FY {result.get('fiscal_year')}: score {score}/100 ({band} risk), {triggered_count} parameter(s) triggered."
+    ]
+
+    # Per-parameter table
+    params = result.get("parameters") or []
+    if params:
+        lines.append("")
+        lines.append("### Risk Parameters")
+        triggered_list = []
+        not_triggered_list = []
+        not_verifiable_list = []
+        for p in params:
+            code = p.get("code", "?")
+            name = p.get("name", "?")
+            threshold = p.get("threshold", "?")
+            actual = p.get("actual_value", "N/A")
+            source = p.get("source", "?")
+            url = p.get("source_url", "")
+            confidence = p.get("confidence", "?")
+            triggered = p.get("triggered")
+
+            status = "TRIGGERED" if triggered is True else ("NOT triggered" if triggered is False else "NOT verifiable")
+            line = f"- **{code} — {name}**: {status} — threshold: {threshold}, actual: {actual}, confidence: {confidence}, source: {source}"
+            if url:
+                line += f" ([link]({url}))"
+            lines.append(line)
+
+            if triggered is True:
+                triggered_list.append(code)
+            elif triggered is False:
+                not_triggered_list.append(code)
+            else:
+                not_verifiable_list.append(code)
+
+        if triggered_list:
+            lines.append("")
+            lines.append(f"**Triggered ({len(triggered_list)}):** {', '.join(triggered_list)}")
+        if not_triggered_list:
+            lines.append(f"**Not triggered ({len(not_triggered_list)}):** {', '.join(not_triggered_list)}")
+        if not_verifiable_list:
+            lines.append(f"**Not verifiable ({len(not_verifiable_list)}):** {', '.join(not_verifiable_list)}")
+
+    # Flagged items with amounts
+    flagged = result.get("flagged_items") or []
+    if flagged:
+        lines.append("")
+        lines.append("### Flagged Items")
+        for fi in flagged:
+            desc = fi.get("description", "")
+            amount = fi.get("amount", "")
+            entries = fi.get("ledger_entry_ids", [])
+            amt_str = f", amount: {amount}" if amount else ""
+            entries_str = f", entries: {', '.join(entries)}" if entries else ""
+            lines.append(f"- **{fi.get('param_code', '?')}**: {desc}{amt_str}{entries_str}")
+
+    lines.append("")
+    lines.append(f"Disclaimer: {result.get('disclaimer', 'See full report.')}")
+    lines.append(excl_s)
+
+    return "\n".join(lines)
 
 
 def _fmt_tax_filings(result: dict) -> str:
