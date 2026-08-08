@@ -384,6 +384,48 @@ class TestAdjustSalesTaxInputOutput:
         assert r.refund_amount == Decimal("15000")
         assert "refund" in r.summary.lower()
 
+    def test_input_tax_ledger_verified(self):
+        """When a real input-tax account has posted entries, basis is ledger_verified."""
+        session = self.session
+        session.add(JournalEntry(
+            entry_id="IT-LEDGER-001",
+            description="Input tax paid on business purchases",
+            posted_date=date(2026, 7, 12),
+            reference=None,
+            debit_account="1200-Input Tax Recoverable",
+            debit_amount=Decimal("72000.00"),
+            credit_account="1000-Cash",
+            credit_amount=Decimal("72000.00"),
+            status="posted",
+        ))
+        session.commit()
+        inp = AdjustSalesTaxInputOutputInput(period=7, fiscal_year=2026)
+        r = adjust_sales_tax_input_output(inp, session)
+        assert r.calculated_input_tax == Decimal("72000.00")
+        assert r.input_tax_basis == "ledger_verified"
+        assert "ledger" in r.input_tax_note.lower()
+
+    def test_input_tax_flat_rate_estimated(self):
+        """No input-tax account entries -> flat-rate estimate with ESTIMATED note."""
+        inp = AdjustSalesTaxInputOutputInput(period=7, fiscal_year=2026)
+        r = adjust_sales_tax_input_output(inp, self.session)
+        # Purchases = 200000 + 50000 + 150000 = 400000; input tax = 400000 * 18% = 72000
+        assert r.calculated_input_tax == Decimal("72000.00")
+        assert r.input_tax_basis == "estimated_flat_rate"
+        assert r.input_tax_note is not None
+        assert "ESTIMATED" in r.input_tax_note
+        assert "flat-rate" in r.input_tax_note.lower()
+
+    def test_manual_override_input_tax(self):
+        """Explicit input_tax_amount -> manual_override basis."""
+        inp = AdjustSalesTaxInputOutputInput(
+            period=7, fiscal_year=2026,
+            input_tax_amount=Decimal("50000"),
+        )
+        r = adjust_sales_tax_input_output(inp, self.session)
+        assert r.calculated_input_tax == Decimal("50000")
+        assert r.input_tax_basis == "manual_override"
+
 
 # ===========================================================================
 # Tool 6: Flag Tax Exemption / Zero Rating
@@ -476,6 +518,36 @@ class TestPrepareSalesTaxFiling:
         r = prepare_sales_tax_filing(inp, self.session)
         assert r.status == "prepared"
         assert r.net_amount_payable == Decimal("0")
+
+    def test_filing_input_tax_flat_rate(self):
+        """No input-tax account -> estimated flat-rate with ESTIMATED note."""
+        inp = PrepareSalesTaxFilingInput(period=7, fiscal_year=2026, confirm=True)
+        r = prepare_sales_tax_filing(inp, self.session)
+        assert r.input_tax_basis == "estimated_flat_rate"
+        assert r.input_tax_note is not None
+        assert "ESTIMATED" in r.input_tax_note
+        assert r.filing_data["input_tax_basis"] == "estimated_flat_rate"
+
+    def test_filing_input_tax_ledger_verified(self):
+        """Input-tax account entries -> ledger_verified basis in filing."""
+        session = self.session
+        session.add(JournalEntry(
+            entry_id="IT-FILING-001",
+            description="Input tax on purchases",
+            posted_date=date(2026, 7, 12),
+            reference=None,
+            debit_account="1200-Input Tax Recoverable",
+            debit_amount=Decimal("45000.00"),
+            credit_account="1000-Cash",
+            credit_amount=Decimal("45000.00"),
+            status="posted",
+        ))
+        session.commit()
+        inp = PrepareSalesTaxFilingInput(period=7, fiscal_year=2026, confirm=True)
+        r = prepare_sales_tax_filing(inp, self.session)
+        assert r.input_tax_basis == "ledger_verified"
+        assert r.input_tax_adjustments == Decimal("45000.00")
+        assert r.filing_data["input_tax_basis"] == "ledger_verified"
 
 
 # ===========================================================================

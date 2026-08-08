@@ -708,6 +708,22 @@ export const AGENTS_DATA: AgentDef[] = [
           { name: "filing_type", type: "text", placeholder: "sales or income (optional)", required: false },
           { name: "fiscal_year", type: "number", placeholder: "e.g. 2026 (optional)", required: false }
         ]
+      },
+      {
+        name: "assess_fbr_audit_risk",
+        description: "Score FBR audit risk from ledger using historical FBR parameters",
+        approval: false,
+        aiOnly: false,
+        inputs: [
+          { name: "fiscal_year", type: "number", placeholder: "e.g. 2026", required: true },
+          { name: "business_type", type: "text", placeholder: "corporate or non_corporate", required: false },
+          { name: "is_manufacturer", type: "boolean", placeholder: "true/false", required: false },
+          { name: "prior_3yr_audit_status", type: "text", placeholder: "audited / not_audited / unknown", required: false },
+          { name: "months_non_filing", type: "number", placeholder: "e.g. 3", required: false },
+          { name: "customs_import_value", type: "number", placeholder: "PKR import value", required: false },
+          { name: "exempt_income", type: "number", placeholder: "PKR exempt income", required: false },
+          { name: "refund_claim", type: "number", placeholder: "PKR refund claim", required: false }
+        ]
       }
     ]
   },

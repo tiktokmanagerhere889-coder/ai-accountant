@@ -330,6 +330,64 @@ def calculate_eobi_deductions(inp: CalculateEobiDeductionsInput, db: Session) ->
 # Tool 5: Adjust Sales Tax Input/Output
 # ---------------------------------------------------------------------------
 
+_INPUT_TAX_ACCOUNT_TOKENS = ("input tax", "input_tax", "input vat", "input-vat",
+                              "sales tax input", "input sales tax", "input output tax",
+                              "vat input", "input gst")
+
+
+def _is_input_tax_account(account: str) -> bool:
+    """Match a ledger account that represents SALES-TAX INPUT (claimable tax)."""
+    a = (account or "").lower()
+    return any(tok in a for tok in _INPUT_TAX_ACCOUNT_TOKENS)
+
+
+def _compute_input_tax(
+    db: Session, fiscal_year: int, period: int
+) -> tuple[Decimal, str, str]:
+    """Compute input tax for a period.
+
+    Returns (input_tax, basis, note).
+      - ledger_verified: a real sales-tax input-tax account in the ledger had posted entries.
+      - estimated_flat_rate: no input-tax account present; falls back to purchases * rate%.
+        The caller supplies the rate; here we pass purchases and let the caller multiply.
+    To keep this helper rate-independent, when ledger input-tax entries exist we sum them;
+    otherwise we return (Decimal("0"), "estimated_flat_rate", None) and the caller applies
+    the flat-rate fallback.
+    """
+    input_entries = db.query(JournalEntry).filter(
+        JournalEntry.status == "posted",
+        func.extract("year", JournalEntry.posted_date) == fiscal_year,
+        func.extract("month", JournalEntry.posted_date) == period,
+    ).all()
+    ledger_total: Decimal = Decimal("0")
+    ledger_accounts: list[str] = []
+    matched = 0
+    for e in input_entries:
+        if _is_input_tax_account(e.debit_account):
+            amt = e.debit_amount or Decimal("0")
+            if amt > Decimal("0"):
+                ledger_total += amt
+                matched += 1
+                if e.debit_account not in ledger_accounts:
+                    ledger_accounts.append(e.debit_account)
+        if _is_input_tax_account(e.credit_account):
+            amt = e.credit_amount or Decimal("0")
+            if amt > Decimal("0"):
+                ledger_total += amt
+                matched += 1
+                if e.credit_account not in ledger_accounts:
+                    ledger_accounts.append(e.credit_account)
+
+    if ledger_total > Decimal("0"):
+        note = (
+            f"Input tax of {_round(ledger_total, 2)} computed from {matched} "
+            f"posted ledger input-tax entries: {', '.join(ledger_accounts)}."
+        )
+        return _round(ledger_total, 2), "ledger_verified", note
+    # No ledger input-tax account — caller will apply flat-rate fallback.
+    return Decimal("0"), "estimated_flat_rate", None
+
+
 def adjust_sales_tax_input_output(inp: AdjustSalesTaxInputOutputInput, db: Session) -> AdjustSalesTaxInputOutputOutput:
     """Adjust sales tax input vs output for a period.
 
@@ -359,21 +417,61 @@ def adjust_sales_tax_input_output(inp: AdjustSalesTaxInputOutputInput, db: Sessi
 
     if inp.input_tax_amount is not None:
         input_tax = inp.input_tax_amount
-        adjustments.append(f"Input tax overridden to {input_tax} (reason: {inp.adjustment_reason or 'manual override'})")
+        input_tax_basis = "manual_override"
+        input_tax_note = f"Overridden to {input_tax} (reason: {inp.adjustment_reason or 'manual override'})"
+        adjustments.append(f"Input tax basis: {input_tax_basis} ({input_tax_note})")
     else:
         if sales_rate == Decimal("0"):
             raise ValueError(
                 "Sales tax rate is not configured in tax_rates (SALES_TAX). "
                 "Add the rate before computing sales tax."
             )
-        purchases = db.query(func.sum(JournalEntry.debit_amount)).filter(
-            expense_filter_clause(JournalEntry.debit_account, db),
+        # Ledger-verified input tax: sum posted entries whose account is an input-tax account.
+        input_entries = db.query(JournalEntry).filter(
             JournalEntry.status == "posted",
             func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
             func.extract("month", JournalEntry.posted_date) == inp.period,
-        ).scalar() or Decimal("0")
-        input_tax = _round(purchases * sales_rate / Decimal("100"), 2)
-        adjustments.append(f"Input tax calculated at {sales_rate}% ({rate_src}) on purchases {_round(purchases, 2)}")
+        ).all()
+        ledger_total: Decimal = Decimal("0")
+        ledger_accounts: list[str] = []
+        for e in input_entries:
+            if _is_input_tax_account(e.debit_account):
+                amt = e.debit_amount or Decimal("0")
+                if amt > Decimal("0"):
+                    ledger_total += amt
+                    if e.debit_account not in ledger_accounts:
+                        ledger_accounts.append(e.debit_account)
+            if _is_input_tax_account(e.credit_account):
+                amt = e.credit_amount or Decimal("0")
+                if amt > Decimal("0"):
+                    ledger_total += amt
+                    if e.credit_account not in ledger_accounts:
+                        ledger_accounts.append(e.credit_account)
+
+        if ledger_total > Decimal("0"):
+            input_tax = _round(ledger_total, 2)
+            input_tax_basis = "ledger_verified"
+            input_tax_note = (
+                f"Input tax of {input_tax} computed from {len([e for e in input_entries if _is_input_tax_account(e.debit_account) or _is_input_tax_account(e.credit_account)])} "  # noqa: E501
+                f"posted ledger input-tax entries: {', '.join(ledger_accounts)}."
+            )
+            adjustments.append(f"Input tax basis: {input_tax_basis} ({input_tax_note})")
+        else:
+            purchases = db.query(func.sum(JournalEntry.debit_amount)).filter(
+                expense_filter_clause(JournalEntry.debit_account, db),
+                JournalEntry.status == "posted",
+                func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
+                func.extract("month", JournalEntry.posted_date) == inp.period,
+            ).scalar() or Decimal("0")
+            input_tax = _round(purchases * sales_rate / Decimal("100"), 2)
+            input_tax_basis = "estimated_flat_rate"
+            input_tax_note = (
+                f"No sales-tax input-tax entries found in the ledger for period {inp.period}/{inp.fiscal_year}. "
+                f"Input tax is ESTIMATED at {sales_rate}% on total purchases ({_round(purchases, 2)}) - "
+                f"flat-rate estimate, not ledger-verified; actual may differ because input tax is only "
+                f"claimable on taxable purchases from registered suppliers."
+            )
+            adjustments.append(f"Input tax basis: {input_tax_basis} ({input_tax_note})")
 
     net_tax = _round(output_tax - input_tax, 2)
     refund = Decimal("0")
@@ -396,6 +494,8 @@ def adjust_sales_tax_input_output(inp: AdjustSalesTaxInputOutputInput, db: Sessi
         fiscal_year=inp.fiscal_year,
         calculated_output_tax=output_tax,
         calculated_input_tax=input_tax,
+        input_tax_basis=input_tax_basis,
+        input_tax_note=input_tax_note,
         net_tax_payable=net_tax,
         refund_amount=refund,
         adjustments=adjustments,
@@ -567,7 +667,26 @@ def prepare_sales_tax_filing(inp: PrepareSalesTaxFilingInput, db: Session) -> Pr
         func.extract("month", JournalEntry.posted_date) == inp.period,
     ).scalar() or Decimal("0")
 
-    input_tax = _round(purchases * sales_rate / Decimal("100"), 2)
+    # Input tax: ledger-verified if an input-tax account exists, else flat-rate estimate.
+    purchases = None
+    input_tax, input_tax_basis, input_tax_note = _compute_input_tax(
+        db, inp.fiscal_year, inp.period
+    )
+    if input_tax_basis == "estimated_flat_rate":
+        purchases = db.query(func.sum(JournalEntry.debit_amount)).filter(
+            expense_filter_clause(JournalEntry.debit_account, db),
+            JournalEntry.status == "posted",
+            func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
+            func.extract("month", JournalEntry.posted_date) == inp.period,
+        ).scalar() or Decimal("0")
+        input_tax = _round(purchases * sales_rate / Decimal("100"), 2)
+        input_tax_note = (
+            f"No sales-tax input-tax entries found in the ledger for period "
+            f"{inp.period}/{inp.fiscal_year}. Input tax is ESTIMATED at {sales_rate}% "
+            f"on total purchases ({_round(purchases, 2)}) - flat-rate estimate, not "
+            f"ledger-verified; actual may differ because input tax is only claimable "
+            f"on taxable purchases from registered suppliers."
+        )
     net_payable = _round(output_tax - input_tax, 2)
     if net_payable < Decimal("0"):
         net_payable = Decimal("0")
@@ -578,8 +697,10 @@ def prepare_sales_tax_filing(inp: PrepareSalesTaxFilingInput, db: Session) -> Pr
         "sales_tax_rate": str(sales_rate),
         "total_revenue": str(_round(revenue, 2)),
         "output_tax": str(output_tax),
-        "total_purchases": str(_round(purchases, 2)),
+        "total_purchases": str(_round(purchases, 2) if purchases is not None else Decimal("0")),
         "input_tax": str(input_tax),
+        "input_tax_basis": input_tax_basis,
+        "input_tax_note": input_tax_note or "",
         "net_payable": str(net_payable),
         "status": "prepared_for_human_submission",
         "note": "This data must be verified and submitted manually via FBR portal.",
@@ -592,7 +713,7 @@ def prepare_sales_tax_filing(inp: PrepareSalesTaxFilingInput, db: Session) -> Pr
         fiscal_year=inp.fiscal_year,
         period=inp.period,
         total_revenue=_round(revenue, 2),
-        total_expenses=_round(purchases, 2),
+        total_expenses=_round(purchases, 2) if purchases is not None else Decimal("0"),
         tax_liability=output_tax,
         net_payable=net_payable,
         filing_data=json.dumps(filing_data, default=str),
@@ -606,6 +727,8 @@ def prepare_sales_tax_filing(inp: PrepareSalesTaxFilingInput, db: Session) -> Pr
         fiscal_year=inp.fiscal_year,
         sales_tax_payable=output_tax,
         input_tax_adjustments=input_tax,
+        input_tax_basis=input_tax_basis,
+        input_tax_note=input_tax_note,
         net_amount_payable=net_payable,
         filing_data=filing_data,
         needs_approval=True,

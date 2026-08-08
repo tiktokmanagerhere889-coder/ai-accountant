@@ -1470,6 +1470,8 @@ class AdjustSalesTaxInputOutputOutput(BaseModel):
     fiscal_year: int
     calculated_output_tax: Decimal = Decimal("0")
     calculated_input_tax: Decimal = Decimal("0")
+    input_tax_basis: Optional[str] = None
+    input_tax_note: Optional[str] = None
     net_tax_payable: Decimal = Decimal("0")
     refund_amount: Decimal = Decimal("0")
     adjustments: list[str] = []
@@ -1513,6 +1515,8 @@ class PrepareSalesTaxFilingOutput(BaseModel):
     fiscal_year: int
     sales_tax_payable: Decimal = Decimal("0")
     input_tax_adjustments: Decimal = Decimal("0")
+    input_tax_basis: Optional[str] = None
+    input_tax_note: Optional[str] = None
     net_amount_payable: Decimal = Decimal("0")
     filing_data: dict = {}
     needs_approval: bool = True

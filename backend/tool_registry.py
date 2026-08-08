@@ -258,6 +258,13 @@ from tools.schemas import (
     ListTaxFilingsOutput,
 )
 
+# --- FBR Audit Risk ---
+from tools.fbr_risk_tools import (
+    assess_fbr_audit_risk,
+    AssessFbrAuditRiskInput,
+    AssessFbrAuditRiskOutput,
+)
+
 # --- Audit ---
 from tools.audit_tools import (
     detect_anomaly_transactions,
@@ -392,6 +399,9 @@ REGISTRY: dict[str, ToolEntry] = {
     "prepare_sales_tax_filing": (prepare_sales_tax_filing, PrepareSalesTaxFilingInput, PrepareSalesTaxFilingOutput, False),
     "prepare_income_tax_filing": (prepare_income_tax_filing, PrepareIncomeTaxFilingInput, PrepareIncomeTaxFilingOutput, False),
     "list_tax_filings": (list_tax_filings, ListTaxFilingsInput, ListTaxFilingsOutput, False),
+
+    # === FBR Audit Risk (1 tool) ===
+    "assess_fbr_audit_risk": (assess_fbr_audit_risk, AssessFbrAuditRiskInput, AssessFbrAuditRiskOutput, False),
 
     # === Audit (4 tools) ===
     "detect_anomaly_transactions": (detect_anomaly_transactions, DetectAnomalyTransactionsInput, DetectAnomalyTransactionsOutput, False),

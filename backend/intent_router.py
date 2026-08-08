@@ -1420,6 +1420,7 @@ ROUTES: list[tuple[list[str], str, callable]] = [
     (["show my tax filings", "show tax filings", "tax filings", "my filings", "list filings", "saved filings", "my tax filing"], "list_tax_filings", _params_filings),
     (["sales tax filing", "file sales tax", "sales tax return"], "prepare_sales_tax_filing", _params_filing_sales),
     (["income tax filing", "file income tax", "income tax return"], "prepare_income_tax_filing", _params_filing_income),
+    (["fbr audit risk", "audit risk", "fbr risk", "audit selection risk", "fbr audit", "tax audit risk", "audit probability", "fbr risk score"], "assess_fbr_audit_risk", _params_year),
 
     # --- Audit ---
     (["detect anomaly", "detect anomalies", "anomaly", "anomalies", "fraud detection", "detect fraud", "suspicious", "anomaly detection", "check anomaly"], "detect_anomaly_transactions", _params_period),

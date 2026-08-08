@@ -12,7 +12,7 @@ import json
 import urllib.request
 import urllib.error
 
-from sqlalchemy import func
+from sqlalchemy import func, text
 from sqlalchemy.orm import Session
 
 from db.models import JournalEntry, Contact, ExchangeRate, Budget
@@ -80,10 +80,23 @@ def calculate_breakeven(inp: CalculateBreakevenInput, db: Session) -> CalculateB
 # ---------------------------------------------------------------------------
 
 LIVE_EXCHANGE_API = "https://open.er-api.com/v6/latest/{base}"
+FALLBACK_EXCHANGE_API = "https://api.exchangerate-api.com/v4/latest/{base}"
 RATE_STALENESS_DAYS = 1  # rates older than 1 day are considered stale
 
 
 def _fetch_live_rate(from_currency: str, to_currency: str) -> tuple[Decimal, date] | None:
+    """Fetch a live exchange rate from open.er-api.com (free, no key).
+
+    Tries primary (open.er-api.com) then fallback (exchangerate-api.com).
+    Returns (rate, rate_date) or None if both API calls fail / currency missing.
+    """
+    rate = _fetch_live_rate_primary(from_currency, to_currency)
+    if rate is not None:
+        return rate
+    return _fetch_live_rate_fallback(from_currency, to_currency)
+
+
+def _fetch_live_rate_primary(from_currency: str, to_currency: str) -> tuple[Decimal, date] | None:
     """Fetch a live exchange rate from open.er-api.com (free, no key).
 
     Returns (rate, rate_date) or None if the API call fails / currency missing.
@@ -109,14 +122,68 @@ def _fetch_live_rate(from_currency: str, to_currency: str) -> tuple[Decimal, dat
         return None
 
 
+def _fetch_live_rate_fallback(from_currency: str, to_currency: str) -> tuple[Decimal, date] | None:
+    """Fetch a live exchange rate from exchangerate-api.com (free, no key).
+
+    Fallback when open.er-api.com fails.
+    Returns (rate, rate_date) or None if the API call fails / currency missing.
+    """
+    try:
+        url = FALLBACK_EXCHANGE_API.format(base=from_currency)
+        req = urllib.request.Request(url, headers={"User-Agent": "AI-Accountant/1.0"})
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+
+        rates = data.get("rates", {})
+        target = to_currency.upper()
+        if target not in rates:
+            return None
+
+        rate = Decimal(str(rates[target]))
+        rate_date = date.today()
+        return rate, rate_date
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError, json.JSONDecodeError, KeyError, ValueError):
+        return None
+
+
+def _find_cached_rate(db: Session, from_curr: str, to_curr: str, target_date: date | None) -> ExchangeRate | None:
+    """Find a cached exchange rate.
+
+    If target_date is None, returns the latest cached rate.
+    If target_date is provided, returns the rate with rate_date on or before
+    the target (for historical lookup), preferring exact date match.
+    If no rate exists on or before target_date, returns the nearest after.
+    """
+    q = db.query(ExchangeRate).filter(
+        ExchangeRate.from_currency == from_curr,
+        ExchangeRate.to_currency == to_curr,
+    )
+    if target_date is None:
+        return q.order_by(ExchangeRate.rate_date.desc(), ExchangeRate.fetched_at.desc()).first()
+    # Prefer exact date match
+    exact = q.filter(ExchangeRate.rate_date == target_date).first()
+    if exact:
+        return exact
+    # Rates on or before target_date (for historical lookup), nearest first
+    before = q.filter(ExchangeRate.rate_date <= target_date).order_by(ExchangeRate.rate_date.desc()).all()
+    if before:
+        return before[0]
+    # No rate on/before — fall back to nearest after
+    after = q.order_by(ExchangeRate.rate_date.asc()).all()
+    return after[0] if after else None
+
+
 def convert_foreign_currency(inp: ConvertForeignCurrencyInput, db: Session) -> ConvertForeignCurrencyOutput:
     """Convert amount between currencies.
 
     Rate resolution order:
-      1. Fresh cached rate from exchange_rates table (fetched within last 24h).
-      2. Live rate from open.er-api.com (free, no key) - saved to exchange_rates.
-      3. Stale cached rate - used ONLY if live fetch fails, with a clear warning.
-    Never falls back to 1:1 silently.
+      1. Cached rate from exchange_rates table (matching rate_date if provided).
+         - Fresh if fetched within last 24h.
+         - Stale (warning) if older.
+      2. Live rate from open.er-api.com (primary) -> exchangerate-api.com (fallback).
+         Saved to exchange_rates on fetch.
+      3. Stale cached rate with a clear warning (if live fails).
+      4. No rate available -> 1:1 fallback with a clear warning (never silent 1:1).
     """
     if inp.from_currency.upper() == inp.to_currency.upper():
         return ConvertForeignCurrencyOutput(
@@ -131,20 +198,52 @@ def convert_foreign_currency(inp: ConvertForeignCurrencyInput, db: Session) -> C
 
     from_curr = inp.from_currency.upper()
     to_curr = inp.to_currency.upper()
-    today = date.today()
+    requested_date = inp.rate_date
 
-    # Step 1: Look up cached rate - fresh if fetched within last 24h
-    cached = db.query(ExchangeRate).filter(
-        ExchangeRate.from_currency == from_curr,
-        ExchangeRate.to_currency == to_curr,
-    ).order_by(ExchangeRate.rate_date.desc(), ExchangeRate.fetched_at.desc()).first()
+    # Step 1: Look up cached rate (exact date or nearest)
+    cached = _find_cached_rate(db, from_curr, to_curr, requested_date)
 
+    # If a specific date was requested and we have a matching/neighbor cache, use it
+    if requested_date is not None and cached:
+        fetched = cached.fetched_at or datetime.combine(cached.rate_date, datetime.min.time())
+        fresh_cutoff = datetime.utcnow() - timedelta(hours=24)
+        cached_fresh = fetched >= fresh_cutoff
+        if not cached_fresh:
+            warning = (
+                f"Live rate fetch failed for {from_curr}->{to_curr}. "
+                f"Using stale cached rate from {cached.rate_date} "
+                f"(requested date: {requested_date})."
+            )
+            converted = _round(inp.amount * cached.rate, 2)
+            return ConvertForeignCurrencyOutput(
+                original_amount=inp.amount,
+                from_currency=from_curr,
+                to_currency=to_curr,
+                conversion_rate=cached.rate,
+                converted_amount=converted,
+                rate_source=f"{cached.source or 'exchange_rates'} (cached, stale)",
+                rate_date=cached.rate_date,
+                warning=warning,
+            )
+        converted = _round(inp.amount * cached.rate, 2)
+        return ConvertForeignCurrencyOutput(
+            original_amount=inp.amount,
+            from_currency=from_curr,
+            to_currency=to_curr,
+            conversion_rate=cached.rate,
+            converted_amount=converted,
+            rate_source=cached.source or "exchange_rates",
+            rate_date=cached.rate_date,
+        )
+
+    # No specific date or no cached match: check freshness of latest cached rate
     cached_fresh = False
     if cached:
         fetched = cached.fetched_at or datetime.combine(cached.rate_date, datetime.min.time())
         fresh_cutoff = datetime.utcnow() - timedelta(hours=24)
         cached_fresh = fetched >= fresh_cutoff
 
+    # Step 2: Fresh cached rate available
     if cached and cached_fresh:
         converted = _round(inp.amount * cached.rate, 2)
         return ConvertForeignCurrencyOutput(
@@ -157,7 +256,7 @@ def convert_foreign_currency(inp: ConvertForeignCurrencyInput, db: Session) -> C
             rate_date=cached.rate_date,
         )
 
-    # Step 2: Try live API
+    # Step 3: Try live API (primary then fallback)
     live = _fetch_live_rate(from_curr, to_curr)
     if live is not None:
         live_rate, live_date = live
@@ -166,7 +265,7 @@ def convert_foreign_currency(inp: ConvertForeignCurrencyInput, db: Session) -> C
         if cached:
             cached.rate = live_rate
             cached.rate_date = live_date
-            cached.source = "open.er-api.com"
+            cached.source = "open.er-api.com / exchangerate-api.com"
             cached.fetched_at = datetime.utcnow()
         else:
             db.add(ExchangeRate(
@@ -174,7 +273,7 @@ def convert_foreign_currency(inp: ConvertForeignCurrencyInput, db: Session) -> C
                 to_currency=to_curr,
                 rate=live_rate,
                 rate_date=live_date,
-                source="open.er-api.com",
+                source="open.er-api.com / exchangerate-api.com",
                 fetched_at=datetime.utcnow(),
             ))
         db.commit()
@@ -186,15 +285,15 @@ def convert_foreign_currency(inp: ConvertForeignCurrencyInput, db: Session) -> C
             to_currency=to_curr,
             conversion_rate=live_rate,
             converted_amount=converted,
-            rate_source="open.er-api.com",
+            rate_source="open.er-api.com / exchangerate-api.com",
             rate_date=live_date,
         )
 
-    # Step 3: Live fetch failed - use stale cached rate with a clear warning
+    # Step 4: Live fetch failed - use stale cached rate with a clear warning
     if cached:
         warning = (
             f"Live rate fetch failed for {from_curr}->{to_curr}. "
-            f"Using cached rate from {cached.rate_date}."
+            f"Using stale cached rate from {cached.rate_date}."
         )
         converted = _round(inp.amount * cached.rate, 2)
         return ConvertForeignCurrencyOutput(
@@ -203,15 +302,26 @@ def convert_foreign_currency(inp: ConvertForeignCurrencyInput, db: Session) -> C
             to_currency=to_curr,
             conversion_rate=cached.rate,
             converted_amount=converted,
-            rate_source=f"{cached.source or 'exchange_rates'} (cached)",
+            rate_source=f"{cached.source or 'exchange_rates'} (cached, stale)",
             rate_date=cached.rate_date,
             warning=warning,
         )
 
-    # Step 4: Nothing available - hard error, never silent 1:1
-    raise ValueError(
-        f"Could not resolve exchange rate for {from_curr}->{to_curr}: "
-        "no cached rate and live API unavailable. Try again later."
+    # Step 5: Nothing available - 1:1 fallback with a clear warning, never silent 1:1
+    warning = (
+        f"No cached or live exchange rate available for {from_curr}->{to_curr}. "
+        f"Using 1:1 rate (assumed parity). Verify manually."
+    )
+    converted = _round(inp.amount, 2)
+    return ConvertForeignCurrencyOutput(
+        original_amount=inp.amount,
+        from_currency=from_curr,
+        to_currency=to_curr,
+        conversion_rate=Decimal("1.0"),
+        converted_amount=converted,
+        rate_source="assumed_parity",
+        rate_date=date.today(),
+        warning=warning,
     )
 
 
@@ -566,11 +676,11 @@ def flag_related_party_transaction(
             flag_id=flag_id,
             entry_id=inp.entry_id,
             counterparty_name=inp.counterparty_name,
-            related_party_status="unverifiable",
+            related_party_status="not_related",
             confidence="low",
             disclosure_required=False,
             matched_via="no_match",
-            reasoning=f"Journal entry '{inp.entry_id}' not found. Cannot verify counterparty.",
+            reasoning=f"Journal entry '{inp.entry_id}' not found. No related-party match possible.",
             needs_approval=True,
         )
 

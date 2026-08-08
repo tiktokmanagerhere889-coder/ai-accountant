@@ -5,7 +5,7 @@ Tests all 8 tools with PostgreSQL isolation per test class.
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from decimal import Decimal, ROUND_HALF_UP
 
 from sqlalchemy import create_engine, text
@@ -18,6 +18,7 @@ from tools.cost_advanced_tools import (
     calculate_revenue_recognition, flag_provision_contingent_liability,
     flag_related_party_transaction,
 )
+from unittest.mock import patch
 from tools.schemas import (
     CalculateBreakevenInput, CalculateBreakevenOutput,
     ConvertForeignCurrencyInput, ConvertForeignCurrencyOutput,
@@ -32,11 +33,12 @@ from tests.test_helpers import TEST_DATABASE_URL
 
 
 def _seed_rate_data(session: Session):
-    """Seed exchange rate records."""
-    session.add(ExchangeRate(from_currency="USD", to_currency="PKR", rate=Decimal("278.50"), rate_date=date(2026, 7, 1), source="SBP"))
-    session.add(ExchangeRate(from_currency="USD", to_currency="PKR", rate=Decimal("279.00"), rate_date=date(2026, 7, 15), source="SBP"))
-    session.add(ExchangeRate(from_currency="USD", to_currency="PKR", rate=Decimal("280.00"), rate_date=date(2026, 7, 25), source="SBP"))
-    session.add(ExchangeRate(from_currency="EUR", to_currency="PKR", rate=Decimal("300.00"), rate_date=date(2026, 7, 1), source="SBP"))
+    """Seed exchange rate records with stale fetched_at (10 days ago)."""
+    stale = datetime.utcnow() - timedelta(days=10)
+    session.add(ExchangeRate(from_currency="USD", to_currency="PKR", rate=Decimal("278.50"), rate_date=date(2026, 7, 1), source="SBP", fetched_at=stale))
+    session.add(ExchangeRate(from_currency="USD", to_currency="PKR", rate=Decimal("279.00"), rate_date=date(2026, 7, 15), source="SBP", fetched_at=stale))
+    session.add(ExchangeRate(from_currency="USD", to_currency="PKR", rate=Decimal("280.00"), rate_date=date(2026, 7, 25), source="SBP", fetched_at=stale))
+    session.add(ExchangeRate(from_currency="EUR", to_currency="PKR", rate=Decimal("300.00"), rate_date=date(2026, 7, 1), source="SBP", fetched_at=stale))
     session.commit()
 
 
@@ -199,13 +201,15 @@ class TestConvertForeignCurrency:
         self.engine.dispose()
 
     def test_convert_normal(self):
-        """1000 USD to PKR with latest rate (280.00)."""
+        """1000 USD to PKR with latest cached rate (280.00)."""
         inp = ConvertForeignCurrencyInput(
             amount=Decimal("1000"),
             from_currency="USD",
             to_currency="PKR",
         )
-        r = convert_foreign_currency(inp, self.session)
+        with patch("tools.cost_advanced_tools._fetch_live_rate", return_value=None):
+            r = convert_foreign_currency(inp, self.session)
+        # Stale cached rate (10 days old) used with warning
         assert r.conversion_rate == Decimal("280.00")
         assert r.converted_amount == Decimal("280000.00")
         assert r.rate_date == date(2026, 7, 25)
@@ -223,40 +227,58 @@ class TestConvertForeignCurrency:
         assert r.rate_source == "same_currency"
 
     def test_convert_no_rate_found(self):
-        """Unknown pair -> 1:1 fallback with warning."""
+        """Unknown pair, no live rate -> 1:1 fallback with warning."""
         inp = ConvertForeignCurrencyInput(
             amount=Decimal("1000"),
             from_currency="GBP",
             to_currency="PKR",
         )
-        r = convert_foreign_currency(inp, self.session)
+        with patch("tools.cost_advanced_tools._fetch_live_rate", return_value=None):
+            r = convert_foreign_currency(inp, self.session)
         assert r.conversion_rate == Decimal("1.0")
         assert r.converted_amount == Decimal("1000")
         assert r.warning is not None
 
     def test_convert_specific_date(self):
-        """Use rate nearest to a specific date."""
+        """Use rate on or before the specific date (nearest backward)."""
         inp = ConvertForeignCurrencyInput(
             amount=Decimal("100"),
             from_currency="USD",
             to_currency="PKR",
             rate_date=date(2026, 7, 10),
         )
-        r = convert_foreign_currency(inp, self.session)
+        with patch("tools.cost_advanced_tools._fetch_live_rate", return_value=None):
+            r = convert_foreign_currency(inp, self.session)
         assert r.conversion_rate == Decimal("278.50")
         assert r.converted_amount == Decimal("27850.00")
 
     def test_convert_stale_rate_warning(self):
-        """Rate older than 30 days -> stale warning."""
+        """Stale cached rate with requested future date -> stale warning."""
         inp = ConvertForeignCurrencyInput(
             amount=Decimal("100"),
             from_currency="USD",
             to_currency="PKR",
             rate_date=date(2026, 8, 28),
         )
-        r = convert_foreign_currency(inp, self.session)
+        with patch("tools.cost_advanced_tools._fetch_live_rate", return_value=None):
+            r = convert_foreign_currency(inp, self.session)
         assert r.warning is not None
         assert "stale" in r.warning.lower()
+
+    def test_convert_live_rate_primary_success(self):
+        """Live API (primary) returns a rate -> used and saved to cache."""
+        inp = ConvertForeignCurrencyInput(
+            amount=Decimal("1000"),
+            from_currency="GBP",
+            to_currency="PKR",
+        )
+        live_rate = (Decimal("200.00"), date(2026, 8, 8))
+        with patch("tools.cost_advanced_tools._fetch_live_rate", return_value=live_rate):
+            r = convert_foreign_currency(inp, self.session)
+        assert r.conversion_rate == Decimal("200.00")
+        assert r.converted_amount == Decimal("200000.00")
+        assert r.rate_source == "open.er-api.com / exchangerate-api.com"
+        assert r.warning is None
 
 
 # ===========================================================================
@@ -732,7 +754,8 @@ class TestE2ECostAdvancedSequence:
             from_currency="USD",
             to_currency="PKR",
         )
-        fx = convert_foreign_currency(fx_inp, self.session)
+        with patch("tools.cost_advanced_tools._fetch_live_rate", return_value=None):
+            fx = convert_foreign_currency(fx_inp, self.session)
         assert fx.converted_amount == Decimal("280000.00")
         print(f"  2. Forex: 1000 USD -> {fx.converted_amount} PKR @ rate {fx.conversion_rate}")
 

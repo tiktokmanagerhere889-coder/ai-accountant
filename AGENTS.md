@@ -196,6 +196,8 @@ Each specialist agent is called as a **tool** by the Orchestrator. Specialist ag
 | 6 | `flag_tax_exemption_zero_rating` | **Yes** | Flags zero-rated or exempt revenue entries for review |
 | 7 | `prepare_sales_tax_filing` | **Yes** | Prepares FBR sales tax filing data; human submits via portal |
 | 8 | `prepare_income_tax_filing` | **Yes** | Prepares FBR income tax filing data; human submits via portal |
+| 9 | `list_tax_filings` | No | Lists all persisted tax filings with status and save dates |
+| 10 | `assess_fbr_audit_risk` | No | FBR audit-risk scoring from ledger using historical FBR parameters |
 
 **DB Tables:** `journal_entries`, `tax_rates`, `eobi_rates`
 
@@ -296,8 +298,9 @@ Tools that pause and wait for explicit human confirmation before writing to the 
 | 22 | `generate_custom_report` | Advisory |
 | 23 | `manage_system_preferences` | System Admin |
 | 24 | `schedule_system_task` | System Admin |
+| 25 | `assess_fbr_audit_risk` | Tax |
 
-**24 approval-gated · 46 direct-execution · 70 total**
+**24 approval-gated · 47 direct-execution · 71 total**
 
 ---
 

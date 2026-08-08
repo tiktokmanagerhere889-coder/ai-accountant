@@ -606,11 +606,28 @@ def _fmt_sales_tax_adjust(result: dict) -> str:
     """Plain-English sales-tax input/output adjustment summary."""
     refund = result.get("refund_amount")
     refund_s = f", refund {_money(refund)}" if refund else ""
+    basis = result.get("input_tax_basis")
+    basis_s = f" (basis: {basis})" if basis else ""
     return (
         f"Sales tax adjustment for period {result.get('period')} / FY {result.get('fiscal_year')}: "
         f"output tax {_money(result.get('calculated_output_tax'))}, "
-        f"input tax {_money(result.get('calculated_input_tax'))}, "
+        f"input tax {_money(result.get('calculated_input_tax'))}{basis_s}, "
         f"net payable {_money(result.get('net_tax_payable'))}{refund_s}."
+    )
+
+
+def _fmt_fbr_audit_risk(result: dict) -> str:
+    """Plain-English FBR audit-risk assessment summary."""
+    score = result.get("risk_score", "0")
+    band = result.get("risk_band", "unknown")
+    triggered = result.get("triggered_count", 0)
+    exclusions = result.get("exclusions_applied") or []
+    excl_s = f" Exclusions: {', '.join(exclusions)}." if exclusions else ""
+    return (
+        f"FBR audit risk for FY {result.get('fiscal_year')}: "
+        f"score {score}/100 ({band} risk), {triggered} "
+        f"parameter(s) triggered.{excl_s} "
+        f"Disclaimer: {result.get('disclaimer', 'See full report.')}"
     )
 
 
@@ -693,6 +710,7 @@ _FORMATTERS = {
     "calculate_withholding_tax": _fmt_withholding,
     "calculate_advance_minimum_tax": _fmt_amt,
     "adjust_sales_tax_input_output": _fmt_sales_tax_adjust,
+    "assess_fbr_audit_risk": _fmt_fbr_audit_risk,
     "flag_tax_exemption_zero_rating": _fmt_flag_exemption,
     "calculate_eobi_deductions": _fmt_eobi,
     "transfer_retained_earnings": _fmt_retained,
