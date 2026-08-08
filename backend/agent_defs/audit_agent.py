@@ -217,7 +217,9 @@ def tool_assess_fbr_audit_risk(fiscal_year: int, business_type: str = "non_corpo
     db = _get_session()
     try:
         r = assess_fbr_audit_risk(inp, db)
-        return _to_json(r)
+        # Return formatted plain-English output so the LLM doesn't condense it
+        from result_formatter import format_tool_result
+        return format_tool_result("assess_fbr_audit_risk", json.loads(r.model_dump_json()))
     except ValueError as e:
         return f"Error: {e}"
     finally:
