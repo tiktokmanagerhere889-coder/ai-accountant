@@ -33,7 +33,7 @@ User Request
 
 Each specialist agent is called as a **tool** by the Orchestrator. Specialist agents never communicate with the user directly — all output flows back through the Orchestrator which explains results in plain English.
 
-**Total: 1 Orchestrator + 10 Specialist Agents + 70 Tools + 3 Direct-Backend Endpoints**
+**Total: 1 Orchestrator + 10 Specialist Agents + 71 Tools + 3 Direct-Backend Endpoints**
 
 ---
 
@@ -311,7 +311,7 @@ Request → Groq (llama-4-scout-17b)  [primary]
               ↓ on 429 rate limit
           Groq (llama-3.3-70b-versatile)  [fallback]
               ↓ on 429 rate limit
-          Cerebras (llama3.1-8b)  [last resort]
+          Gemini (gemini-1.5-flash)  [last resort]
               ↓ on 402 / failure
           Clean error message returned to user
 ```

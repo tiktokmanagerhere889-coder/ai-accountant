@@ -56,7 +56,7 @@ The system orchestrates **1 Orchestrator + 10 specialist agents** over **71 tool
 | Data Models | Pydantic v2 |
 | Agent Framework | OpenAI Agents SDK — Orchestrator + Agents as Tools pattern |
 | Primary LLM | Groq (`meta-llama/llama-4-scout-17b-16e-instruct`) |
-| Fallback LLM | Groq (`llama-3.3-70b-versatile`) → Cerebras (`llama3.1-8b`) |
+| Fallback LLM | Groq (`llama-3.3-70b-versatile`) → Gemini (`gemini-1.5-flash`) |
 | Containerization | Docker + docker-compose |
 
 ---
