@@ -8,9 +8,10 @@ prepare_sales_tax_filing, prepare_income_tax_filing.
 from datetime import date, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 import json
+import re
 import uuid
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from db.models import JournalEntry, TaxRate, EobiRate, Contact, RetainedEarnings, TaxFiling
@@ -74,6 +75,76 @@ def _sales_tax_rate(db: Session, effective_date: date = None) -> tuple[Decimal, 
 def _corporate_tax_rate(db: Session, effective_date: date = None) -> tuple[Decimal, str]:
     """Corporate income tax rate resolved from tax_rates table (type INCOME_TAX)."""
     return _rate_or_zero(db, "INCOME_TAX", effective_date)
+
+
+# Keywords that identify advance-tax / WHT-paid / FBR-challan payments in the
+# ledger. Matched against the debit account name AND the entry description, so
+# both "Dr Advance Tax 200,000 / Cr Bank" and "paid advance tax 200000 for Q1"
+# (recorded to any account) are picked up. Deliberately excludes the generic
+# "Tax Payable" settlement case ("paid tax payable") — paying down an already
+# recorded liability is not a new credit that reduces the current-year tax due.
+_ADVANCE_TAX_KEYWORDS = (
+    "advance tax", "advance income tax", "prepaid tax", "tax paid in advance",
+    "withholding tax paid", "wht paid", "paid wht", "wht challan",
+    "tax challan", "advance payment of tax", "provisional tax",
+    "advance income tax paid",
+)
+
+# Compound matcher for naturally-phrased descriptions that no single keyword
+# catches, e.g. "Withholding tax on rent remitted to FBR" (the verb "remitted"
+# is separated from the token "withholding tax"). A description counts as an
+# advance-tax/WHT payment only when it carries a tax token AND a payment verb,
+# and is not a liability settlement ("payable"/"liability"/"owed"). This keeps
+# accruals ("accrued withholding tax liability"), reversals ("reverse WHT
+# provision"), and "paid tax payable" (settling a recorded liability) from
+# being counted as new advance-tax credits.
+_ADVANCE_TAX_TOKEN_RE = re.compile(
+    r"\b(withholding tax|wht|advance tax|provisional tax|prepaid tax|"
+    r"tax paid in advance)\b",
+    re.IGNORECASE,
+)
+_TAX_PAYMENT_RE = re.compile(
+    r"\b(remitted|deposited|paid|challan|instal?lment|payment)\b",
+    re.IGNORECASE,
+)
+_TAX_LIABILITY_RE = re.compile(r"\b(payable|liability|owed)\b", re.IGNORECASE)
+
+
+def _desc_is_advance_tax_paid(desc: str) -> bool:
+    """True if a journal description records an advance-tax / WHT payment."""
+    if not desc:
+        return False
+    d = desc.lower()
+    if any(kw in d for kw in _ADVANCE_TAX_KEYWORDS):
+        return True
+    if _TAX_LIABILITY_RE.search(d):
+        return False
+    return bool(_ADVANCE_TAX_TOKEN_RE.search(d) and _TAX_PAYMENT_RE.search(d))
+
+
+def _advance_tax_paid(db: Session, fiscal_year: int) -> Decimal:
+    """Sum advance-tax / WHT-paid debits actually booked in journal_entries.
+
+    Reads the real ledger instead of assuming 0. An entry counts when its
+    debit account name carries an advance-tax keyword ("Dr Advance Tax"), or
+    its description records an advance-tax/WHT payment ("paid advance tax
+    50000 for Q1", "WHT paid via challan", "Withholding tax on rent remitted
+    to FBR"). Only posted entries in the fiscal year count.
+    """
+    rows = db.query(JournalEntry).filter(
+        JournalEntry.status == "posted",
+        func.extract("year", JournalEntry.posted_date) == fiscal_year,
+    ).all()
+
+    total = Decimal("0")
+    for e in rows:
+        acct = (e.debit_account or "").lower()
+        desc = (e.description or "").lower()
+        if any(kw in acct for kw in _ADVANCE_TAX_KEYWORDS) or _desc_is_advance_tax_paid(desc):
+            amt = e.debit_amount or Decimal("0")
+            if amt > Decimal("0"):
+                total += amt
+    return _round(total, 2)
 
 
 def _get_eobi_rate(db: Session, rate_type: str = "standard") -> EobiRate:
@@ -618,8 +689,8 @@ def prepare_income_tax_filing(inp: PrepareIncomeTaxFilingInput, db: Session) -> 
     tax_rate = corp_rate
     tax_liability = _round(taxable_income * tax_rate / Decimal("100"), 2)
 
-    # Check if any advance tax was paid (from retained_earnings or specific entries)
-    advance_tax = Decimal("0")
+    # Advance tax / WHT actually paid during the year, summed from the ledger.
+    advance_tax = _advance_tax_paid(db, inp.fiscal_year)
 
     filing_data = {
         "fbr_form": "Income Tax Return (Form ITR)",
@@ -637,11 +708,31 @@ def prepare_income_tax_filing(inp: PrepareIncomeTaxFilingInput, db: Session) -> 
 
     net_due = _round(tax_liability - advance_tax, 2)
 
+    # Surface a clear warning when no advance-tax / WHT payment entries were
+    # found in the ledger, instead of silently treating advance_tax as 0.
+    if advance_tax == Decimal("0"):
+        adv_entries = db.query(JournalEntry).filter(
+            JournalEntry.status == "posted",
+            func.extract("year", JournalEntry.posted_date) == inp.fiscal_year,
+        ).count()
+        if adv_entries and adv_entries > 0:
+            warning = (
+                "No advance tax or WHT payment entries found in the ledger for "
+                f"FY {inp.fiscal_year}; advance tax is being treated as 0. "
+                "If advance tax was paid, record it (e.g. 'Dr Advance Tax / Cr Bank')."
+            )
+        else:
+            warning = None
+    else:
+        warning = None
+
     message_parts = []
     if taxable_income > Decimal("0"):
         message_parts.append(f"Estimated tax liability for FY {inp.fiscal_year}: {net_due}")
     else:
         message_parts.append(f"No tax liability for FY {inp.fiscal_year} (net loss or zero income)")
+    if warning:
+        message_parts.append(warning)
     message_parts.append("Review all figures before submitting via FBR portal")
 
     # Persist the prepared filing so it survives restarts and can be exported.
@@ -672,6 +763,7 @@ def prepare_income_tax_filing(inp: PrepareIncomeTaxFilingInput, db: Session) -> 
         needs_approval=True,
         status="prepared",
         message=". ".join(message_parts) + ".",
+        warning=warning,
     )
 
 

@@ -750,6 +750,19 @@ export const AGENTS_DATA: AgentDef[] = [
         ]
       },
       {
+        name: "resolve_flagged_entry",
+        description: "Confirm or waive an audit flag",
+        approval: true,
+        aiOnly: false,
+        inputs: [
+          { name: "entry_id", type: "text", placeholder: "JE-2026-0001", required: true },
+          { name: "flag_type", type: "text", placeholder: "missing_reference", required: true },
+          { name: "action", type: "text", placeholder: "confirm/waive", required: true },
+          { name: "notes", type: "text", placeholder: "Resolution notes", required: false },
+          { name: "resolved_by", type: "text", placeholder: "Reviewer", required: false }
+        ]
+      },
+      {
         name: "maintain_statutory_registers",
         description: "CRUD statutory registry records",
         approval: true,

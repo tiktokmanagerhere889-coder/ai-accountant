@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from db.models import Base, JournalEntry, TaxRate, EobiRate, Contact
 from tools.tax_tools import (
+    _advance_tax_paid,
     calculate_withholding_tax, get_tax_planning_advice,
     calculate_advance_minimum_tax, calculate_eobi_deductions,
     adjust_sales_tax_input_output, flag_tax_exemption_zero_rating,
@@ -37,7 +38,12 @@ def _seed_tax_rates(session: Session):
     session.add(TaxRate(tax_type="wht_supply", rate=Decimal("4"), effective_from=date(2025, 1, 1), effective_to=None, description="WHT on supplies"))
     session.add(TaxRate(tax_type="wht_contract", rate=Decimal("7.5"), effective_from=date(2025, 1, 1), effective_to=None, description="WHT on contracts"))
     session.add(TaxRate(tax_type="wht_rent", rate=Decimal("5"), effective_from=date(2025, 1, 1), effective_to=None, description="WHT on rent"))
+    session.add(TaxRate(tax_type="wht_salary", rate=Decimal("8"), effective_from=date(2025, 1, 1), effective_to=None, description="WHT on salary"))
     session.add(TaxRate(tax_type="amt_company", rate=Decimal("1.5"), effective_from=date(2025, 1, 1), effective_to=None, description="AMT for companies"))
+    session.add(TaxRate(tax_type="amt_individual", rate=Decimal("1"), effective_from=date(2025, 1, 1), effective_to=None, description="AMT for individuals"))
+    session.add(TaxRate(tax_type="amt_partnership", rate=Decimal("0.5"), effective_from=date(2025, 1, 1), effective_to=None, description="AMT for partnerships"))
+    session.add(TaxRate(tax_type="INCOME_TAX", rate=Decimal("29"), effective_from=date(2025, 1, 1), effective_to=None, description="Corporate income tax"))
+    session.add(TaxRate(tax_type="SALES_TAX", rate=Decimal("18"), effective_from=date(2025, 1, 1), effective_to=None, description="Sales tax"))
     session.commit()
 
 
@@ -156,16 +162,29 @@ class TestCalculateWithholdingTax:
         assert r.rate_applied == Decimal("4")
         assert r.tax_amount == Decimal("3000.00")
 
-    def test_wht_salary_default(self):
-        """No rate in table -> falls back to 5% default for salary."""
+    def test_wht_salary_configured(self):
+        """Configured salary rate 8% -> 4800 tax."""
         inp = CalculateWithholdingTaxInput(
             amount=Decimal("60000"), withholding_type="salary",
             transaction_date=date(2026, 7, 15),
         )
         r = calculate_withholding_tax(inp, self.session)
-        assert r.rate_applied == Decimal("5")
-        assert r.tax_amount == Decimal("3000.00")
-        assert "default" in r.rate_source
+        assert r.rate_applied == Decimal("8")
+        assert r.tax_amount == Decimal("4800.00")
+        assert "tax_rates" in r.rate_source
+
+    def test_wht_not_configured_raises(self):
+        """Unconfigured rate -> clear error, no silent hardcoded fallback."""
+        inp = CalculateWithholdingTaxInput(
+            amount=Decimal("60000"), withholding_type="dividend",
+            transaction_date=date(2026, 7, 15),
+        )
+        try:
+            calculate_withholding_tax(inp, self.session)
+            assert False, "Should have raised ValueError"
+        except ValueError as e:
+            assert "dividend" in str(e)
+            assert "not configured" in str(e)
 
 
 # ===========================================================================
@@ -319,6 +338,7 @@ class TestAdjustSalesTaxInputOutput:
             c.commit()
         Base.metadata.create_all(bind=self.engine)
         self.session = Session(bind=self.engine)
+        _seed_tax_rates(self.session)
         _seed_journal_entries(self.session)
 
     def teardown_method(self):
@@ -421,6 +441,7 @@ class TestPrepareSalesTaxFiling:
             c.commit()
         Base.metadata.create_all(bind=self.engine)
         self.session = Session(bind=self.engine)
+        _seed_tax_rates(self.session)
         _seed_journal_entries(self.session)
 
     def teardown_method(self):
@@ -469,6 +490,7 @@ class TestPrepareIncomeTaxFiling:
             c.commit()
         Base.metadata.create_all(bind=self.engine)
         self.session = Session(bind=self.engine)
+        _seed_tax_rates(self.session)
         _seed_journal_entries(self.session)
 
     def teardown_method(self):
@@ -514,6 +536,114 @@ class TestPrepareIncomeTaxFiling:
         assert r.status == "prepared"
         assert r.total_income == Decimal("0")
         assert r.net_tax_due == Decimal("0")
+
+    def test_income_tax_filing_advance_tax_from_ledger(self):
+        """Advance tax paid in the ledger reduces net tax due.
+
+        Seed FY2026 advance-tax debits (one via account name, one via
+        description) and confirm advance_tax_paid is summed from the ledger,
+        not assumed zero.
+        """
+        self.session.add(JournalEntry(
+            entry_id="ADV-TAX-1", description="Advance tax paid Q1",
+            posted_date=date(2026, 4, 10), reference="CHALAN-001",
+            debit_account="2200-Tax Payable - Advance Tax", debit_amount=Decimal("20000.00"),
+            credit_account="1000-Cash", credit_amount=Decimal("20000.00"),
+            status="posted",
+        ))
+        self.session.add(JournalEntry(
+            entry_id="ADV-TAX-2", description="paid WHT via challan 5000",
+            posted_date=date(2026, 5, 20), reference="CHALAN-002",
+            debit_account="1200-Prepaid Taxes", debit_amount=Decimal("5000.00"),
+            credit_account="1000-Cash", credit_amount=Decimal("5000.00"),
+            status="posted",
+        ))
+        # Prior-year advance tax must NOT count toward FY2026.
+        self.session.add(JournalEntry(
+            entry_id="ADV-TAX-2025", description="Advance tax paid Q4",
+            posted_date=date(2025, 6, 20), reference="CHALAN-000",
+            debit_account="2200-Tax Payable - Advance Tax", debit_amount=Decimal("999999.00"),
+            credit_account="1000-Cash", credit_amount=Decimal("999999.00"),
+            status="posted",
+        ))
+        self.session.commit()
+
+        inp = PrepareIncomeTaxFilingInput(fiscal_year=2026, confirm=True)
+        r = prepare_income_tax_filing(inp, self.session)
+        # 20K (account keyword) + 5K (description keyword); prior-year excluded.
+        assert r.advance_tax_paid == Decimal("25000.00")
+        # Tax liability 58K - 25K advance = 33K due.
+        assert r.tax_liability == Decimal("58000.00")
+        assert r.net_tax_due == Decimal("33000.00")
+        assert r.filing_data["advance_tax_paid"] == "25000.00"
+
+    def test_advance_tax_natural_phrases_all_match(self):
+        """Naturally-phrased advance-tax descriptions (as a CA/AI would write
+        them, not keyword copy-paste) must all be picked up by _advance_tax_paid.
+        Uses neutral debit accounts so only description matching is under test.
+        """
+        phrases = [
+            "Advance income tax deposited for Q1",
+            "FBR advance tax challan paid via bank",
+            "Quarterly advance tax remittance",
+            "Withholding tax on rent remitted to FBR",
+            "Paid provisional tax installment for the year",
+        ]
+        amounts = [Decimal("10000.00"), Decimal("20000.00"), Decimal("30000.00"),
+                   Decimal("40000.00"), Decimal("50000.00")]
+        for i, (desc, amt) in enumerate(zip(phrases, amounts), start=1):
+            self.session.add(JournalEntry(
+                entry_id=f"NAT-{i}", description=desc,
+                posted_date=date(2026, 4, i), reference=f"CHALAN-NAT-{i}",
+                debit_account="1500-Misc", debit_amount=amt,
+                credit_account="1000-Cash", credit_amount=amt,
+                status="posted",
+            ))
+        # Non-tax entries must NOT match (even with payment verbs / 'remit').
+        self.session.add(JournalEntry(
+            entry_id="NAT-NT", description="remitted dividend to shareholder",
+            posted_date=date(2026, 4, 20), reference="DIV-1",
+            debit_account="2000-Payables", debit_amount=Decimal("90000.00"),
+            credit_account="1000-Cash", credit_amount=Decimal("90000.00"),
+            status="posted",
+        ))
+        self.session.commit()
+        assert _advance_tax_paid(self.session, 2026) == sum(amounts)
+
+    def test_advance_tax_liability_settlement_not_counted(self):
+        """Settling a recorded tax liability must not be counted as a new
+        advance-tax credit (would inflate advance_tax_paid).
+        """
+        self.session.add(JournalEntry(
+            entry_id="SETTLE-1", description="paid tax payable WHT liability settlement",
+            posted_date=date(2026, 4, 10), reference="CHALAN-SETTLE",
+            debit_account="2200-Tax Payable", debit_amount=Decimal("50000.00"),
+            credit_account="1000-Cash", credit_amount=Decimal("50000.00"),
+            status="posted",
+        ))
+        self.session.commit()
+        assert _advance_tax_paid(self.session, 2026) == Decimal("0")
+
+    def test_income_tax_filing_no_advance_tax_warns(self):
+        """When no advance-tax/WHT payment entry is found in the ledger, the
+        filing must surface a clear warning instead of silently treating
+        advance_tax as 0.
+        """
+        # Some FY2026 revenue so the filing computes a liability.
+        self.session.add(JournalEntry(
+            entry_id="INC-1", description="Consulting income",
+            posted_date=date(2026, 4, 10), reference="INV-1",
+            debit_account="1000-Cash", debit_amount=Decimal("100000.00"),
+            credit_account="4000-Revenue", credit_amount=Decimal("100000.00"),
+            status="posted",
+        ))
+        self.session.commit()
+        inp = PrepareIncomeTaxFilingInput(fiscal_year=2026, confirm=True)
+        r = prepare_income_tax_filing(inp, self.session)
+        assert r.advance_tax_paid == Decimal("0")
+        assert r.warning is not None
+        assert "No advance tax or WHT payment entries found" in r.warning
+        assert "advance tax is being treated as 0" in r.warning
 
 
 # ===========================================================================

@@ -1,6 +1,6 @@
 # Agent: Audit & Regulatory Agent
 
-**Role:** Anomaly detection, internal audit support, statutory records, and compliance deadline tracking. 4 tools, 2 requiring human approval.
+**Role:** Anomaly detection, internal audit support, statutory records, and compliance deadline tracking. 5 tools, 3 requiring human approval.
 
 ---
 
@@ -40,8 +40,19 @@ Consistent with Agents 2, 4, 5, 6, 7:
 - **DB tables:** `journal_entries` (read — for ledger data), `flagged_entries` (read/write)
 - **Edge cases:** No entries for period → empty results. All entries clean → "no issues found". Resolved flags excluded by default. min_severity filters out lower-severity flags.
 - **Logic:** Scans journal_entries for audit-relevant patterns: (1) entries without proper reference numbers, (2) entries posted on weekends/holidays, (3) entries with round amounts (ending in 000), (4) unusually large entries (>3σ from mean), (5) accounts with infrequent activity suddenly posting. Each pattern assigned severity. Results stored in `flagged_entries`.
-- **New DB table needed:** `flagged_entries` (id, entry_id, flag_type, reason, severity, flagged_by, flagged_at, resolved_at, status)
+- **Deduplication:** Re-running the audit never duplicates rows. Each `(entry_id, flag_type)` is created once; later runs report the existing open flag without inserting. Resolved flags (`confirmed`/`waived`) are excluded by default and only returned with `include_resolved=True`.
+- **New DB table needed:** `flagged_entries` (id, entry_id, flag_type, reason, severity, flagged_by, flagged_at, resolved_at, resolved_by, resolution_note, status)
 - **Example:** User: "Run internal audit for FY 2026" → flags entries with missing references, weekend postings, anomalous amounts
+
+## Tool: resolve_flagged_entry
+
+- **Approval:** **Yes** — the accountant's decision on each flag
+- **Input:** `entry_id` (str), `flag_type` (str), `action` (str — "confirm" | "waive"), `notes` (Optional[str]), `resolved_by` (Optional[str])
+- **Output:** `entry_id`, `flag_type`, `action`, `status` ("confirmed"/"waived"), `resolved_at` (date), `resolved_by`, `notes`, `message`, `needs_approval` (bool)
+- **DB tables:** `flagged_entries` (write)
+- **Edge cases:** unknown `entry_id`/`flag_type` → ValueError. Already-resolved flag → ValueError. invalid action → ValueError.
+- **Logic:** `confirm` marks a flag as a real issue (stays visible as confirmed); `waive` marks it reviewed-not-an-issue. Sets `resolved_at`, `resolved_by`, `resolution_note`. The record stays in `flagged_entries` so re-runs do not re-flag it.
+- **Example:** User: "Waive the missing_reference flag on JE-2026-0001" → flag status set to waived with timestamp.
 
 ## Tool: detect_anomaly_transactions
 
@@ -82,7 +93,7 @@ Consistent with Agents 2, 4, 5, 6, 7:
 
 ## Agent-Level Behavior
 
-- **Routing:** "internal audit", "audit support", "audit review", "anomaly", "fraud detection", "suspicious transaction", "statutory register", "register of directors", "register of members", "register of charges", "compliance deadline", "filing deadline", "due date", "regulatory filing", "compliance reminder"
-- **2 human-approval tools:** `support_internal_audit`, `maintain_statutory_registers`
+- **Routing:** "internal audit", "audit support", "audit review", "anomaly", "fraud detection", "suspicious transaction", "confirm flag", "waive flag", "resolve flag", "statutory register", "register of directors", "register of members", "register of charges", "compliance deadline", "filing deadline", "due date", "regulatory filing", "compliance reminder"
+- **3 human-approval tools:** `support_internal_audit`, `resolve_flagged_entry`, `maintain_statutory_registers`
 - **2 non-approval tools:** `detect_anomaly_transactions`, `get_compliance_deadlines`
-- **All audit flagging:** read-only detection; accountant decides resolution
+- **All audit flagging:** read-only detection; accountant decides resolution via `resolve_flagged_entry`

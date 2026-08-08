@@ -1539,6 +1539,7 @@ class PrepareIncomeTaxFilingOutput(BaseModel):
     needs_approval: bool = True
     status: str = "draft"
     message: str = ""
+    warning: Optional[str] = None
 
 
 # Tool 9: List Tax Filings (read-only)
@@ -1651,6 +1652,26 @@ class SupportInternalAuditOutput(BaseModel):
     needs_approval: bool = True
 
 
+class ResolveFlaggedEntryInput(BaseModel):
+    entry_id: str = Field(..., description="Journal entry id of the flagged record")
+    flag_type: str = Field(..., description="Flag type to resolve (e.g. missing_reference)")
+    action: str = Field(..., description="confirm or waive")
+    notes: Optional[str] = Field(default=None, description="Resolution notes from the reviewer")
+    resolved_by: Optional[str] = Field(default=None, description="Reviewer name")
+
+
+class ResolveFlaggedEntryOutput(BaseModel):
+    entry_id: str = ""
+    flag_type: str = ""
+    action: str = ""
+    status: str = ""
+    resolved_at: date
+    resolved_by: str = ""
+    notes: str = ""
+    message: str = ""
+    needs_approval: bool = True
+
+
 # Tool 4: Maintain Statutory Registers (Approval: Yes)
 
 class MaintainStatutoryRegistersInput(BaseModel):
@@ -1663,8 +1684,17 @@ class MaintainStatutoryRegistersInput(BaseModel):
     register_id: Optional[str] = Field(default=None, description="Required for update/delete actions")
 
 
+class StatutoryRegisterItem(BaseModel):
+    register_id: str = ""
+    entry_date: date
+    description: str = ""
+    reference_number: str = ""
+    amount: Decimal = Decimal("0")
+    status: str = ""
+
+
 class MaintainStatutoryRegistersOutput(BaseModel):
-    register_id: str
+    register_id: str = ""
     action_performed: str
     register_type: str
     entry_date: date
@@ -1674,6 +1704,7 @@ class MaintainStatutoryRegistersOutput(BaseModel):
     status: str = ""
     message: str = ""
     needs_approval: bool = True
+    entries: list[StatutoryRegisterItem] = Field(default_factory=list)
 
 
 # --- Agent 9: Advisory ---

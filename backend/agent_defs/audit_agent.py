@@ -13,11 +13,12 @@ from tools.schemas import (
     DetectAnomalyTransactionsInput, DetectAnomalyTransactionsOutput,
     GetComplianceDeadlinesInput, GetComplianceDeadlinesOutput,
     SupportInternalAuditInput, SupportInternalAuditOutput,
+    ResolveFlaggedEntryInput, ResolveFlaggedEntryOutput,
     MaintainStatutoryRegistersInput, MaintainStatutoryRegistersOutput,
 )
 from tools.audit_tools import (
     detect_anomaly_transactions, get_compliance_deadlines,
-    support_internal_audit, maintain_statutory_registers,
+    support_internal_audit, resolve_flagged_entry, maintain_statutory_registers,
 )
 from agent_defs.model_providers import (
     create_groq_provider, create_gemini_provider,
@@ -117,7 +118,36 @@ def tool_support_internal_audit(fiscal_year: int, period: int = 0, min_severity:
         db.close()
 
 
-# -- Tool 4: maintain_statutory_registers --
+# -- Tool 4: resolve_flagged_entry --
+@function_tool
+def tool_resolve_flagged_entry(entry_id: str, flag_type: str, action: str, notes: str = "", resolved_by: str = "") -> str:
+    """Mark a flagged audit entry as confirmed or waived. REQUIRES APPROVAL.
+
+    Args:
+        entry_id: Journal entry id of the flagged record (e.g. 'JE-2026-0001').
+        flag_type: Flag type to resolve (e.g. missing_reference, weekend_posting).
+        action: confirm (real issue) or waive (reviewed, not an issue).
+        notes: Optional resolution notes.
+        resolved_by: Reviewer name.
+    """
+    inp = ResolveFlaggedEntryInput(
+        entry_id=entry_id,
+        flag_type=flag_type,
+        action=action.lower().strip(),
+        notes=notes if notes else None,
+        resolved_by=resolved_by if resolved_by else None,
+    )
+    db = _get_session()
+    try:
+        r = resolve_flagged_entry(inp, db)
+        return _to_json(r)
+    except ValueError as e:
+        return f"Error: {e}"
+    finally:
+        db.close()
+
+
+# -- Tool 5: maintain_statutory_registers --
 @function_tool
 def tool_maintain_statutory_registers(action: str, register_type: str, entry_date: str, description: str, reference_number: str = "", amount: str = "", register_id: str = "") -> str:
     """CRUD operations on statutory registers. REQUIRES APPROVAL for write actions.
@@ -156,20 +186,22 @@ AUDIT_AGENT = Agent(
     name="Audit & Regulatory Agent",
     instructions="""You are the Audit & Regulatory Agent for the AI Accountant.
 
-You handle anomaly detection, internal audit support, statutory records, and compliance deadline tracking. You have 4 tools.
+You handle anomaly detection, internal audit support, statutory records, and compliance deadline tracking. You have 5 tools.
 
 Available tools:
 1. tool_detect_anomaly_transactions - Pattern-based fraud/anomaly detection (no approval).
 2. tool_get_compliance_deadlines - Query compliance deadlines and due dates (no approval).
 3. tool_support_internal_audit - Full internal audit scan with 5 patterns (REQUIRES APPROVAL).
-4. tool_maintain_statutory_registers - CRUD for directors/members/charges/contracts/beneficial_owners registers (REQUIRES APPROVAL for writes).
+4. tool_resolve_flagged_entry - Mark an audit flag as confirmed or waived (REQUIRES APPROVAL).
+5. tool_maintain_statutory_registers - CRUD for directors/members/charges/contracts/beneficial_owners registers (REQUIRES APPROVAL for writes).
 
 Rules:
 - Greetings, chit-chat, or general questions ('hi', 'hello', 'how are you',
   'what can you do', 'thanks'): answer conversationally. Do NOT call any tool.
 - Call a tool ONLY when the user asks for specific accounting work (cash balance,
   record expense, reports, etc.).
-- For tools 3-4: tell the user these require approval before writing.
+- For tools 3-5: tell the user these require approval before writing.
+- When the user asks to confirm/waive an audit flag, call tool_resolve_flagged_entry.
 - Pass dates in YYYY-MM-DD format.
 - Pass amounts as string numbers (e.g., '500000' not 500000).
 - Explain results in plain English after tool calls.
@@ -178,6 +210,7 @@ Rules:
         tool_detect_anomaly_transactions,
         tool_get_compliance_deadlines,
         tool_support_internal_audit,
+        tool_resolve_flagged_entry,
         tool_maintain_statutory_registers,
     ],
     model=GROQ_MODEL,

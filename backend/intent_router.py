@@ -594,6 +594,44 @@ _REGISTER_TYPES = {
 }
 
 
+def _params_resolve_flag(text: str) -> dict:
+    """Resolve-flagged-entry route: action, entry_id, flag_type, notes.
+
+    Extracts confirm/waive, an entry id (JE-...), a flag type keyword, and any
+    trailing notes. Fields the parser can't derive stay out so slot-fill can
+    ask for them.
+    """
+    t = text.lower()
+    action = "confirm" if re.search(r"\b(confirm(ed|s)?|mark as confirmed|valid)\b", t) else "waive"
+    p = {"action": action}
+    eid = re.search(r"\b(JE-[\w-]+)\b", text, re.I)
+    if eid:
+        p["entry_id"] = eid.group(1)
+    for ft in ("missing_reference", "weekend_posting", "round_amount",
+               "large_amount", "infrequent_account", "duplicate_amount", "unusual_account"):
+        if ft.replace("_", " ") in t or ft in t:
+            p["flag_type"] = ft
+            break
+    if "missing" in t and "reference" in t:
+        p["flag_type"] = "missing_reference"
+    elif "weekend" in t:
+        p["flag_type"] = "weekend_posting"
+    elif "round" in t and "amount" in t:
+        p["flag_type"] = "round_amount"
+    elif "large" in t or "3sigma" in t or "3 sigma" in t:
+        p["flag_type"] = "large_amount"
+    elif "infrequent" in t:
+        p["flag_type"] = "infrequent_account"
+    note = re.sub(
+        r"\b(confirm|waive|resolve|mark|as|the|flag|entry|audit|finding|on|for|with|id)\b",
+        "", t
+    ).strip()
+    note = re.sub(r"\s+", " ", note).strip()
+    if note:
+        p["notes"] = note
+    return p
+
+
 def _params_statutory_registers(text: str) -> dict:
     """Maintain-statutory-registers route: action, register type, date, description.
 
@@ -1387,6 +1425,7 @@ ROUTES: list[tuple[list[str], str, callable]] = [
     (["detect anomaly", "detect anomalies", "anomaly", "anomalies", "fraud detection", "detect fraud", "suspicious", "anomaly detection", "check anomaly"], "detect_anomaly_transactions", _params_period),
     (["compliance", "deadline", "filing deadline", "due date", "compliance calendar", "reminder"], "get_compliance_deadlines", _params_compliance),
     (["internal audit", "audit support"], "support_internal_audit", _params_year),
+    (["confirm flag", "confirm audit flag", "waive flag", "waive audit flag", "resolve flag", "resolve audit flag", "mark as confirmed", "mark as waived", "audit decision", "confirm finding", "waive finding", "clear flag", "dismiss flag"], "resolve_flagged_entry", _params_resolve_flag),
     (["statutory register", "register of director", "register of directors", "register of member", "register of members", "register of charge", "register of charges", "register of contract", "register of contracts", "director register", "member register", "charge register", "contract register", "beneficial owner", "beneficial owner register", "maintain register", "register entry", "register record", "statutory"], "maintain_statutory_registers", _params_statutory_registers),
 
     # --- Advisory ---
@@ -1488,7 +1527,7 @@ def is_approval_required(tool_name: str, params: Optional[dict] = None) -> bool:
         "flag_provision_contingent_liability", "flag_related_party_transaction",
         "adjust_sales_tax_input_output", "flag_tax_exemption_zero_rating",
         "prepare_sales_tax_filing", "prepare_income_tax_filing", "support_internal_audit",
-        "maintain_statutory_registers", "manage_system_preferences", "schedule_system_task",
+        "resolve_flagged_entry", "maintain_statutory_registers", "manage_system_preferences", "schedule_system_task",
         "generate_custom_report",
     }
     if tool_name == "manage_system_preferences" and params and params.get("action") == "view":

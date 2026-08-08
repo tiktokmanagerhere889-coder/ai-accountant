@@ -313,6 +313,16 @@ def _fmt_audit(result: dict) -> str:
     )
 
 
+def _fmt_resolve_flag(result: dict) -> str:
+    """Flag resolution: action taken + which flag + when."""
+    return (
+        f"Audit flag resolved: '{result.get('entry_id', '')}' "
+        f"({result.get('flag_type', '')}) -> {result.get('action', '')} "
+        f"on {result.get('resolved_at', '')} by {result.get('resolved_by', 'reviewer')}. "
+        f"{result.get('message', '')}"
+    )
+
+
 def _fmt_statutory(result: dict) -> str:
     """Statutory register result: action + register type + description/message."""
     action = result.get("action_performed", "")
@@ -323,6 +333,18 @@ def _fmt_statutory(result: dict) -> str:
     if action == "view" and result.get("status") == "empty":
         return f"Statutory register '{reg}': {msg}"
     if action == "view":
+        entries = result.get("entries") or []
+        if entries:
+            lines = [f"Statutory register '{reg}': {msg}"]
+            for e in entries:
+                eid = e.get("register_id", "")
+                edate = e.get("entry_date", "")
+                lines.append(
+                    f"  - {eid} | {edate} | {e.get('description', '')} "
+                    f"(ref {e.get('reference_number', '')}, "
+                    f"{_money(e.get('amount', 0))}, {e.get('status', '')})"
+                )
+            return "\n".join(lines)
         return (
             f"Statutory register '{reg}': {msg}\n"
             f"  Latest: {desc} (ref {result.get('reference_number', '')}, "
@@ -666,6 +688,7 @@ _FORMATTERS = {
     "detect_anomaly_transactions": _fmt_anomaly,
     "get_compliance_deadlines": _fmt_compliance,
     "support_internal_audit": _fmt_audit,
+    "resolve_flagged_entry": _fmt_resolve_flag,
     "maintain_statutory_registers": _fmt_statutory,
     "calculate_withholding_tax": _fmt_withholding,
     "calculate_advance_minimum_tax": _fmt_amt,

@@ -263,6 +263,7 @@ from tools.audit_tools import (
     detect_anomaly_transactions,
     get_compliance_deadlines,
     support_internal_audit,
+    resolve_flagged_entry,
     maintain_statutory_registers,
 )
 from tools.schemas import (
@@ -272,6 +273,8 @@ from tools.schemas import (
     GetComplianceDeadlinesOutput,
     SupportInternalAuditInput,
     SupportInternalAuditOutput,
+    ResolveFlaggedEntryInput,
+    ResolveFlaggedEntryOutput,
     MaintainStatutoryRegistersInput,
     MaintainStatutoryRegistersOutput,
 )
@@ -394,6 +397,7 @@ REGISTRY: dict[str, ToolEntry] = {
     "detect_anomaly_transactions": (detect_anomaly_transactions, DetectAnomalyTransactionsInput, DetectAnomalyTransactionsOutput, False),
     "get_compliance_deadlines": (get_compliance_deadlines, GetComplianceDeadlinesInput, GetComplianceDeadlinesOutput, False),
     "support_internal_audit": (support_internal_audit, SupportInternalAuditInput, SupportInternalAuditOutput, False),
+    "resolve_flagged_entry": (resolve_flagged_entry, ResolveFlaggedEntryInput, ResolveFlaggedEntryOutput, False),
     "maintain_statutory_registers": (maintain_statutory_registers, MaintainStatutoryRegistersInput, MaintainStatutoryRegistersOutput, False),
 
     # === Advisory (5 tools) ===

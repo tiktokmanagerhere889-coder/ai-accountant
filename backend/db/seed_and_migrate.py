@@ -152,6 +152,27 @@ def _ensure_bank_transactions_custom_fields() -> None:
     logger.info("Added bank_transactions.custom_fields column")
 
 
+def _ensure_flagged_resolution_columns() -> None:
+    """Add flagged_entries.resolved_by + resolution_note if missing (idempotent).
+
+    Used by resolve_flagged_entry (confirm/waive review workflow).
+    """
+    insp = inspect(engine)
+    if "flagged_entries" not in insp.get_table_names():
+        logger.info("flagged_entries table missing - skipping resolution-column migration")
+        return
+
+    cols = {c["name"] for c in insp.get_columns("flagged_entries")}
+    if "resolved_by" not in cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE flagged_entries ADD COLUMN resolved_by VARCHAR NULL"))
+        logger.info("Added flagged_entries.resolved_by column")
+    if "resolution_note" not in cols:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE flagged_entries ADD COLUMN resolution_note TEXT NULL"))
+        logger.info("Added flagged_entries.resolution_note column")
+
+
 # ---------------------------------------------------------------------------
 # 5. Seed the standard chart of accounts (idempotent - check-then-insert)
 # ---------------------------------------------------------------------------
@@ -274,6 +295,7 @@ def run_migrations() -> None:
     """Run all idempotent migrations + seeds. Safe to call every startup."""
     _ensure_fetched_at_column()
     _ensure_bank_transactions_custom_fields()
+    _ensure_flagged_resolution_columns()
     _seed_tax_rates()
     _seed_eobi_rates()
     _seed_asset_configs()

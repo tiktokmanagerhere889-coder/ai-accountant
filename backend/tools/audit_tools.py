@@ -18,7 +18,9 @@ from tools.schemas import (
     GetComplianceDeadlinesInput, GetComplianceDeadlinesOutput,
     FlaggedAuditEntry,
     SupportInternalAuditInput, SupportInternalAuditOutput,
+    ResolveFlaggedEntryInput, ResolveFlaggedEntryOutput,
     MaintainStatutoryRegistersInput, MaintainStatutoryRegistersOutput,
+    StatutoryRegisterItem,
 )
 
 
@@ -272,6 +274,15 @@ def support_internal_audit(inp: SupportInternalAuditInput, db: Session) -> Suppo
 
     flags: list[FlaggedAuditEntry] = []
 
+    # Preload existing flags for the scanned entries so re-runs never create
+    # duplicate flagged_entries rows. Key: (entry_id, flag_type).
+    existing_flags = db.query(FlaggedEntry).filter(
+        FlaggedEntry.entry_id.in_([e.entry_id for e in entries])
+    ).all()
+    existing_by_key: dict[tuple[str, str], FlaggedEntry] = {}
+    for ef in existing_flags:
+        existing_by_key.setdefault((ef.entry_id, ef.flag_type), ef)
+
     for e in entries:
         amount = max(e.debit_amount, e.credit_amount)
         severities = []
@@ -304,6 +315,35 @@ def support_internal_audit(inp: SupportInternalAuditInput, db: Session) -> Suppo
                 sev_order = {"low": 0, "medium": 1, "high": 2, "critical": 3}
                 if sev_order.get(severity, 0) < sev_order.get(inp.min_severity, 0):
                     continue
+
+            prev = existing_by_key.get((e.entry_id, flag_type))
+            if prev is not None:
+                if prev.status in ("confirmed", "waived"):
+                    # Already reviewed — do not re-flag unless explicitly asked.
+                    if not inp.include_resolved:
+                        continue
+                    flags.append(FlaggedAuditEntry(
+                        entry_id=e.entry_id,
+                        description=e.description,
+                        amount=amount,
+                        flag_type=flag_type,
+                        reason=reason,
+                        severity=severity,
+                        status=prev.status,
+                    ))
+                    continue
+                # Still open from an earlier run: report it, do not duplicate the row.
+                flags.append(FlaggedAuditEntry(
+                    entry_id=e.entry_id,
+                    description=e.description,
+                    amount=amount,
+                    flag_type=flag_type,
+                    reason=reason,
+                    severity=severity,
+                    status="open",
+                ))
+                continue
+
             flags.append(FlaggedAuditEntry(
                 entry_id=e.entry_id,
                 description=e.description,
@@ -346,6 +386,59 @@ def support_internal_audit(inp: SupportInternalAuditInput, db: Session) -> Suppo
     )
 
 
+def resolve_flagged_entry(inp: ResolveFlaggedEntryInput, db: Session) -> ResolveFlaggedEntryOutput:
+    """Mark a flagged audit entry as confirmed or waived.
+
+    This is the reviewer decision on an audit flag:
+      - 'confirmed': the flag is a real issue that needs fixing (stays visible).
+      - 'waived':    the accountant reviewed it and determined it is not an issue.
+
+    Requires approval. Record stays in flagged_entries with resolved_at set so
+    re-runs of support_internal_audit do not re-flag it.
+    """
+    today = date.today()
+    if inp.action not in ("confirm", "waive"):
+        raise ValueError("action must be 'confirm' or 'waive'")
+    status = "confirmed" if inp.action == "confirm" else "waived"
+
+    entry = db.query(FlaggedEntry).filter(
+        FlaggedEntry.entry_id == inp.entry_id,
+        FlaggedEntry.flag_type == inp.flag_type,
+    ).first()
+    if entry is None:
+        raise ValueError(
+            f"No flagged entry found for entry_id '{inp.entry_id}' with flag_type '{inp.flag_type}'"
+        )
+    if entry.status in ("confirmed", "waived"):
+        raise ValueError(
+            f"Flagged entry '{inp.entry_id}' ({inp.flag_type}) is already {entry.status}"
+        )
+
+    entry.status = status
+    entry.resolved_at = today
+    entry.resolved_by = inp.resolved_by or "reviewer"
+    if inp.notes:
+        entry.resolution_note = inp.notes
+    db.commit()
+
+    msg = (
+        f"Flag on '{inp.entry_id}' ({inp.flag_type}) marked as "
+        f"{inp.action} on {today.isoformat()}"
+        + (f" — {inp.notes}" if inp.notes else "")
+    )
+    return ResolveFlaggedEntryOutput(
+        entry_id=inp.entry_id,
+        flag_type=inp.flag_type,
+        action=inp.action,
+        status=status,
+        resolved_at=today,
+        resolved_by=entry.resolved_by,
+        notes=inp.notes or "",
+        message=msg,
+        needs_approval=True,
+    )
+
+
 def maintain_statutory_registers(inp: MaintainStatutoryRegistersInput, db: Session) -> MaintainStatutoryRegistersOutput:
     """CRUD operations on statutory registers.
 
@@ -379,19 +472,30 @@ def maintain_statutory_registers(inp: MaintainStatutoryRegistersInput, db: Sessi
                 message=msg,
                 needs_approval=False,
             )
-        # Return count of entries found
-        entry = entries[0]
+        # Return every entry in the register, newest first.
+        items = [
+            StatutoryRegisterItem(
+                register_id=e.register_id,
+                entry_date=e.entry_date,
+                description=e.description,
+                reference_number=e.reference_number or "",
+                amount=e.amount or Decimal("0"),
+                status=e.status,
+            )
+            for e in entries
+        ]
         return MaintainStatutoryRegistersOutput(
-            register_id=entry.register_id,
+            register_id=items[0].register_id,
             action_performed="view",
             register_type=inp.register_type,
-            entry_date=entry.entry_date,
-            description=entry.description,
-            reference_number=entry.reference_number or "",
-            amount=entry.amount or Decimal("0"),
-            status=entry.status,
-            message=f"Found {len(entries)} entry(ies) in '{inp.register_type}' register.",
+            entry_date=items[0].entry_date,
+            description=items[0].description,
+            reference_number=items[0].reference_number,
+            amount=items[0].amount,
+            status=items[0].status,
+            message=f"Found {len(items)} entry(ies) in '{inp.register_type}' register.",
             needs_approval=False,
+            entries=items,
         )
 
     # -- DELETE --

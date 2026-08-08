@@ -421,6 +421,8 @@ class FlaggedEntry(Base):
     flagged_by = Column(String, nullable=False, default="system")
     flagged_at = Column(Date, nullable=False)
     resolved_at = Column(Date, nullable=True)
+    resolved_by = Column(String, nullable=True)
+    resolution_note = Column(Text, nullable=True)
     status = Column(String, nullable=False, default="open")
 
 

@@ -1,6 +1,6 @@
 """Tests for Audit & Regulatory tools (Agent 8).
 
-Tests all 4 tools with PostgreSQL isolation per test class.
+Tests all 5 tools with PostgreSQL isolation per test class.
 """
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -14,12 +14,13 @@ from sqlalchemy.orm import Session
 from db.models import Base, JournalEntry, FlaggedEntry, StatutoryRegister, ComplianceDeadline
 from tools.audit_tools import (
     detect_anomaly_transactions, get_compliance_deadlines,
-    support_internal_audit, maintain_statutory_registers,
+    support_internal_audit, resolve_flagged_entry, maintain_statutory_registers,
 )
 from tools.schemas import (
     DetectAnomalyTransactionsInput, DetectAnomalyTransactionsOutput,
     GetComplianceDeadlinesInput, GetComplianceDeadlinesOutput,
     SupportInternalAuditInput, SupportInternalAuditOutput,
+    ResolveFlaggedEntryInput, ResolveFlaggedEntryOutput,
     MaintainStatutoryRegistersInput, MaintainStatutoryRegistersOutput,
 )
 from tests.test_helpers import TEST_DATABASE_URL
@@ -317,6 +318,76 @@ class TestSupportInternalAudit:
         r = support_internal_audit(inp, self.session)
         assert r.total_flagged >= 1
 
+    def test_audit_rerun_no_duplicates(self):
+        """Re-running the audit must not duplicate flagged_entries rows."""
+        inp = SupportInternalAuditInput(fiscal_year=2026)
+        support_internal_audit(inp, self.session)
+        first_count = self.session.query(FlaggedEntry).count()
+        assert first_count >= 1
+
+        support_internal_audit(inp, self.session)
+        second_count = self.session.query(FlaggedEntry).count()
+        assert second_count == first_count
+
+    def test_resolve_flagged_entry_waive(self):
+        """Waiving a flag sets status, so re-audit does not re-flag it."""
+        support_internal_audit(SupportInternalAuditInput(fiscal_year=2026), self.session)
+        fe = self.session.query(FlaggedEntry).first()
+        assert fe is not None
+
+        r = resolve_flagged_entry(ResolveFlaggedEntryInput(
+            entry_id=fe.entry_id, flag_type=fe.flag_type, action="waive",
+            notes="Reviewed - no issue", resolved_by="Ali",
+        ), self.session)
+        assert r.status == "waived"
+        assert r.resolved_at is not None
+        assert r.resolved_by == "Ali"
+
+        # Re-audit: waived flag is not re-flagged and not duplicated.
+        rr = support_internal_audit(SupportInternalAuditInput(fiscal_year=2026), self.session)
+        assert all(f.flag_type != fe.flag_type or f.entry_id != fe.entry_id for f in rr.flagged_entries)
+
+    def test_resolve_flagged_entry_confirm(self):
+        """Confirming keeps the flag but marks it resolved."""
+        support_internal_audit(SupportInternalAuditInput(fiscal_year=2026), self.session)
+        fe = self.session.query(FlaggedEntry).first()
+        r = resolve_flagged_entry(ResolveFlaggedEntryInput(
+            entry_id=fe.entry_id, flag_type=fe.flag_type, action="confirm",
+            notes="Real issue - fix entry", resolved_by="Sara",
+        ), self.session)
+        assert r.status == "confirmed"
+
+    def test_resolve_flagged_entry_invalid_action(self):
+        """Invalid action raises ValueError."""
+        support_internal_audit(SupportInternalAuditInput(fiscal_year=2026), self.session)
+        fe = self.session.query(FlaggedEntry).first()
+        import pytest
+        with pytest.raises(ValueError):
+            resolve_flagged_entry(ResolveFlaggedEntryInput(
+                entry_id=fe.entry_id, flag_type=fe.flag_type, action="delete",
+            ), self.session)
+
+    def test_resolve_flagged_entry_not_found(self):
+        """Unknown entry_id -> ValueError."""
+        import pytest
+        with pytest.raises(ValueError):
+            resolve_flagged_entry(ResolveFlaggedEntryInput(
+                entry_id="JE-DOES-NOT-EXIST", flag_type="missing_reference", action="waive",
+            ), self.session)
+
+    def test_resolve_flagged_entry_already_resolved(self):
+        """Resolving an already-resolved flag raises."""
+        support_internal_audit(SupportInternalAuditInput(fiscal_year=2026), self.session)
+        fe = self.session.query(FlaggedEntry).first()
+        resolve_flagged_entry(ResolveFlaggedEntryInput(
+            entry_id=fe.entry_id, flag_type=fe.flag_type, action="waive",
+        ), self.session)
+        import pytest
+        with pytest.raises(ValueError):
+            resolve_flagged_entry(ResolveFlaggedEntryInput(
+                entry_id=fe.entry_id, flag_type=fe.flag_type, action="confirm",
+            ), self.session)
+
 
 # ===========================================================================
 # Tool 4: Maintain Statutory Registers
@@ -375,6 +446,28 @@ class TestMaintainStatutoryRegisters:
         assert r.action_performed == "view"
         assert "Found" in r.message
         assert r.needs_approval is False
+
+    def test_view_returns_all_entries(self):
+        """View returns every entry in the register, not just the newest."""
+        for i, desc in enumerate(["Director A", "Director B", "Director C"], start=1):
+            maintain_statutory_registers(MaintainStatutoryRegistersInput(
+                action="add", register_type="directors",
+                entry_date=date(2026, 7, i),
+                description=desc,
+                reference_number=f"DIR-00{i}",
+            ), self.session)
+        r = maintain_statutory_registers(MaintainStatutoryRegistersInput(
+            action="view", register_type="directors",
+            entry_date=date(2026, 7, 1),
+            description="View",
+        ), self.session)
+        assert len(r.entries) == 3
+        assert "Found 3" in r.message
+        # Newest first.
+        assert [e.description for e in r.entries] == ["Director C", "Director B", "Director A"]
+        # Each item carries its own identity.
+        assert all(e.register_id.startswith("REG-DIR-") for e in r.entries)
+        assert all(e.reference_number for e in r.entries)
 
     def test_view_empty_register(self):
         """View empty register -> appropriate message."""
