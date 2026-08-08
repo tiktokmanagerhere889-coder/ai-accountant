@@ -647,7 +647,7 @@ def _fmt_fbr_audit_risk(result: dict) -> str:
             triggered = p.get("triggered")
 
             status = "TRIGGERED" if triggered is True else ("NOT triggered" if triggered is False else "NOT verifiable")
-            line = f"- **{code} — {name}**: {status} — threshold: {threshold}, actual: {actual}, confidence: {confidence}, source: {source}"
+            line = f"- **{code}**: {name} - {status} - threshold: {threshold}, actual: {actual}, confidence: {confidence}, source: {source}"
             if url:
                 line += f" ([link]({url}))"
             lines.append(line)
