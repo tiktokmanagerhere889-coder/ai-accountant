@@ -1,4 +1,4 @@
-"""Audit & Regulatory Agent - wraps 4 tools as an OpenAI Agent."""
+"""Audit & Regulatory Agent - wraps 5 tools as an OpenAI Agent."""
 import sys, os, json, typing
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -20,6 +20,7 @@ from tools.audit_tools import (
     detect_anomaly_transactions, get_compliance_deadlines,
     support_internal_audit, resolve_flagged_entry, maintain_statutory_registers,
 )
+from tools.fbr_risk_tools import assess_fbr_audit_risk, AssessFbrAuditRiskInput
 from agent_defs.model_providers import (
     create_groq_provider, create_gemini_provider,
     GROQ_MODEL, GROQ_FALLBACK_MODEL, GEMINI_MODEL,
@@ -182,11 +183,52 @@ def tool_maintain_statutory_registers(action: str, register_type: str, entry_dat
         db.close()
 
 
+# -- Tool 6: assess_fbr_audit_risk --
+@function_tool
+def tool_assess_fbr_audit_risk(fiscal_year: int, business_type: str = "non_corporate",
+                               prior_3yr_audit_status: str = "unknown",
+                               is_manufacturer: bool = False,
+                               months_non_filing: int = 0,
+                               customs_import_value: float = 0,
+                               exempt_income: float = 0,
+                               refund_claim: float = 0) -> str:
+    """Score FBR audit-selection risk from historically-disclosed parameters. Read-only, no approval.
+
+    Args:
+        fiscal_year: Fiscal year (e.g., 2026).
+        business_type: 'non_corporate' or 'corporate'.
+        prior_3yr_audit_status: 'audited' (Finance Act 2025 immunity), 'not_audited', or 'unknown'.
+        is_manufacturer: True if the business is a manufacturer.
+        months_non_filing: Months of tax non-filing (if applicable).
+        customs_import_value: Customs-import value in PKR (if known).
+        exempt_income: Exempt income amount in PKR.
+        refund_claim: Refund claim amount in PKR.
+    """
+    inp = AssessFbrAuditRiskInput(
+        fiscal_year=fiscal_year,
+        business_type=business_type,
+        is_manufacturer=is_manufacturer,
+        prior_3yr_audit_status=prior_3yr_audit_status,
+        months_non_filing=months_non_filing if months_non_filing > 0 else None,
+        customs_import_value=Decimal(str(customs_import_value)) if customs_import_value > 0 else None,
+        exempt_income=Decimal(str(exempt_income)) if exempt_income > 0 else None,
+        refund_claim=Decimal(str(refund_claim)) if refund_claim > 0 else None,
+    )
+    db = _get_session()
+    try:
+        r = assess_fbr_audit_risk(inp, db)
+        return _to_json(r)
+    except ValueError as e:
+        return f"Error: {e}"
+    finally:
+        db.close()
+
+
 AUDIT_AGENT = Agent(
     name="Audit & Regulatory Agent",
     instructions="""You are the Audit & Regulatory Agent for the AI Accountant.
 
-You handle anomaly detection, internal audit support, statutory records, and compliance deadline tracking. You have 5 tools.
+You handle anomaly detection, internal audit support, FBR audit risk scoring, statutory records, and compliance deadline tracking. You have 6 tools.
 
 Available tools:
 1. tool_detect_anomaly_transactions - Pattern-based fraud/anomaly detection (no approval).
@@ -194,6 +236,7 @@ Available tools:
 3. tool_support_internal_audit - Full internal audit scan with 5 patterns (REQUIRES APPROVAL).
 4. tool_resolve_flagged_entry - Mark an audit flag as confirmed or waived (REQUIRES APPROVAL).
 5. tool_maintain_statutory_registers - CRUD for directors/members/charges/contracts/beneficial_owners registers (REQUIRES APPROVAL for writes).
+6. tool_assess_fbr_audit_risk - Score FBR audit-selection risk from historically-disclosed parameters (no approval).
 
 Rules:
 - Greetings, chit-chat, or general questions ('hi', 'hello', 'how are you',
@@ -212,6 +255,7 @@ Rules:
         tool_support_internal_audit,
         tool_resolve_flagged_entry,
         tool_maintain_statutory_registers,
+        tool_assess_fbr_audit_risk,
     ],
     model=GROQ_MODEL,
 )

@@ -197,9 +197,8 @@ Each specialist agent is called as a **tool** by the Orchestrator. Specialist ag
 | 7 | `prepare_sales_tax_filing` | **Yes** | Prepares FBR sales tax filing data; human submits via portal |
 | 8 | `prepare_income_tax_filing` | **Yes** | Prepares FBR income tax filing data; human submits via portal |
 | 9 | `list_tax_filings` | No | Lists all persisted tax filings with status and save dates |
-| 10 | `assess_fbr_audit_risk` | No | FBR audit-risk scoring from ledger using historical FBR parameters |
 
-**DB Tables:** `journal_entries`, `tax_rates`, `eobi_rates`
+**DB Tables:** `journal_entries`, `tax_rates`, `eobi_rates`, `tax_filings`
 
 ---
 
@@ -207,7 +206,7 @@ Each specialist agent is called as a **tool** by the Orchestrator. Specialist ag
 
 **File:** `backend/agent_defs/audit_agent.py`
 **Tools file:** `backend/tools/audit_tools.py`
-**Role:** Anomaly detection, internal audit support, statutory records, and compliance deadline tracking.
+**Role:** Anomaly detection, internal audit support, FBR audit risk scoring, statutory records, and compliance deadline tracking.
 
 | # | Tool | Approval | What it does |
 |---|------|----------|--------------|
@@ -216,6 +215,7 @@ Each specialist agent is called as a **tool** by the Orchestrator. Specialist ag
 | 3 | `support_internal_audit` | **Yes** | Flags unusual journal entries for accountant review — 5 patterns: large reversals, dormant accounts, missing references, late postings, imbalanced entries |
 | 4 | `maintain_statutory_registers` | **Yes** | Keeps statutory register data current; legal accuracy checked by a person before confirming |
 | 5 | `resolve_flagged_entry` | **Yes** | Confirms or waives an audit flag after human review — records who resolved it and why |
+| 6 | `assess_fbr_audit_risk` | No | Scores FBR audit-selection risk from historically-disclosed parameters (TY2011/TY2017); FA 2025 immunity; read-only |
 
 **DB Tables:** `journal_entries`, `flagged_entries`, `compliance_deadlines`, `statutory_registers`
 
@@ -295,10 +295,10 @@ Tools that pause and wait for explicit human confirmation before writing to the 
 | 19 | `support_internal_audit` | Audit & Regulatory |
 | 20 | `maintain_statutory_registers` | Audit & Regulatory |
 | 21 | `resolve_flagged_entry` | Audit & Regulatory |
+| 25 | `assess_fbr_audit_risk` | Audit & Regulatory |
 | 22 | `generate_custom_report` | Advisory |
 | 23 | `manage_system_preferences` | System Admin |
 | 24 | `schedule_system_task` | System Admin |
-| 25 | `assess_fbr_audit_risk` | Tax |
 
 **24 approval-gated · 47 direct-execution · 71 total**
 
