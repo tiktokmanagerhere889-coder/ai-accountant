@@ -128,7 +128,7 @@ npm run dev
 ai-accountant/
 ├── backend/
 │   ├── agent_defs/        # Orchestrator + 10 specialist agent definitions
-│   ├── tools/             # 67 tool implementations (Pydantic in/out)
+│   ├── tools/             # 70 tool implementations (Pydantic in/out)
 │   ├── db/                # PostgreSQL models, migrations, connection
 │   ├── tests/             # Unit + E2E test suites (150+ tests)
 │   └── main.py            # FastAPI entrypoint

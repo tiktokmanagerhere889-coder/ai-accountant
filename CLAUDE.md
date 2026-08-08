@@ -4,7 +4,7 @@ This file is generated during init for the selected agent.
 
 ## Project Summary
 
-AI accounting assistant built on an Orchestrator + 10 agents + 63 tools pattern. The system orchestrates multiple specialized AI agents that handle accounting tasks through a curated set of tools, providing intelligent financial assistance.
+AI accounting assistant built on an Orchestrator + 10 agents + 70 tools pattern. The system orchestrates multiple specialized AI agents that handle accounting tasks through a curated set of tools, providing intelligent financial assistance.
 
 ## Tech Stack
 

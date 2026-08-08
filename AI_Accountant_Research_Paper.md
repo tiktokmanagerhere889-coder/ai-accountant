@@ -140,7 +140,7 @@ Advisory and Analysis | Cost-cutting recommendations | AI agent | Simplified | S
 Advisory and Analysis | Custom management reporting | AI-assisted, human confirms | Simplified | The owner asks for a custom view in plain language, the agent builds the query (implemented as `generate_custom_report`).
 Advisory and Analysis | Financial ratio analysis | AI agent | Core | Standard ratios calculated and explained in plain language (implemented as `calculate_financial_ratios`).
 
-Note: Of the sixty-eight rows in this table, three are backend features rather than registered agent tools. Audit trail and change log is exposed through the `/audit-trail` REST endpoints, multi-user roles and permissions through the `/roles` REST endpoints, and data backup and retention scheduling through the `/backup` REST endpoints. Each remaining row corresponds to one or more registered agent tools; the backend registry holds **sixty-eight** registered tools in total, including two bonus System Admin tools, `manage_system_preferences` and `schedule_system_task`, that are covered by the System and Administration rows.
+Note: Of the seventy rows in this table, three are backend features rather than registered agent tools. Audit trail and change log is exposed through the `/audit-trail` REST endpoints, multi-user roles and permissions through the `/roles` REST endpoints, and data backup and retention scheduling through the `/backup` REST endpoints. Each remaining row corresponds to one or more registered agent tools; the backend registry holds **seventy** registered tools in total, including two bonus System Admin tools, `manage_system_preferences` and `schedule_system_task`, that are covered by the System and Administration rows.
 
 3.1 Features Planned for a Later Version
 
@@ -293,7 +293,7 @@ useful for the parts of accounting that involve understanding a request in plain
 calculating data, and explaining a result, but it should not be trusted to make final decisions on anything
 irreversible, legally sensitive, or dependent on professional judgement. The project is built around that
 boundary, using an AI agent for natural-language entry and explanation, ordinary backend code for every
-calculation, and a human approval step wherever the outcome matters. Twenty-four of the sixty-eight
+calculation, and a human approval step wherever the outcome matters. Twenty-four of the seventy
 tools require explicit human approval before any data is written, covering all irreversible, legally
 sensitive, or judgement-heavy actions. The free-tier model and framework choices made here, Groq as
 the primary model provider with Gemini as a fallback, and the OpenAI Agents SDK for orchestration,

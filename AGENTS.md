@@ -33,7 +33,7 @@ User Request
 
 Each specialist agent is called as a **tool** by the Orchestrator. Specialist agents never communicate with the user directly — all output flows back through the Orchestrator which explains results in plain English.
 
-**Total: 1 Orchestrator + 10 Specialist Agents + 67 Tools + 3 Direct-Backend Endpoints**
+**Total: 1 Orchestrator + 10 Specialist Agents + 70 Tools + 3 Direct-Backend Endpoints**
 
 ---
 
@@ -213,6 +213,7 @@ Each specialist agent is called as a **tool** by the Orchestrator. Specialist ag
 | 2 | `get_compliance_deadlines` | No | Tracks FBR, SECP, EOBI, and PESSI filing deadlines; reminds owner ahead of due dates |
 | 3 | `support_internal_audit` | **Yes** | Flags unusual journal entries for accountant review — 5 patterns: large reversals, dormant accounts, missing references, late postings, imbalanced entries |
 | 4 | `maintain_statutory_registers` | **Yes** | Keeps statutory register data current; legal accuracy checked by a person before confirming |
+| 5 | `resolve_flagged_entry` | **Yes** | Confirms or waives an audit flag after human review — records who resolved it and why |
 
 **DB Tables:** `journal_entries`, `flagged_entries`, `compliance_deadlines`, `statutory_registers`
 
@@ -265,38 +266,38 @@ These go straight from API to the database. No agent, no tool, no LLM call.
 
 ---
 
-## Approval-Required Tools — Full List (24 of 67)
+## Approval-Required Tools — Full List (24 of 70)
 
 Tools that pause and wait for explicit human confirmation before writing to the database:
 
 | # | Tool | Agent |
 |---|------|-------|
 | 1 | `process_receipt_image` | Daily Entry |
-| 2 | `suggest_chart_of_accounts` | Ledger & Master Data |
-| 3 | `categorize_fixed_asset` | Ledger & Master Data |
-| 4 | `run_bank_reconciliation` | Reconciliation & Banking |
-| 5 | `post_accrual_entry` | Reconciliation & Banking |
-| 6 | `reconcile_vendor_statement` | Reconciliation & Banking |
-| 7 | `reconcile_customer_statement` | Reconciliation & Banking |
-| 8 | `track_lc_bank_guarantee` | Reconciliation & Banking |
-| 9 | `forecast_cash_flow` | Month-End Reporting |
-| 10 | `close_fiscal_year` | Year-End Close |
-| 11 | `calculate_standard_costing_variance` | Cost & Budgeting |
-| 12 | `allocate_overhead_cost` | Cost & Budgeting |
-| 13 | `calculate_revenue_recognition` | Cost & Budgeting |
-| 14 | `flag_provision_contingent_liability` | Cost & Budgeting |
-| 15 | `flag_related_party_transaction` | Cost & Budgeting |
-| 16 | `adjust_sales_tax_input_output` | Tax |
-| 17 | `flag_tax_exemption_zero_rating` | Tax |
-| 18 | `prepare_sales_tax_filing` | Tax |
-| 19 | `prepare_income_tax_filing` | Tax |
-| 20 | `support_internal_audit` | Audit & Regulatory |
-| 21 | `maintain_statutory_registers` | Audit & Regulatory |
+| 2 | `categorize_fixed_asset` | Ledger & Master Data |
+| 3 | `run_bank_reconciliation` | Reconciliation & Banking |
+| 4 | `post_accrual_entry` | Reconciliation & Banking |
+| 5 | `reconcile_vendor_statement` | Reconciliation & Banking |
+| 6 | `reconcile_customer_statement` | Reconciliation & Banking |
+| 7 | `track_lc_bank_guarantee` | Reconciliation & Banking |
+| 8 | `forecast_cash_flow` | Month-End Reporting |
+| 9 | `close_fiscal_year` | Year-End Close |
+| 10 | `calculate_standard_costing_variance` | Cost & Budgeting |
+| 11 | `allocate_overhead_cost` | Cost & Budgeting |
+| 12 | `calculate_revenue_recognition` | Cost & Budgeting |
+| 13 | `flag_provision_contingent_liability` | Cost & Budgeting |
+| 14 | `flag_related_party_transaction` | Cost & Budgeting |
+| 15 | `adjust_sales_tax_input_output` | Tax |
+| 16 | `flag_tax_exemption_zero_rating` | Tax |
+| 17 | `prepare_sales_tax_filing` | Tax |
+| 18 | `prepare_income_tax_filing` | Tax |
+| 19 | `support_internal_audit` | Audit & Regulatory |
+| 20 | `maintain_statutory_registers` | Audit & Regulatory |
+| 21 | `resolve_flagged_entry` | Audit & Regulatory |
 | 22 | `generate_custom_report` | Advisory |
 | 23 | `manage_system_preferences` | System Admin |
 | 24 | `schedule_system_task` | System Admin |
 
-**24 approval-gated · 43 direct-execution · 67 total**
+**24 approval-gated · 46 direct-execution · 70 total**
 
 ---
 

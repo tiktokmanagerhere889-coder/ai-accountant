@@ -6,7 +6,7 @@ This file lists every agent in the system, every tool inside each agent, what ea
 
 **Framework:** OpenAI Agents SDK — Manager pattern (Orchestrator calls specialist agents as tools, specialist agents never talk to the user directly).
 
-**Total: 1 Orchestrator + 9 Specialist Agents + 1 BONUS Agent (System Admin) + 67 tools + 3 direct-backend (non-AI) features = 72 components.**
+**Total: 1 Orchestrator + 9 Specialist Agents + 1 BONUS Agent (System Admin) + 70 tools + 3 direct-backend (non-AI) features = 75 components.**
 
 
 ---
@@ -215,4 +215,4 @@ These are the tools that must pause and wait for human confirmation before writi
 23. `manage_system_preferences` (System Admin)
 24. `schedule_system_task` (System Admin)
 
-**24 tools require approval, 43 do not, out of 67 total (All 10 Agents implemented).**
+**24 tools require approval, 46 do not, out of 70 total (All 10 Agents implemented).**
