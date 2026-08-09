@@ -37,6 +37,8 @@ class ErrorBoundary extends React.Component<{children: React.ReactNode}, {hasErr
 
 export default function Home() {
   const [currentView, setCurrentView] = useState("dashboard");
+  // Dark mode defaults to true and is persisted to localStorage so the choice
+  // survives reloads. Uses the class-based `dark:` Tailwind convention.
   const [darkMode, setDarkMode] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -83,15 +85,24 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [approvalRefreshTick]);
 
-  // Theme effect
+  // Theme effect — apply the class and persist the choice
   useEffect(() => {
     const root = window.document.documentElement;
-    if (darkMode) {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
+    root.classList.toggle("dark", darkMode);
   }, [darkMode]);
+
+  // Apply a persisted theme once after mount. SSR can't read localStorage, so
+  // `darkMode` defaults true and this reconciles to the stored choice without
+  // re-writing it. Only writes back when no stored value exists.
+  useEffect(() => {
+    const stored = localStorage.getItem("theme");
+    if (stored === "dark" || stored === "light") {
+      setDarkMode(stored === "dark");
+    } else {
+      localStorage.setItem("theme", darkMode ? "dark" : "light");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Close export dropdown on outside click
   useEffect(() => {

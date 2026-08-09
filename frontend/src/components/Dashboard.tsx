@@ -1,45 +1,100 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import axios from "axios";
 import {
   DollarSign, ListTodo, AlertTriangle, ShieldCheck,
   Percent, ArrowRight, RefreshCw
 } from "lucide-react";
+import { RingChart } from "@/components/charts/ring-chart";
+import { Ring } from "@/components/charts/ring";
+import { RingCenter } from "@/components/charts/ring-center";
+import { RadarChart } from "@/components/charts/radar-chart";
+import { RadarGrid } from "@/components/charts/radar-grid";
+import { RadarAxis } from "@/components/charts/radar-axis";
+import { RadarLabels } from "@/components/charts/radar-labels";
+import { RadarArea } from "@/components/charts/radar-area";
+import { AreaChart } from "@/components/charts/area-chart";
+import { Area } from "@/components/charts/area";
+import { Grid } from "@/components/charts/grid";
+import { XAxis } from "@/components/charts/x-axis";
+import { ChartTooltip } from "@/components/charts/tooltip/chart-tooltip";
+import { LineChart } from "@/components/charts/line-chart";
+import { Line } from "@/components/charts/line";
+import { useCountUp } from "@/components/useCountUp";
 
 interface DashboardProps {
   onSelectAgent: (id: string) => void;
   refreshTrigger: number;
 }
 
+type SnapshotPoint = Record<string, unknown> & { date: string; closing_balance: number; };
+type TrendPoint = Record<string, unknown> & { date: Date; revenue: number; expenses: number; };
+type RadarPoint = Record<string, unknown> & { category: string; value: number; };
+
+const RADAR_CATEGORIES = ["liquidity", "profitability", "leverage", "efficiency"] as const;
+const CATEGORY_LABELS: Record<string, string> = {
+  liquidity: "Liquidity",
+  profitability: "Profitability",
+  leverage: "Leverage",
+  efficiency: "Efficiency",
+};
+// Categorical hue order (validated colorblind-safe in both themes).
+const CHART_COLORS = [
+  "var(--chart-1)", // teal
+  "var(--chart-2)", // amber
+  "var(--chart-3)", // indigo
+  "var(--chart-4)", // rose
+  "var(--chart-5)", // violet
+];
+
+function parseRatioValue(value: string | number | null | undefined): number {
+  if (value === null || value === undefined || value === "") return 0;
+  const num = typeof value === "number" ? value : parseFloat(value);
+  return Number.isFinite(num) ? num : 0;
+}
+
+// Convert a ratio % string like "60.00" (percent) into a 0-100 score.
+// Direction comes from the benchmark operator ("< X" = lower is better,
+// "> X" = higher is better), which covers every ratio in
+// calculate_financial_ratios — including Expense Ratio ("< 80%"), which is
+// NOT in the leverage category and was previously scored inverted.
+function ratioToIndex(value: number, benchmark: string): number {
+  const lowerIsBetter = benchmark.trim().startsWith("<");
+  // Benchmark like "> 1.0", "< 0.5", "> 10%".
+  const benchNum = parseRatioValue(benchmark.replace(/[<>=%\s]/g, ""));
+  if (benchNum <= 0) return 0;
+  // For % ratios, value is already a percent (60.00). For ratios like 1.00, treat as percent of 1.0 max.
+  const isPercent = benchmark.includes("%");
+  const max = isPercent ? 100 : Math.max(1, benchNum * 2);
+  // Clamp the raw score before rounding so extreme values (-877.5%, +977.5%)
+  // saturate at 0 / 100 instead of distorting or breaking the radar polygon.
+  const raw = lowerIsBetter ? 1 - value / max : value / max;
+  const clamped = Math.min(1, Math.max(0, raw));
+  return Math.round(clamped * 100);
+}
+
 export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardProps) {
   const [cashBalance, setCashBalance] = useState<string>("Calculating...");
-  const [transactions, setTransactions] = useState<any[]>([]);
   const [healthScore, setHealthScore] = useState<number | null>(null);
   const [auditStats, setAuditStats] = useState<{ total: number; resolved: number; open: number }>({
     total: 0,
     resolved: 0,
     open: 0,
   });
+  const [cashSnapshots, setCashSnapshots] = useState<SnapshotPoint[]>([]);
+  const [trend, setTrend] = useState<TrendPoint[]>([]);
+  const [ratios, setRatios] = useState<RadarPoint[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const [auditLoading, setAuditLoading] = useState(true);
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
-  useEffect(() => {
-    fetchDashboardStats();
-  }, [refreshTrigger]);
-
-  const fetchDashboardStats = async () => {
-    setAuditLoading(true);
-    // Use the current date dynamically so the dashboard always reflects the
-    // latest entries (was hardcoded to 2026-08-01, missing newer transactions).
+  const fetchDashboardStats = useCallback(async () => {
+    setLoading(true);
     const today = new Date();
     const todayISO = today.toISOString().slice(0, 10);
     const currentYear = today.getFullYear();
-    const firstOfMonth = `${todayISO.slice(0, 7)}-01`;
-    const yearStart = `${currentYear}-01-01`;
-    const yearEnd = `${currentYear}-12-31`;
 
     try {
-      // 1. Fetch cash position via DIRECT tool (no LLM — reliable)
+      // 1. Cash position
       const cashRes = await axios.post(`${apiBase}/tools/execute`, {
         tool_name: "check_cash_position",
         params: { as_of_date: todayISO, account_id: "ALL" },
@@ -51,55 +106,130 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
         setCashBalance("Unavailable");
       }
 
-      // 2. Fetch financial health score via DIRECT tool (replaces hardcoded 92%)
+      // 2. Financial health score (Ring)
       try {
         const healthRes = await axios.post(`${apiBase}/tools/execute`, {
           tool_name: "assess_financial_health",
           params: { fiscal_year: currentYear },
         }, { timeout: 30000 });
         const score = healthRes.data.result?.score;
-        if (typeof score === "number") {
-          setHealthScore(score);
-        } else {
-          setHealthScore(null);
-        }
+        if (typeof score === "number") setHealthScore(score);
+        else setHealthScore(null);
       } catch {
         setHealthScore(null);
       }
 
-      // 3. Fetch recent ledger entries via DIRECT tool
-      const ledgerRes = await axios.post(`${apiBase}/tools/execute`, {
-        tool_name: "get_general_ledger",
-        params: { from_date: yearStart, to_date: yearEnd },
-      }, { timeout: 30000 });
-      const accounts = ledgerRes.data.result?.accounts || [];
-      const txs = accounts.map((a: any) => ({
-        id: a.account_code,
-        desc: a.account_name,
-        amount: Math.abs(Number(a.closing_balance || 0)).toLocaleString("en-US", { minimumFractionDigits: 2 }),
-        type: Number(a.closing_balance) > 0 ? "debit" : "credit",
-        account: `${a.account_code}-${a.account_name}`,
-      }));
-      setTransactions(txs);
+      // 3. Cash snapshots (Area)
+      try {
+        const snapRes = await axios.get(`${apiBase}/cash-snapshots`, { timeout: 30000 });
+        const snapshots = snapRes.data?.snapshots || [];
+        setCashSnapshots(snapshots);
+      } catch {
+        setCashSnapshots([]);
+      }
 
-      // 4. Fetch audit logs count via uncapped /audit-trail/count endpoint
-      //    (the list endpoint caps at limit<=100, so counting its rows would
-      //    under-report once more than 100 logs exist).
-      const logsRes = await axios.get(`${apiBase}/audit-trail/count`, { timeout: 30000 });
-      const total = logsRes.data?.total ?? 0;
-      setAuditStats({
-        total,
-        resolved: 0,
-        open: 0,
-      });
-      setAuditLoading(false);
+      // 4. Monthly trend (Line) — bypass approval (read-only custom report)
+      try {
+        const trendRes = await axios.post(`${apiBase}/tools/execute`, {
+          tool_name: "generate_custom_report",
+          params: { report_type: "trend", fiscal_year: currentYear, report_title: "Monthly Trend" },
+          bypass_approval: true,
+        }, { timeout: 30000 });
+        const sections = trendRes.data?.result?.sections || [];
+        const months = sections[0]?.data?.months || [];
+        setTrend(months.map((m: any) => ({
+          date: new Date(`${m.month}-01T00:00:00`),
+          revenue: parseRatioValue(m.revenue),
+          expenses: parseRatioValue(m.expenses),
+        })));
+      } catch {
+        setTrend([]);
+      }
+
+      // 5. Financial ratios (Radar)
+      try {
+        const ratioRes = await axios.post(`${apiBase}/tools/execute`, {
+          tool_name: "calculate_financial_ratios",
+          params: { fiscal_year: currentYear },
+        }, { timeout: 30000 });
+        const list = ratioRes.data?.result?.ratios || [];
+        const byCat = new Map<string, number[]>();
+        for (const r of list) {
+          const cat = r?.category;
+          if (!cat) continue;
+          if (!byCat.has(cat)) byCat.set(cat, []);
+          byCat.get(cat)!.push(ratioToIndex(parseRatioValue(r.value), r.benchmark || ""));
+        }
+        setRatios(
+          RADAR_CATEGORIES
+            .filter((c) => byCat.has(c))
+            .map((c) => {
+              const vals = byCat.get(c)!;
+              const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+              return { category: c, value: Math.round(avg) };
+            })
+        );
+      } catch {
+        setRatios([]);
+      }
+
+      // 6. Audit count
+      try {
+        const logsRes = await axios.get(`${apiBase}/audit-trail/count`, { timeout: 30000 });
+        const total = logsRes.data?.total ?? 0;
+        setAuditStats({ total, resolved: 0, open: 0 });
+      } catch {
+        // keep existing audit stats
+      }
+      setLoading(false);
     } catch (err) {
       console.error("Dashboard statistics retrieval failed:", err);
       setCashBalance("Unavailable");
       setHealthScore(null);
-      setAuditLoading(false);
+      setLoading(false);
     }
-  };
+  }, [apiBase]);
+
+  useEffect(() => {
+    fetchDashboardStats();
+  }, [refreshTrigger, fetchDashboardStats]);
+
+  // Count-up animations
+  const animatedCash = useCountUp(
+    cashBalance !== "Calculating..." && cashBalance !== "Unavailable" && cashBalance !== ""
+      ? parseFloat(cashBalance.replace(/,/g, ""))
+      : null
+  );
+  const animatedHealth = useCountUp(healthScore);
+  const animatedAudit = useCountUp(auditStats.total);
+
+  // Ring data. Clamp the score to [0, 100] so an out-of-range backend value
+  // (score > maxValue) can't push the arc past the ring's end angle.
+  const ringData = useMemo(() => {
+    if (healthScore === null) return [];
+    const clamped = Math.min(100, Math.max(0, healthScore));
+    return [{ label: "Health Score", value: clamped, maxValue: 100, color: CHART_COLORS[0] }];
+  }, [healthScore]);
+
+  // Radar data
+  const radarData = useMemo(() => {
+    if (!ratios.length) return [];
+    return [{
+      label: "FY Performance",
+      color: CHART_COLORS[0],
+      values: Object.fromEntries(ratios.map((r) => [r.category, r.value])),
+    }];
+  }, [ratios]);
+  const radarMetrics = useMemo(() =>
+    RADAR_CATEGORIES.filter((c) => ratios.some((r) => r.category === c))
+      .map((c) => ({ key: c, label: CATEGORY_LABELS[c] })),
+    [ratios]
+  );
+
+  const hasTrend = trend.length > 0;
+  const hasSnapshots = cashSnapshots.length > 0;
+  const hasRadar = radarMetrics.length > 0;
+  const hasRing = ringData.length > 0;
 
   return (
     <div className="space-y-6">
@@ -113,9 +243,8 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
         </p>
       </div>
 
-      {/* Cards Panel */}
+      {/* Metric Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Cash balance card */}
         <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between h-36">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs uppercase font-bold tracking-wider">Net Cash Position</span>
@@ -125,63 +254,126 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
             {cashBalance === "Unavailable" ? (
               <span className="text-sm font-normal text-gray-500">Currently Unavailable</span>
             ) : (
-              `PKR ${cashBalance}`
+              <>PKR {animatedCash !== null ? animatedCash.toLocaleString("en-US", { minimumFractionDigits: 2 }) : "…"}</>
             )}
           </div>
-          <button
-            onClick={() => onSelectAgent("daily-entry")}
-            className="text-xs text-accent-light hover:underline font-semibold flex items-center gap-1 mt-2 self-start"
-          >
+          <button onClick={() => onSelectAgent("daily-entry")}
+            className="text-xs text-accent-light hover:underline font-semibold flex items-center gap-1 mt-2 self-start">
             Manage cash flow <ArrowRight className="w-3 h-3" />
           </button>
         </div>
 
-        {/* Audit status card */}
         <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between h-36">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs uppercase font-bold tracking-wider">Audit Trail Updates</span>
             <ListTodo className="w-5 h-5 text-amber-500" />
           </div>
           <div className="text-2xl font-semibold font-mono text-gray-900 dark:text-gray-100">
-            {auditLoading ? (
+            {loading ? (
               <div className="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
             ) : (
-              <span className="text-2xl font-bold">{auditStats.total}</span>
+              <span className="text-2xl font-bold">{animatedAudit ?? 0}</span>
             )} <span className="text-xs font-normal text-gray-500">Logged Actions</span>
           </div>
-          <button
-            onClick={() => onSelectAgent("audit")}
-            className="text-xs text-accent-light hover:underline font-semibold flex items-center gap-1 mt-2 self-start"
-          >
+          <button onClick={() => onSelectAgent("audit")}
+            className="text-xs text-accent-light hover:underline font-semibold flex items-center gap-1 mt-2 self-start">
             Review audit trail <ArrowRight className="w-3 h-3" />
           </button>
         </div>
 
-        {/* Financial health card */}
         <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between h-36">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs uppercase font-bold tracking-wider">Corporate Ratios</span>
             <Percent className="w-5 h-5 text-emerald-500" />
           </div>
           <div className="text-2xl font-semibold font-mono text-gray-900 dark:text-gray-100">
-            {healthScore !== null ? (
-              <>{healthScore}% <span className="text-xs font-normal text-gray-500">Financial Health</span></>
+            {animatedHealth !== null ? (
+              <>{Math.round(animatedHealth)}% <span className="text-xs font-normal text-gray-500">Financial Health</span></>
             ) : (
               <span className="text-sm font-normal text-gray-500">Not calculated</span>
             )}
           </div>
-          <button
-            onClick={() => onSelectAgent("advisory")}
-            className="text-xs text-accent-light hover:underline font-semibold flex items-center gap-1 mt-2 self-start"
-          >
+          <button onClick={() => onSelectAgent("advisory")}
+            className="text-xs text-accent-light hover:underline font-semibold flex items-center gap-1 mt-2 self-start">
             Analyze financial indicators <ArrowRight className="w-3 h-3" />
           </button>
         </div>
       </div>
 
+      {/* Charts Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Cash flow trend (Area) */}
+        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6">
+          <h3 className="font-semibold text-sm uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-4">
+            Cash Position Trend
+          </h3>
+          {hasSnapshots ? (
+            <AreaChart data={cashSnapshots.map((s) => ({ date: s.date, balance: s.closing_balance }))} xDataKey="date" aspectRatio="2 / 1">
+              <Grid horizontal />
+              <Area dataKey="balance" fill="var(--chart-line-primary)" />
+              <XAxis />
+              <ChartTooltip />
+            </AreaChart>
+          ) : (
+            <div className="text-center p-8 text-sm text-gray-500">No cash snapshot data.</div>
+          )}
+        </div>
+
+        {/* Financial health (Ring) */}
+        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col items-center">
+          <h3 className="font-semibold text-sm uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-2 self-start">
+            Financial Health Score
+          </h3>
+          {hasRing ? (
+            <RingChart data={ringData} size={200} className="mt-2">
+              <Ring index={0} />
+              <RingCenter defaultLabel="Health Score" />
+            </RingChart>
+          ) : (
+            <div className="text-center p-8 text-sm text-gray-500">No health data.</div>
+          )}
+        </div>
+
+        {/* Radar ratios */}
+        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6">
+          <h3 className="font-semibold text-sm uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-4">
+            Financial Ratios
+          </h3>
+          {hasRadar ? (
+            <RadarChart data={radarData} metrics={radarMetrics} size={360} className="mx-auto">
+              <RadarGrid />
+              <RadarAxis />
+              <RadarLabels />
+              {radarData.map((item, index) => (
+                <RadarArea key={item.label} index={index} />
+              ))}
+            </RadarChart>
+          ) : (
+            <div className="text-center p-8 text-sm text-gray-500">No ratio data.</div>
+          )}
+        </div>
+
+        {/* Monthly trend (Line) */}
+        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6">
+          <h3 className="font-semibold text-sm uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-4">
+            Monthly Revenue vs Expenses
+          </h3>
+          {hasTrend ? (
+            <LineChart data={trend} xDataKey="date" aspectRatio="2 / 1">
+              <Grid horizontal />
+              <Line dataKey="revenue" stroke="var(--chart-line-primary)" />
+              <Line dataKey="expenses" stroke="var(--chart-line-secondary)" />
+              <XAxis />
+              <ChartTooltip />
+            </LineChart>
+          ) : (
+            <div className="text-center p-8 text-sm text-gray-500">No trend data.</div>
+          )}
+        </div>
+      </div>
+
       {/* Main Splits: Recent transactions & Alerts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Ledger items */}
         <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 lg:col-span-2">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-sm uppercase tracking-wider text-gray-700 dark:text-gray-300">
@@ -191,29 +383,11 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
               <RefreshCw className="w-4 h-4 text-gray-400 hover:text-gray-600" />
             </button>
           </div>
-          {transactions.length === 0 ? (
-            <div className="text-center p-8 text-sm text-gray-500">
-              No entries logged in this session range.
-            </div>
-          ) : (
-            <div className="divide-y divide-gray-100 dark:divide-gray-800">
-              {transactions.map((tx, idx) => (
-                <div key={idx} className="py-3 flex items-center justify-between text-xs">
-                  <div className="space-y-1">
-                    <span className="font-mono text-gray-500 dark:text-gray-500 mr-2">{tx.id}</span>
-                    <span className="font-medium text-gray-800 dark:text-gray-200">{tx.desc}</span>
-                    <div className="text-[10px] text-gray-400 font-mono">{tx.account}</div>
-                  </div>
-                  <span className={`font-mono font-semibold tabular-nums ${tx.type === "debit" ? "text-red-500" : "text-emerald-500"}`}>
-                    {tx.type === "debit" ? "- " : "+ "} PKR {tx.amount}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="text-center p-8 text-sm text-gray-500">
+            Ledger postings moved to the Transactions view.
+          </div>
         </div>
 
-        {/* Status Alerts */}
         <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6">
           <h3 className="font-semibold text-sm uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-4">
             System Alerts

@@ -56,3 +56,5 @@ full-workflow.md
 # Compiled Python cache
 *.pyc
 *.pyd
+frontend/tsconfig.tsbuildinfo
+frontend/shots2.mjs

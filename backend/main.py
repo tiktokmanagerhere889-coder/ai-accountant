@@ -204,6 +204,56 @@ def get_audit_trail_count(
     return {"total": query.scalar() or 0}
 
 
+@app.get("/cash-snapshots")
+def get_cash_snapshots(
+    from_date: Optional[date] = None,
+    to_date: Optional[date] = None,
+    db: Session = Depends(get_db),
+):
+    """Return chronological daily cash snapshots computed from the ledger.
+
+    Runs a cumulative balance over posted journal entries, counting only
+    entries that touch cash/bank accounts. Uses the same cash-account
+    definition as check_cash_position (name check + chart-prefix check), so
+    the last snapshot equals the card's closing_balance. Computed on the fly
+    from journal_entries - no separate snapshot table.
+    """
+    from tools.account_utils import get_cash_prefixes
+
+    # Resolve cash prefixes once (avoids a DB query per entry)
+    cash_prefixes = get_cash_prefixes(db)
+
+    def is_cash_account(account_code: str) -> bool:
+        name = account_code.lower()
+        if any(k in name for k in ("cash", "bank")):
+            return True
+        if cash_prefixes:
+            return any(account_code.startswith(p) for p in cash_prefixes)
+        return False
+
+    query = db.query(JournalEntry).filter(JournalEntry.status == "posted")
+    if from_date:
+        query = query.filter(JournalEntry.posted_date >= from_date)
+    if to_date:
+        query = query.filter(JournalEntry.posted_date <= to_date)
+    entries = query.order_by(JournalEntry.posted_date, JournalEntry.id).all()
+
+    balance = Decimal("0.00")
+    snapshots = []
+    for entry in entries:
+        if entry.debit_amount is not None and is_cash_account(entry.debit_account):
+            balance += entry.debit_amount
+        if entry.credit_amount is not None and is_cash_account(entry.credit_account):
+            balance -= entry.credit_amount
+        day = entry.posted_date.isoformat()
+        if snapshots and snapshots[-1]["date"] == day:
+            snapshots[-1]["closing_balance"] = float(balance)
+        else:
+            snapshots.append({"date": day, "closing_balance": float(balance)})
+
+    return {"snapshots": snapshots, "count": len(snapshots)}
+
+
 # 2. User Roles CRUD
 @app.post("/roles", response_model=UserRoleResponse, status_code=201)
 def create_role(payload: UserRoleCreate, db: Session = Depends(get_db)):
