@@ -8,6 +8,13 @@
   body {
     @apply antialiased transition-colors duration-200;
   }
+  /* Full-viewport app shell height. Falls back to 100vh on browsers without
+     dvh support; uses 100dvh (dynamic viewport height) where available so
+     mobile URL-bar show/hide doesn't clip content below the visible fold. */
+  .h-shell {
+    height: 100vh;
+    height: 100dvh;
+  }
   .theme {
     --font-heading: var(--font-sans);
     --font-sans: var(--font-sans);

@@ -119,7 +119,7 @@ export default function Home() {
 
   return (
     <ErrorBoundary>
-      <div className={`h-screen flex flex-col overflow-hidden font-sans bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-200`}>
+      <div className={`h-shell flex flex-col overflow-hidden font-sans bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-200`}>
       {/* Top Bar */}
       <header className="flex items-center justify-between px-6 py-3 border-b bg-surface-light dark:bg-surface-dark border-gray-200 dark:border-gray-800 flex-shrink-0 z-10">
         <div className="flex items-center gap-3">
@@ -136,8 +136,8 @@ export default function Home() {
           <div className="flex items-center gap-2">
             <Database className="w-3.5 h-3.5" />
             <span>Database Connection:</span>
-            <span className={`w-2.5 h-2.5 rounded-full ${dbHealthy ? "bg-emerald-500 animate-pulse" : "bg-red-500"}`} />
-            <span className={dbHealthy ? "text-emerald-500" : "text-red-500"}>
+            <span className={`w-2.5 h-2.5 rounded-full ${dbHealthy ? "bg-success-light dark:bg-success-dark animate-pulse" : "bg-danger-light dark:bg-danger-dark"}`} />
+            <span className={dbHealthy ? "text-success-light dark:text-success-dark" : "text-danger-light dark:text-danger-dark"}>
               {dbHealthy ? "ONLINE" : "OFFLINE"}
             </span>
           </div>
@@ -195,7 +195,7 @@ export default function Home() {
       </header>
 
       {/* Primary Panels splits */}
-      <div className="flex flex-1 overflow-hidden flex-col lg:flex-row">
+      <div className="flex flex-1 min-h-0 overflow-hidden flex-col lg:flex-row">
         {/* Navigation Sidebar */}
         <Sidebar
           currentView={currentView}
@@ -207,7 +207,7 @@ export default function Home() {
 
         {/* Center Panel (Main contents) */}
         {currentView === "chat" ? (
-          <main className="flex-1 overflow-hidden flex">
+          <main className="flex-1 min-h-0 overflow-hidden flex">
             <ChatPanel
               fullPage
               externalApproval={lastApproval}
@@ -215,7 +215,7 @@ export default function Home() {
             />
           </main>
         ) : (
-        <main className="flex-1 overflow-y-auto p-8 w-full lg:max-w-5xl mx-auto">
+        <main className="flex-1 min-h-0 overflow-y-auto p-8 w-full lg:max-w-5xl mx-auto">
           {currentView === "dashboard" && (
             <Dashboard
               onSelectAgent={setCurrentView}

@@ -26,7 +26,7 @@ export default function Sidebar({
 
   return (
     <div
-      className={`flex flex-col border-r h-full transition-all duration-300 bg-surface-light dark:bg-surface-dark border-gray-200 dark:border-gray-800 ${
+      className={`flex flex-col border-r h-auto lg:h-full max-h-[45dvh] lg:max-h-none transition-all duration-300 bg-surface-light dark:bg-surface-dark border-gray-200 dark:border-gray-800 ${
         collapsed ? "w-16" : "w-64"
       }`}
     >

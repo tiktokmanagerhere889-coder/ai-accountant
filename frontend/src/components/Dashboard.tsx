@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import axios from "axios";
 import {
-  DollarSign, ListTodo, AlertTriangle, ShieldCheck,
+  DollarSign, ListTodo,
   Percent, ArrowRight, RefreshCw
 } from "lucide-react";
 import { RingChart } from "@/components/charts/ring-chart";
@@ -266,7 +266,7 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
         <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between h-36">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs uppercase font-bold tracking-wider">Audit Trail Updates</span>
-            <ListTodo className="w-5 h-5 text-amber-500" />
+            <ListTodo className="w-5 h-5 text-warning-light dark:text-warning-dark" />
           </div>
           <div className="text-2xl font-semibold font-mono text-gray-900 dark:text-gray-100">
             {loading ? (
@@ -284,7 +284,7 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
         <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between h-36">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs uppercase font-bold tracking-wider">Corporate Ratios</span>
-            <Percent className="w-5 h-5 text-emerald-500" />
+            <Percent className="w-5 h-5 text-success-light dark:text-success-dark" />
           </div>
           <div className="text-2xl font-semibold font-mono text-gray-900 dark:text-gray-100">
             {animatedHealth !== null ? (
@@ -372,9 +372,11 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
         </div>
       </div>
 
-      {/* Main Splits: Recent transactions & Alerts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 lg:col-span-2">
+      {/* Main split: Recent postings (alerts moved out — System Alerts card removed,
+          static text duplicates the header DB status + Approvals bell which carry
+          real data) */}
+      <div className="grid grid-cols-1 gap-6">
+        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-sm uppercase tracking-wider text-gray-700 dark:text-gray-300">
               Recent General Ledger postings
@@ -385,28 +387,6 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
           </div>
           <div className="text-center p-8 text-sm text-gray-500">
             Ledger postings moved to the Transactions view.
-          </div>
-        </div>
-
-        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6">
-          <h3 className="font-semibold text-sm uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-4">
-            System Alerts
-          </h3>
-          <div className="space-y-4">
-            <div className="p-3.5 rounded border border-emerald-500/20 bg-emerald-500/10 dark:bg-emerald-500/20 flex items-start gap-3">
-              <ShieldCheck className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-              <div className="text-xs">
-                <div className="font-semibold text-emerald-800 dark:text-emerald-400">Database Connection</div>
-                <div className="text-gray-600 dark:text-gray-400 mt-0.5">PostgreSQL instances connected and fully synced.</div>
-              </div>
-            </div>
-            <div className="p-3.5 rounded border border-amber-500/20 bg-amber-500/10 dark:bg-amber-500/20 flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
-              <div className="text-xs">
-                <div className="font-semibold text-amber-800 dark:text-amber-400">Audit Reminders</div>
-                <div className="text-gray-600 dark:text-gray-400 mt-0.5">Prepare final year close notes before closing dates.</div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
