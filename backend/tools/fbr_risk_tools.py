@@ -526,8 +526,11 @@ def assess_fbr_audit_risk(inp: AssessFbrAuditRiskInput, db: Session) -> AssessFb
                   actual_value=f"{_round(ratio, 1)}%",
                   note="Spec defines 80% for non-corporate (70% for hotels/restaurants); no industry input exists, so 80% is used for all.")
         if trig:
-            flag("IT-08", f"COGS {_round(ratio, 1)}% of sales exceeds 80%.",
-                 amount=_round(cogs_cur - revenue_cur * Decimal("0.80"), 2), tax_year=fy,
+            excess = _round(cogs_cur - revenue_cur * Decimal("0.80"), 2)
+            flag("IT-08", f"COGS Rs {_round(cogs_cur, 2)} ({_round(ratio, 1)}% of sales) exceeds "
+                          f"the 80% threshold (Rs {_round(revenue_cur * Decimal('0.80'), 2)}); "
+                          f"excess above threshold Rs {excess}.",
+                 amount=excess, tax_year=fy,
                  ledger_entry_ids=cogs_ids)
     else:
         add_param("IT-08", "High COGS ratio", "income_tax", _IT_SOURCE, _IT_URL,
@@ -733,21 +736,23 @@ def assess_fbr_audit_risk(inp: AssessFbrAuditRiskInput, db: Session) -> AssessFb
         if trig:
             flag("ST-07", f"No filing recorded for {months} months.", tax_year=fy)
     else:
+        # The tax_filings table only records filings PREPARED inside this app.
+        # A business may have filed on the FBR portal directly, so the absence
+        # of in-app sales-filing periods (or a partial set) is NOT evidence of
+        # actual non-filing. Only a manual months_non_filing input from the
+        # owner/CA is reliable, so without it this parameter is not_verifiable
+        # rather than triggered from an incomplete record.
         periods = _sales_filing_periods(db, fy)
-        if not periods:
-            add_param("ST-07", "Non-filing", "sales_tax", _ST_SOURCE, _ST_URL,
-                      "non-filing > 6 months", "not_verifiable", None,
-                      actual_value="N/A",
-                      note="No sales TaxFiling periods for this fiscal year; non-filing cannot be inferred.")
+        if periods:
+            period_note = f"{len(periods)} in-app sales filing period(s) recorded for FY {fy}; "
         else:
-            months = 12 - len(periods)
-            trig = months > 6
-            add_param("ST-07", "Non-filing", "sales_tax", _ST_SOURCE, _ST_URL,
-                      "non-filing > 6 months", "computed_from_ledger", trig,
-                      actual_value=f"{months} months non-filing",
-                      note=f"Inferred from {len(periods)} distinct monthly sales-filing periods recorded for FY {fy}.")
-            if trig:
-                flag("ST-07", f"No filing recorded for {months} months.", tax_year=fy)
+            period_note = ""
+        add_param("ST-07", "Non-filing", "sales_tax", _ST_SOURCE, _ST_URL,
+                  "non-filing > 6 months", "not_verifiable", None,
+                  actual_value="N/A",
+                  note=(period_note +
+                        "the app only tracks filings prepared here, not FBR portal submissions; "
+                        "non-filing cannot be confirmed without a manual months_non_filing value."))
 
     # ------------------------------------------------------------------
     # Scoring (see module docstring rubric)

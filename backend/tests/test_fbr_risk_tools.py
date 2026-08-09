@@ -168,3 +168,31 @@ class TestAssessFbrAuditRisk:
         assert by_code["IT-03"].triggered is True
         assert by_code["IT-03"].confidence == "computed_from_ledger"
         assert any(fi.param_code == "IT-03" for fi in r.flagged_items)
+
+    def test_st07_partial_filing_not_verifiable(self):
+        """A partial in-app sales-filing record (1 of 12 periods) must NOT be
+        inferred as non-filing: the app only tracks filings prepared here, not
+        FBR portal submissions, so ST-07 is not_verifiable (never triggered)
+        without a manual months_non_filing value."""
+        _seed_normal_ledger(self.session)
+        self.session.add(TaxFiling(
+            filing_id="ST-2026-07", filing_type="sales", fiscal_year=2026, period=7,
+            total_revenue=Decimal("100000"), total_expenses=Decimal("0"),
+            tax_liability=Decimal("0"), net_payable=Decimal("0"), status="prepared",
+        ))
+        self.session.commit()
+        r = self._run()
+        by_code = self._params(r)
+        assert by_code["ST-07"].confidence == "not_verifiable"
+        assert by_code["ST-07"].triggered is None
+        assert "portal" in by_code["ST-07"].note
+
+    def test_st07_manual_months_non_filing_triggers(self):
+        """A manual months_non_filing override (from the owner/CA) is genuine
+        evidence and DOES trigger ST-07 when > 6 months."""
+        _seed_normal_ledger(self.session)
+        r = self._run(months_non_filing=11)
+        by_code = self._params(r)
+        assert by_code["ST-07"].triggered is True
+        assert by_code["ST-07"].confidence == "manual_input"
+        assert any(fi.param_code == "ST-07" for fi in r.flagged_items)
