@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import axios from "axios";
 import {
-  DollarSign, ListTodo,
-  Percent, ArrowRight, RefreshCw
+  AlertTriangle, DollarSign, ListTodo,
+  Percent, ArrowRight, RefreshCw, Scale, ShieldAlert
 } from "lucide-react";
 import { RingChart } from "@/components/charts/ring-chart";
 import { Ring } from "@/components/charts/ring";
@@ -23,6 +23,7 @@ import { useCountUp } from "@/components/useCountUp";
 
 interface DashboardProps {
   onSelectAgent: (id: string) => void;
+  onOpenApprovals: () => void;
   refreshTrigger: number;
 }
 
@@ -52,6 +53,15 @@ function parseRatioValue(value: string | number | null | undefined): number {
   return Number.isFinite(num) ? num : 0;
 }
 
+// Map an FBR audit risk band to the semantic text token used to color the score.
+function riskBandColor(band: string): string {
+  switch (band.toLowerCase()) {
+    case "low": return "text-success-light dark:text-success-dark";
+    case "medium": return "text-warning-light dark:text-warning-dark";
+    default: return "text-danger-light dark:text-danger-dark"; // high, critical
+  }
+}
+
 // Convert a ratio % string like "60.00" (percent) into a 0-100 score.
 // Direction comes from the benchmark operator ("< X" = lower is better,
 // "> X" = higher is better), which covers every ratio in
@@ -72,7 +82,7 @@ function ratioToIndex(value: number, benchmark: string): number {
   return Math.round(clamped * 100);
 }
 
-export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardProps) {
+export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigger }: DashboardProps) {
   const [cashBalance, setCashBalance] = useState<string>("Calculating...");
   const [healthScore, setHealthScore] = useState<number | null>(null);
   const [auditStats, setAuditStats] = useState<{ total: number; resolved: number; open: number }>({
@@ -83,12 +93,19 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
   const [cashSnapshots, setCashSnapshots] = useState<SnapshotPoint[]>([]);
   const [trend, setTrend] = useState<TrendPoint[]>([]);
   const [ratios, setRatios] = useState<RadarPoint[]>([]);
+  const [pendingApprovals, setPendingApprovals] = useState(0);
+  const [riskScore, setRiskScore] = useState<number | null>(null);
+  const [riskBand, setRiskBand] = useState<string | null>(null);
+  const [tbInBalance, setTbInBalance] = useState<boolean | null>(null);
+  const [tbDifference, setTbDifference] = useState<number | null>(null);
+  const [tbStatus, setTbStatus] = useState<"loading" | "ready" | "error">("loading");
   const [loading, setLoading] = useState(true);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
   const fetchDashboardStats = useCallback(async () => {
     setLoading(true);
+    setTbStatus("loading");
     const today = new Date();
     const todayISO = today.toISOString().slice(0, 10);
     const currentYear = today.getFullYear();
@@ -181,11 +198,57 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
       } catch {
         // keep existing audit stats
       }
+
+      // 7. Pending approvals count (banner)
+      try {
+        const pendingRes = await axios.get(`${apiBase}/approvals/pending`, { timeout: 15000 });
+        setPendingApprovals(pendingRes.data?.approvals?.length || 0);
+      } catch {
+        // backend unreachable — keep current count
+      }
+
+      // 8. FBR audit risk (metric card)
+      try {
+        const fbrRes = await axios.post(`${apiBase}/tools/execute`, {
+          tool_name: "assess_fbr_audit_risk",
+          params: { fiscal_year: currentYear },
+        }, { timeout: 30000 });
+        const result = fbrRes.data?.result;
+        if (result && typeof result.risk_score !== "undefined") {
+          setRiskScore(Number(result.risk_score));
+          setRiskBand(result.risk_band || null);
+        } else {
+          setRiskScore(null);
+          setRiskBand(null);
+        }
+      } catch {
+        setRiskScore(null);
+        setRiskBand(null);
+      }
+
+      // 9. Trial balance (metric card)
+      try {
+        const tbRes = await axios.post(`${apiBase}/tools/execute`, {
+          tool_name: "generate_trial_balance",
+          params: { as_of_date: todayISO },
+        }, { timeout: 30000 });
+        const result = tbRes.data?.result;
+        if (result && typeof result.in_balance !== "undefined") {
+          setTbInBalance(Boolean(result.in_balance));
+          setTbDifference(typeof result.difference !== "undefined" ? Number(result.difference) : null);
+          setTbStatus("ready");
+        } else {
+          setTbStatus("error");
+        }
+      } catch {
+        setTbStatus("error");
+      }
       setLoading(false);
     } catch (err) {
       console.error("Dashboard statistics retrieval failed:", err);
       setCashBalance("Unavailable");
       setHealthScore(null);
+      setTbStatus("error");
       setLoading(false);
     }
   }, [apiBase]);
@@ -202,6 +265,7 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
   );
   const animatedHealth = useCountUp(healthScore);
   const animatedAudit = useCountUp(auditStats.total);
+  const animatedRisk = useCountUp(riskScore);
 
   // Ring data. Clamp the score to [0, 100] so an out-of-range backend value
   // (score > maxValue) can't push the arc past the ring's end angle.
@@ -233,6 +297,24 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
 
   return (
     <div className="space-y-6">
+      {/* Pending Approvals Banner */}
+      {pendingApprovals > 0 && (
+        <div className="flex items-center justify-between gap-4 bg-warning-light/10 dark:bg-warning-dark/10 text-warning-light dark:text-warning-dark border border-warning-light/40 dark:border-warning-dark/40 rounded px-4 py-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <AlertTriangle className="w-5 h-5 animate-pulse flex-shrink-0" />
+            <span className="text-sm font-semibold">
+              {pendingApprovals} pending approval{pendingApprovals === 1 ? "" : "s"} awaiting review
+            </span>
+          </div>
+          <button
+            onClick={onOpenApprovals}
+            className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider bg-warning-light/20 dark:bg-warning-dark/20 text-warning-light dark:text-warning-dark border border-warning-light/40 dark:border-warning-dark/40 rounded px-3 py-1.5 hover:bg-warning-light/30 dark:hover:bg-warning-dark/30 transition-colors flex-shrink-0"
+          >
+            Review approvals <ArrowRight className="w-3 h-3" />
+          </button>
+        </div>
+      )}
+
       {/* Top Banner */}
       <div>
         <h2 className="font-serif text-2xl text-gray-800 dark:text-gray-100">
@@ -244,7 +326,7 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
       </div>
 
       {/* Metric Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between h-36">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs uppercase font-bold tracking-wider">Net Cash Position</span>
@@ -296,6 +378,51 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
           <button onClick={() => onSelectAgent("advisory")}
             className="text-xs text-accent-light hover:underline font-semibold flex items-center gap-1 mt-2 self-start">
             Analyze financial indicators <ArrowRight className="w-3 h-3" />
+          </button>
+        </div>
+
+        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between h-36">
+          <div className="flex items-center justify-between text-gray-500">
+            <span className="text-xs uppercase font-bold tracking-wider">FBR Audit Risk</span>
+            <ShieldAlert className="w-5 h-5 text-warning-light dark:text-warning-dark" />
+          </div>
+          <div className={`text-2xl font-semibold font-mono ${riskScore !== null && riskBand ? riskBandColor(riskBand) : "text-gray-900 dark:text-gray-100"}`}>
+            {riskScore !== null && riskBand ? (
+              <>{animatedRisk !== null ? Math.round(animatedRisk) : "…"} <span className="text-xs font-normal uppercase">{riskBand}</span></>
+            ) : (
+              <span className="text-sm font-normal text-gray-500">Not calculated</span>
+            )}
+          </div>
+          <button onClick={() => onSelectAgent("tax")}
+            className="text-xs text-accent-light hover:underline font-semibold flex items-center gap-1 mt-2 self-start">
+            Review FBR risk <ArrowRight className="w-3 h-3" />
+          </button>
+        </div>
+
+        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between h-36">
+          <div className="flex items-center justify-between text-gray-500">
+            <span className="text-xs uppercase font-bold tracking-wider">Trial Balance</span>
+            <Scale className="w-5 h-5 text-accent-light" />
+          </div>
+          <div className="text-2xl font-semibold font-mono text-gray-900 dark:text-gray-100">
+            {tbStatus === "loading" ? (
+              <div className="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            ) : tbStatus === "error" || tbInBalance === null ? (
+              <span className="text-sm font-normal text-gray-500">Unavailable</span>
+            ) : tbInBalance ? (
+              <span className="text-success-light dark:text-success-dark">✅ IN BALANCE</span>
+            ) : (
+              <>
+                <span className="text-danger-light dark:text-danger-dark">⚠️ OUT OF BALANCE</span>
+                {tbDifference !== null && (
+                  <div className="text-xs font-normal text-gray-500 mt-1">PKR {tbDifference.toLocaleString("en-US")}</div>
+                )}
+              </>
+            )}
+          </div>
+          <button onClick={() => onSelectAgent("year-end")}
+            className="text-xs text-accent-light hover:underline font-semibold flex items-center gap-1 mt-2 self-start">
+            Open trial balance <ArrowRight className="w-3 h-3" />
           </button>
         </div>
       </div>

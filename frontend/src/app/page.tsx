@@ -51,6 +51,9 @@ export default function Home() {
   // Last approval resolved from the Notifications panel — forwarded to ChatPanel
   // so the result also appears in the chat thread (not only panel history).
   const [lastApproval, setLastApproval] = useState<ApprovalResolvedEvent | null>(null);
+  // Rendered only after mount to avoid a timezone-dependent SSR/client
+  // hydration mismatch (server UTC vs visitor TZ can be different days).
+  const [todayLabel, setTodayLabel] = useState("");
   const exportRef = useRef<HTMLDivElement | null>(null);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -104,6 +107,19 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Fill the header date after mount (client-only) to keep SSR and the first
+  // client render identical regardless of timezone.
+  useEffect(() => {
+    setTodayLabel(
+      new Date().toLocaleDateString("en-US", {
+        weekday: "short",
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      })
+    );
+  }, []);
+
   // Close export dropdown on outside click
   useEffect(() => {
     const handleOutsideClick = (e: MouseEvent) => {
@@ -144,7 +160,12 @@ export default function Home() {
 
           <div className="flex items-center gap-1.5 border-l border-gray-200 dark:border-gray-800 pl-6">
             <Calendar className="w-3.5 h-3.5" />
-            <span>{new Date().toLocaleDateString("en-US", { weekday: "short", year: "numeric", month: "short", day: "numeric" })}</span>
+            {/* Client-only date: SSR in the server's timezone (UTC) and client
+                hydration in the visitor's timezone can land on different days,
+                which breaks React hydration (#425/#418) on phones in a later
+                TZ. Render a stable placeholder on the server and fill the real
+                date after mount. */}
+            <span suppressHydrationWarning={true}>{todayLabel}</span>
           </div>
 
           {/* Theme Switcher Toggle */}
@@ -219,6 +240,7 @@ export default function Home() {
           {currentView === "dashboard" && (
             <Dashboard
               onSelectAgent={setCurrentView}
+              onOpenApprovals={() => setApprovalsOpen(true)}
               refreshTrigger={refreshTrigger}
             />
           )}
