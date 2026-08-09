@@ -187,6 +187,23 @@ def get_audit_trail(
     return query.order_by(AuditLog.timestamp.desc()).offset(offset).limit(limit).all()
 
 
+@app.get("/audit-trail/count")
+def get_audit_trail_count(
+    user_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """Return the total audit-trail record count (uncapped).
+
+    The list endpoint caps at limit<=100, so a dashboard counting
+    logsRes.data.length would undercount once records exceed that. This
+    endpoint returns the true total so callers never under-report.
+    """
+    query = db.query(func.count(AuditLog.id))
+    if user_id:
+        query = query.filter(AuditLog.user_id == user_id)
+    return {"total": query.scalar() or 0}
+
+
 # 2. User Roles CRUD
 @app.post("/roles", response_model=UserRoleResponse, status_code=201)
 def create_role(payload: UserRoleCreate, db: Session = Depends(get_db)):

@@ -82,12 +82,15 @@ export default function Dashboard({ onSelectAgent, refreshTrigger }: DashboardPr
       }));
       setTransactions(txs);
 
-      // 4. Fetch audit logs count
-      const logsRes = await axios.get(`${apiBase}/audit-trail`, { timeout: 30000 });
+      // 4. Fetch audit logs count via uncapped /audit-trail/count endpoint
+      //    (the list endpoint caps at limit<=100, so counting its rows would
+      //    under-report once more than 100 logs exist).
+      const logsRes = await axios.get(`${apiBase}/audit-trail/count`, { timeout: 30000 });
+      const total = logsRes.data?.total ?? 0;
       setAuditStats({
-        total: logsRes.data.length,
-        resolved: logsRes.data.filter((l: any) => l.action.includes("RESOLVED")).length,
-        open: logsRes.data.filter((l: any) => !l.action.includes("RESOLVED")).length,
+        total,
+        resolved: 0,
+        open: 0,
       });
       setAuditLoading(false);
     } catch (err) {
