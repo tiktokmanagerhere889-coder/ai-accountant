@@ -452,7 +452,7 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
             Financial Health Score
           </h3>
           {hasRing ? (
-            <RingChart data={ringData} size={200} className="mt-2">
+            <RingChart data={ringData} className="mt-2">
               <Ring index={0} />
               <RingCenter defaultLabel="Health Score" />
             </RingChart>
@@ -467,7 +467,7 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
             Financial Ratios
           </h3>
           {hasRadar ? (
-            <RadarChart data={radarData} metrics={radarMetrics} size={360} className="mx-auto">
+            <RadarChart data={radarData} metrics={radarMetrics} className="mx-auto">
               <RadarGrid />
               <RadarAxis />
               <RadarLabels />
