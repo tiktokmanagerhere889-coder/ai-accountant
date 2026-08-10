@@ -334,6 +334,16 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
     [ratios]
   );
 
+  // Stable identity for the Area chart: map cashSnapshots through useMemo so
+  // every Dashboard render passes the SAME array reference. Without this, the
+  // inline .map() created a fresh array each render, and the chart's
+  // phase-orchestrator effect (setPlotData on targetData change) re-ran on it
+  // forever — "Maximum update depth exceeded" during fast re-render churn.
+  const snapshotChartData = useMemo(
+    () => cashSnapshots.map((s) => ({ date: s.date, balance: s.closing_balance })),
+    [cashSnapshots]
+  );
+
   const hasTrend = trend.length > 0;
   const hasSnapshots = cashSnapshots.length > 0;
   const hasRadar = radarMetrics.length > 0;
@@ -479,7 +489,7 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
             Cash Position Trend
           </h3>
           {hasSnapshots ? (
-            <AreaChart data={cashSnapshots.map((s) => ({ date: s.date, balance: s.closing_balance }))} xDataKey="date" aspectRatio="2 / 1">
+            <AreaChart data={snapshotChartData} xDataKey="date" aspectRatio="2 / 1">
               <Grid horizontal />
               <Area dataKey="balance" fill="var(--chart-line-primary)" />
               <XAxis />
