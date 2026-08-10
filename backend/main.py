@@ -254,6 +254,46 @@ def get_cash_snapshots(
     return {"snapshots": snapshots, "count": len(snapshots)}
 
 
+@app.get("/ledger/entries")
+def get_recent_ledger_entries(
+    limit: int = Query(default=10, ge=1, le=100),
+    db: Session = Depends(get_db),
+):
+    """Return the most recent posted journal entries.
+
+    Feeds the dashboard "Recent General Ledger postings" card. Entries are
+    shown individually (date, description, debit/credit legs), newest first.
+    Only entries whose status is 'posted' are returned.
+    """
+    entries = (
+        db.query(JournalEntry)
+        .filter(JournalEntry.status == "posted")
+        .order_by(JournalEntry.posted_date.desc(), JournalEntry.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+    def _account_label(value: str) -> str:
+        # Normalize "1000-Cash" → "Cash", keep plain codes as-is.
+        return value.split("-", 1)[-1].strip() if value and "-" in value else value
+
+    rows = []
+    for e in entries:
+        rows.append(
+            {
+                "entry_id": e.entry_id,
+                "description": e.description,
+                "posted_date": e.posted_date.isoformat(),
+                "debit_account": _account_label(e.debit_account),
+                "debit_amount": float(e.debit_amount or 0),
+                "credit_account": _account_label(e.credit_account),
+                "credit_amount": float(e.credit_amount or 0),
+            }
+        )
+
+    return {"entries": rows, "count": len(rows)}
+
+
 # 2. User Roles CRUD
 @app.post("/roles", response_model=UserRoleResponse, status_code=201)
 def create_role(payload: UserRoleCreate, db: Session = Depends(get_db)):

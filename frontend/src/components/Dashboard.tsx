@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import axios from "axios";
 import {
   AlertTriangle, DollarSign, ListTodo,
-  Percent, ArrowRight, RefreshCw, Scale, ShieldAlert
+  Percent, ArrowRight, RefreshCw, Scale, ShieldAlert, ArrowUpRight, ArrowDownRight
 } from "lucide-react";
 import { RingChart } from "@/components/charts/ring-chart";
 import { Ring } from "@/components/charts/ring";
@@ -30,6 +30,15 @@ interface DashboardProps {
 type SnapshotPoint = Record<string, unknown> & { date: string; closing_balance: number; };
 type TrendPoint = Record<string, unknown> & { date: Date; revenue: number; expenses: number; };
 type RadarPoint = Record<string, unknown> & { category: string; value: number; };
+type LedgerEntry = {
+  entry_id: string;
+  description: string;
+  posted_date: string;
+  debit_account: string;
+  debit_amount: number;
+  credit_account: string;
+  credit_amount: number;
+};
 
 const RADAR_CATEGORIES = ["liquidity", "profitability", "leverage", "efficiency"] as const;
 const CATEGORY_LABELS: Record<string, string> = {
@@ -99,6 +108,8 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
   const [tbInBalance, setTbInBalance] = useState<boolean | null>(null);
   const [tbDifference, setTbDifference] = useState<number | null>(null);
   const [tbStatus, setTbStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [recentLedger, setRecentLedger] = useState<LedgerEntry[]>([]);
+  const [ledgerStatus, setLedgerStatus] = useState<"loading" | "ready" | "error">("loading");
   const [loading, setLoading] = useState(true);
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
@@ -242,6 +253,16 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
         }
       } catch {
         setTbStatus("error");
+      }
+
+      // 10. Recent General Ledger postings
+      try {
+        const ledgerRes = await axios.get(`${apiBase}/ledger/entries?limit=10`, { timeout: 15000 });
+        setRecentLedger(ledgerRes.data?.entries || []);
+        setLedgerStatus("ready");
+      } catch {
+        setRecentLedger([]);
+        setLedgerStatus("error");
       }
       setLoading(false);
     } catch (err) {
@@ -499,9 +520,7 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
         </div>
       </div>
 
-      {/* Main split: Recent postings (alerts moved out — System Alerts card removed,
-          static text duplicates the header DB status + Approvals bell which carry
-          real data) */}
+      {/* Recent General Ledger postings */}
       <div className="grid grid-cols-1 gap-6">
         <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6">
           <div className="flex items-center justify-between mb-4">
@@ -512,9 +531,49 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
               <RefreshCw className="w-4 h-4 text-gray-400 hover:text-gray-600" />
             </button>
           </div>
-          <div className="text-center p-8 text-sm text-gray-500">
-            Ledger postings moved to the Transactions view.
-          </div>
+          {ledgerStatus === "loading" && (
+            <div className="text-center p-8 text-sm text-gray-500">Loading postings…</div>
+          )}
+          {ledgerStatus === "error" && (
+            <div className="text-center p-8 text-sm text-gray-500">
+              Recent postings are unavailable right now.
+            </div>
+          )}
+          {ledgerStatus === "ready" && recentLedger.length === 0 && (
+            <div className="text-center p-8 text-sm text-gray-500">No postings yet.</div>
+          )}
+          {ledgerStatus === "ready" && recentLedger.length > 0 && (
+            <ul className="divide-y divide-gray-200 dark:divide-gray-800">
+              {recentLedger.map((entry) => (
+                <li key={entry.entry_id} className="py-3">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
+                        {entry.description}
+                      </p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {entry.posted_date} · {entry.entry_id}
+                      </p>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400">
+                        <ArrowDownRight className="w-3 h-3 text-success-light dark:text-success-dark" />
+                        <span className="font-mono">{Number(entry.debit_amount).toLocaleString()}</span>
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        <ArrowUpRight className="w-3 h-3 text-danger-light dark:text-danger-dark" />
+                        <span className="font-mono">{Number(entry.credit_amount).toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1.5 text-[11px] text-gray-400">
+                    <span>Dr: {entry.debit_account}</span>
+                    <span>Cr: {entry.credit_account}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </div>
     </div>
