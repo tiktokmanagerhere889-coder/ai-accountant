@@ -140,6 +140,28 @@
   html {
     @apply font-sans;
   }
+  /* Custom scrollbars — thin, and themed via CSS tokens so they follow the
+     active theme automatically (--border is a muted line in both themes,
+     --muted-foreground is the secondary text tone). */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 8px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-foreground);
+  }
+  /* Firefox */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+  }
 }
 
 .font-serif {
