@@ -16,7 +16,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={cn("font-sans", inter.variable)}>
+    <html lang="en" suppressHydrationWarning className={cn("font-sans", inter.variable)}>
+      <head>
+        {/* Pre-paint theme bootstrap: apply the persisted theme before first
+            paint to avoid a light flash for dark-mode users. Mirrors the
+            reconciliation in page.tsx (defaults to dark when nothing stored). */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function () {
+  try {
+    var theme = localStorage.getItem("theme");
+    if (theme === "dark" || theme === null) {
+      document.documentElement.classList.add("dark");
+    }
+  } catch (e) {}
+})();`,
+          }}
+        />
+      </head>
       <body>{children}</body>
     </html>
   );

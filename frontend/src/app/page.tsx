@@ -182,7 +182,7 @@ export default function Home() {
           <button
             onClick={() => setDarkMode(!darkMode)}
             aria-label="Toggle Theme Mode"
-            className="p-2 rounded bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+            className="p-3 rounded bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
           >
             {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
@@ -195,7 +195,7 @@ export default function Home() {
             <button
               onClick={() => setExportOpen(!exportOpen)}
               aria-label="Export Data"
-              className="flex items-center gap-1.5 p-2 rounded bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 font-medium"
+              className="flex items-center gap-1.5 p-3 rounded bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400 font-medium"
             >
               <Download className="w-4 h-4" />
               <span className="hidden sm:inline">Export</span>
@@ -357,7 +357,7 @@ function ExportMiniButton({
         downloadExport(format, agent);
         onSelect();
       }}
-      className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-gray-100 hover:bg-accent-light hover:text-white dark:bg-gray-800 dark:hover:bg-accent-light text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 transition-colors"
+      className="px-2.5 py-2 rounded text-[10px] font-bold uppercase bg-gray-100 hover:bg-accent-light hover:text-white dark:bg-gray-800 dark:hover:bg-accent-light text-gray-500 dark:text-gray-400 border border-gray-200 dark:border-gray-700 transition-colors"
     >
       {format.toUpperCase()}
     </button>

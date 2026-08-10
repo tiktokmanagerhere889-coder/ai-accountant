@@ -104,13 +104,13 @@ export default function AgentCards() {
                     </span>
                     <button
                       onClick={(e) => { e.stopPropagation(); downloadExport("xlsx", agent.id); }}
-                      className="text-[10px] px-2 py-1 rounded bg-accent-light/10 text-accent-light hover:bg-accent-light/20 font-semibold"
+                      className="text-[11px] px-2.5 py-2 rounded bg-accent-light/10 text-accent-light hover:bg-accent-light/20 font-semibold"
                     >
                       XLSX
                     </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); downloadExport("csv", agent.id); }}
-                      className="text-[10px] px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 font-semibold"
+                      className="text-[11px] px-2.5 py-2 rounded bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700 font-semibold"
                     >
                       CSV
                     </button>

@@ -335,7 +335,7 @@ export default function ApprovalsPanel({ open, onClose, onPendingCountChange, on
                     <button
                       onClick={() => handleReject(approval)}
                       disabled={!!busy}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 font-medium text-xs text-gray-700 dark:text-gray-300 disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded border border-gray-300 dark:border-gray-600 hover:bg-gray-200 dark:hover:bg-gray-700 font-medium text-xs text-gray-700 dark:text-gray-300 disabled:opacity-50"
                     >
                       {busy === "rejecting" ? (
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -347,7 +347,7 @@ export default function ApprovalsPanel({ open, onClose, onPendingCountChange, on
                     <button
                       onClick={() => handleApprove(approval)}
                       disabled={!!busy}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs disabled:opacity-50"
+                      className="flex items-center gap-1.5 px-4 py-2.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs disabled:opacity-50"
                     >
                       {busy === "approving" ? (
                         <>
