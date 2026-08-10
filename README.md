@@ -142,6 +142,23 @@ ai-accountant/
 
 ---
 
+## 📦 Demo Data & Scripts
+
+Demo data and generators used for demos, seeding, and debugging:
+
+| Path | Purpose |
+|------|---------|
+| `samples/sample_Agent1_DailyEntry.csv` | Sample daily-entry CSV (Agent 1) |
+| `samples/sample_Agent2_Ledger.csv` | Sample ledger CSV (Agent 2) |
+| `samples/sample_Agent4_Financials.csv` | Sample financials CSV (Agent 4) |
+| `samples/AI_Accountant_Demo_Export.xlsx` | Ready-to-open CA-style demo XLSX export |
+| `scripts/generate_demo_xlsx.py` | Regenerates the demo XLSX with fake data (openpyxl) |
+| `scripts/seed_agent4_prod.py` | Seeds the production Neon DB with Agent-4 test data (idempotent) |
+| `scripts/test_orchestrator.py` | Counts Groq calls for one chat message through the orchestrator |
+| `scripts/test_provider.py` | Verifies the fail-fast Groq provider fix (no SDK retry on 429) |
+
+---
+
 ## 🔌 Key API Endpoints
 
 | Method | Endpoint | Description |

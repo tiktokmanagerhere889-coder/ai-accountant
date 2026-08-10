@@ -38,6 +38,9 @@ frontend/package-lock.json
 .DS_Store
 Thumbs.db
 
+# Microsoft Office temp/lock files
+~$*
+
 # IDE / tools
 .vscode/
 .idea/
