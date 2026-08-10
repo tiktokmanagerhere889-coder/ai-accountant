@@ -327,7 +327,7 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
 
       {/* Metric Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between h-36">
+        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between min-h-36">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs uppercase font-bold tracking-wider">Net Cash Position</span>
             <DollarSign className="w-5 h-5 text-accent-light" />
@@ -345,7 +345,7 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
           </button>
         </div>
 
-        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between h-36">
+        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between min-h-36">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs uppercase font-bold tracking-wider">Audit Trail Updates</span>
             <ListTodo className="w-5 h-5 text-warning-light dark:text-warning-dark" />
@@ -363,7 +363,7 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
           </button>
         </div>
 
-        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between h-36">
+        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between min-h-36">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs uppercase font-bold tracking-wider">Corporate Ratios</span>
             <Percent className="w-5 h-5 text-success-light dark:text-success-dark" />
@@ -381,7 +381,7 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
           </button>
         </div>
 
-        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between h-36">
+        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between min-h-36">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs uppercase font-bold tracking-wider">FBR Audit Risk</span>
             <ShieldAlert className="w-5 h-5 text-warning-light dark:text-warning-dark" />
@@ -399,7 +399,7 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
           </button>
         </div>
 
-        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between h-36">
+        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between min-h-36">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs uppercase font-bold tracking-wider">Trial Balance</span>
             <Scale className="w-5 h-5 text-accent-light" />
