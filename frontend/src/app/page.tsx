@@ -137,28 +137,28 @@ export default function Home() {
     <ErrorBoundary>
       <div className={`h-shell flex flex-col overflow-hidden font-sans bg-background-light dark:bg-background-dark text-gray-800 dark:text-gray-200`}>
       {/* Top Bar */}
-      <header className="flex items-center justify-between px-6 py-3 border-b bg-surface-light dark:bg-surface-dark border-gray-200 dark:border-gray-800 flex-shrink-0 z-10">
-        <div className="flex items-center gap-3">
+      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 sm:px-6 py-3 border-b bg-surface-light dark:bg-surface-dark border-gray-200 dark:border-gray-800 flex-shrink-0 z-10">
+        <div className="flex items-center gap-2 sm:gap-3">
           <span className="font-serif font-bold text-lg tracking-wide uppercase text-accent-light">
             AI Accountant
           </span>
-          <span className="text-[10px] uppercase font-bold text-gray-400 border border-gray-200 dark:border-gray-800 px-2 py-0.5 rounded">
+          <span className="hidden sm:inline-block text-[10px] uppercase font-bold text-gray-400 border border-gray-200 dark:border-gray-800 px-2 py-0.5 rounded">
             Orchestration Node v1
           </span>
         </div>
 
-        <div className="flex items-center gap-6 text-xs font-semibold text-gray-500">
+        <div className="flex items-center flex-wrap gap-x-4 gap-y-2 sm:gap-6 text-xs font-semibold text-gray-500">
           {/* PostgreSQL status */}
           <div className="flex items-center gap-2">
             <Database className="w-3.5 h-3.5" />
-            <span>Database Connection:</span>
+            <span className="hidden sm:inline">Database Connection:</span>
             <span className={`w-2.5 h-2.5 rounded-full ${dbHealthy ? "bg-success-light dark:bg-success-dark animate-pulse" : "bg-danger-light dark:bg-danger-dark"}`} />
             <span className={dbHealthy ? "text-success-light dark:text-success-dark" : "text-danger-light dark:text-danger-dark"}>
               {dbHealthy ? "ONLINE" : "OFFLINE"}
             </span>
           </div>
 
-          <div className="flex items-center gap-1.5 border-l border-gray-200 dark:border-gray-800 pl-6">
+          <div className="flex items-center gap-1.5 border-l border-gray-200 dark:border-gray-800 pl-3 sm:pl-6">
             <Calendar className="w-3.5 h-3.5" />
             {/* Client-only date: SSR in the server's timezone (UTC) and client
                 hydration in the visitor's timezone can land on different days,
