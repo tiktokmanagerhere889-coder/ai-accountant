@@ -110,168 +110,191 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
   const [tbStatus, setTbStatus] = useState<"loading" | "ready" | "error">("loading");
   const [recentLedger, setRecentLedger] = useState<LedgerEntry[]>([]);
   const [ledgerStatus, setLedgerStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [loading, setLoading] = useState(true);
+  const [auditStatus, setAuditStatus] = useState<"loading" | "ready" | "error">("loading");
 
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
   const fetchDashboardStats = useCallback(async () => {
-    setLoading(true);
     setTbStatus("loading");
+    setLedgerStatus("loading");
+    setAuditStatus("loading");
     const today = new Date();
     const todayISO = today.toISOString().slice(0, 10);
     const currentYear = today.getFullYear();
 
-    try {
+    // All 10 data sources are independent — no call's result feeds another —
+    // so they fire in PARALLEL via Promise.all. Each has its own try/catch and
+    // sets only its own state, so a slow or failing call never blocks or
+    // resets the other cards: whichever finishes first renders immediately.
+    await Promise.all([
       // 1. Cash position
-      const cashRes = await axios.post(`${apiBase}/tools/execute`, {
-        tool_name: "check_cash_position",
-        params: { as_of_date: todayISO, account_id: "ALL" },
-      }, { timeout: 30000 });
-      const cashData = cashRes.data.result;
-      if (cashData && typeof cashData.closing_balance !== "undefined") {
-        setCashBalance(Number(cashData.closing_balance).toLocaleString("en-US", { minimumFractionDigits: 2 }));
-      } else {
-        setCashBalance("Unavailable");
-      }
+      (async () => {
+        try {
+          const cashRes = await axios.post(`${apiBase}/tools/execute`, {
+            tool_name: "check_cash_position",
+            params: { as_of_date: todayISO, account_id: "ALL" },
+          }, { timeout: 30000 });
+          const cashData = cashRes.data.result;
+          if (cashData && typeof cashData.closing_balance !== "undefined") {
+            setCashBalance(Number(cashData.closing_balance).toLocaleString("en-US", { minimumFractionDigits: 2 }));
+          } else {
+            setCashBalance("Unavailable");
+          }
+        } catch {
+          setCashBalance("Unavailable");
+        }
+      })(),
 
       // 2. Financial health score (Ring)
-      try {
-        const healthRes = await axios.post(`${apiBase}/tools/execute`, {
-          tool_name: "assess_financial_health",
-          params: { fiscal_year: currentYear },
-        }, { timeout: 30000 });
-        const score = healthRes.data.result?.score;
-        if (typeof score === "number") setHealthScore(score);
-        else setHealthScore(null);
-      } catch {
-        setHealthScore(null);
-      }
+      (async () => {
+        try {
+          const healthRes = await axios.post(`${apiBase}/tools/execute`, {
+            tool_name: "assess_financial_health",
+            params: { fiscal_year: currentYear },
+          }, { timeout: 30000 });
+          const score = healthRes.data.result?.score;
+          if (typeof score === "number") setHealthScore(score);
+          else setHealthScore(null);
+        } catch {
+          setHealthScore(null);
+        }
+      })(),
 
       // 3. Cash snapshots (Area)
-      try {
-        const snapRes = await axios.get(`${apiBase}/cash-snapshots`, { timeout: 30000 });
-        const snapshots = snapRes.data?.snapshots || [];
-        setCashSnapshots(snapshots);
-      } catch {
-        setCashSnapshots([]);
-      }
+      (async () => {
+        try {
+          const snapRes = await axios.get(`${apiBase}/cash-snapshots`, { timeout: 30000 });
+          const snapshots = snapRes.data?.snapshots || [];
+          setCashSnapshots(snapshots);
+        } catch {
+          setCashSnapshots([]);
+        }
+      })(),
 
       // 4. Monthly trend (Line) — bypass approval (read-only custom report)
-      try {
-        const trendRes = await axios.post(`${apiBase}/tools/execute`, {
-          tool_name: "generate_custom_report",
-          params: { report_type: "trend", fiscal_year: currentYear, report_title: "Monthly Trend" },
-          bypass_approval: true,
-        }, { timeout: 30000 });
-        const sections = trendRes.data?.result?.sections || [];
-        const months = sections[0]?.data?.months || [];
-        setTrend(months.map((m: any) => ({
-          date: new Date(`${m.month}-01T00:00:00`),
-          revenue: parseRatioValue(m.revenue),
-          expenses: parseRatioValue(m.expenses),
-        })));
-      } catch {
-        setTrend([]);
-      }
+      (async () => {
+        try {
+          const trendRes = await axios.post(`${apiBase}/tools/execute`, {
+            tool_name: "generate_custom_report",
+            params: { report_type: "trend", fiscal_year: currentYear, report_title: "Monthly Trend" },
+            bypass_approval: true,
+          }, { timeout: 30000 });
+          const sections = trendRes.data?.result?.sections || [];
+          const months = sections[0]?.data?.months || [];
+          setTrend(months.map((m: any) => ({
+            date: new Date(`${m.month}-01T00:00:00`),
+            revenue: parseRatioValue(m.revenue),
+            expenses: parseRatioValue(m.expenses),
+          })));
+        } catch {
+          setTrend([]);
+        }
+      })(),
 
       // 5. Financial ratios (Radar)
-      try {
-        const ratioRes = await axios.post(`${apiBase}/tools/execute`, {
-          tool_name: "calculate_financial_ratios",
-          params: { fiscal_year: currentYear },
-        }, { timeout: 30000 });
-        const list = ratioRes.data?.result?.ratios || [];
-        const byCat = new Map<string, number[]>();
-        for (const r of list) {
-          const cat = r?.category;
-          if (!cat) continue;
-          if (!byCat.has(cat)) byCat.set(cat, []);
-          byCat.get(cat)!.push(ratioToIndex(parseRatioValue(r.value), r.benchmark || ""));
+      (async () => {
+        try {
+          const ratioRes = await axios.post(`${apiBase}/tools/execute`, {
+            tool_name: "calculate_financial_ratios",
+            params: { fiscal_year: currentYear },
+          }, { timeout: 30000 });
+          const list = ratioRes.data?.result?.ratios || [];
+          const byCat = new Map<string, number[]>();
+          for (const r of list) {
+            const cat = r?.category;
+            if (!cat) continue;
+            if (!byCat.has(cat)) byCat.set(cat, []);
+            byCat.get(cat)!.push(ratioToIndex(parseRatioValue(r.value), r.benchmark || ""));
+          }
+          setRatios(
+            RADAR_CATEGORIES
+              .filter((c) => byCat.has(c))
+              .map((c) => {
+                const vals = byCat.get(c)!;
+                const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+                return { category: c, value: Math.round(avg) };
+              })
+          );
+        } catch {
+          setRatios([]);
         }
-        setRatios(
-          RADAR_CATEGORIES
-            .filter((c) => byCat.has(c))
-            .map((c) => {
-              const vals = byCat.get(c)!;
-              const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
-              return { category: c, value: Math.round(avg) };
-            })
-        );
-      } catch {
-        setRatios([]);
-      }
+      })(),
 
       // 6. Audit count
-      try {
-        const logsRes = await axios.get(`${apiBase}/audit-trail/count`, { timeout: 30000 });
-        const total = logsRes.data?.total ?? 0;
-        setAuditStats({ total, resolved: 0, open: 0 });
-      } catch {
-        // keep existing audit stats
-      }
+      (async () => {
+        try {
+          const logsRes = await axios.get(`${apiBase}/audit-trail/count`, { timeout: 30000 });
+          const total = logsRes.data?.total ?? 0;
+          setAuditStats({ total, resolved: 0, open: 0 });
+          setAuditStatus("ready");
+        } catch {
+          setAuditStatus("error");
+        }
+      })(),
 
       // 7. Pending approvals count (banner)
-      try {
-        const pendingRes = await axios.get(`${apiBase}/approvals/pending`, { timeout: 15000 });
-        setPendingApprovals(pendingRes.data?.approvals?.length || 0);
-      } catch {
-        // backend unreachable — keep current count
-      }
+      (async () => {
+        try {
+          const pendingRes = await axios.get(`${apiBase}/approvals/pending`, { timeout: 15000 });
+          setPendingApprovals(pendingRes.data?.approvals?.length || 0);
+        } catch {
+          // backend unreachable — keep current count
+        }
+      })(),
 
       // 8. FBR audit risk (metric card)
-      try {
-        const fbrRes = await axios.post(`${apiBase}/tools/execute`, {
-          tool_name: "assess_fbr_audit_risk",
-          params: { fiscal_year: currentYear },
-        }, { timeout: 30000 });
-        const result = fbrRes.data?.result;
-        if (result && typeof result.risk_score !== "undefined") {
-          setRiskScore(Number(result.risk_score));
-          setRiskBand(result.risk_band || null);
-        } else {
+      (async () => {
+        try {
+          const fbrRes = await axios.post(`${apiBase}/tools/execute`, {
+            tool_name: "assess_fbr_audit_risk",
+            params: { fiscal_year: currentYear },
+          }, { timeout: 30000 });
+          const result = fbrRes.data?.result;
+          if (result && typeof result.risk_score !== "undefined") {
+            setRiskScore(Number(result.risk_score));
+            setRiskBand(result.risk_band || null);
+          } else {
+            setRiskScore(null);
+            setRiskBand(null);
+          }
+        } catch {
           setRiskScore(null);
           setRiskBand(null);
         }
-      } catch {
-        setRiskScore(null);
-        setRiskBand(null);
-      }
+      })(),
 
       // 9. Trial balance (metric card)
-      try {
-        const tbRes = await axios.post(`${apiBase}/tools/execute`, {
-          tool_name: "generate_trial_balance",
-          params: { as_of_date: todayISO },
-        }, { timeout: 30000 });
-        const result = tbRes.data?.result;
-        if (result && typeof result.in_balance !== "undefined") {
-          setTbInBalance(Boolean(result.in_balance));
-          setTbDifference(typeof result.difference !== "undefined" ? Number(result.difference) : null);
-          setTbStatus("ready");
-        } else {
+      (async () => {
+        try {
+          const tbRes = await axios.post(`${apiBase}/tools/execute`, {
+            tool_name: "generate_trial_balance",
+            params: { as_of_date: todayISO },
+          }, { timeout: 30000 });
+          const result = tbRes.data?.result;
+          if (result && typeof result.in_balance !== "undefined") {
+            setTbInBalance(Boolean(result.in_balance));
+            setTbDifference(typeof result.difference !== "undefined" ? Number(result.difference) : null);
+            setTbStatus("ready");
+          } else {
+            setTbStatus("error");
+          }
+        } catch {
           setTbStatus("error");
         }
-      } catch {
-        setTbStatus("error");
-      }
+      })(),
 
       // 10. Recent General Ledger postings
-      try {
-        const ledgerRes = await axios.get(`${apiBase}/ledger/entries?limit=10`, { timeout: 15000 });
-        setRecentLedger(ledgerRes.data?.entries || []);
-        setLedgerStatus("ready");
-      } catch {
-        setRecentLedger([]);
-        setLedgerStatus("error");
-      }
-      setLoading(false);
-    } catch (err) {
-      console.error("Dashboard statistics retrieval failed:", err);
-      setCashBalance("Unavailable");
-      setHealthScore(null);
-      setTbStatus("error");
-      setLoading(false);
-    }
+      (async () => {
+        try {
+          const ledgerRes = await axios.get(`${apiBase}/ledger/entries?limit=10`, { timeout: 15000 });
+          setRecentLedger(ledgerRes.data?.entries || []);
+          setLedgerStatus("ready");
+        } catch {
+          setRecentLedger([]);
+          setLedgerStatus("error");
+        }
+      })(),
+    ]);
   }, [apiBase]);
 
   useEffect(() => {
@@ -372,7 +395,7 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
             <ListTodo className="w-5 h-5 text-warning-light dark:text-warning-dark" />
           </div>
           <div className="text-2xl font-semibold font-mono text-gray-900 dark:text-gray-100">
-            {loading ? (
+            {auditStatus === "loading" ? (
               <div className="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
             ) : (
               <span className="text-2xl font-bold">{animatedAudit ?? 0}</span>
