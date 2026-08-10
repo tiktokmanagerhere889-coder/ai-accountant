@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import axios from "axios";
-import { Sun, Moon, Calendar, Database, Download, FileDown } from "lucide-react";
+import { Sun, Moon, Calendar, Database, Download, FileDown, Menu } from "lucide-react";
 import Sidebar from "@/components/Sidebar";
 import ChatPanel from "@/components/ChatPanel";
 import Dashboard from "@/components/Dashboard";
@@ -41,6 +41,7 @@ export default function Home() {
   // survives reloads. Uses the class-based `dark:` Tailwind convention.
   const [darkMode, setDarkMode] = useState(true);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [dbHealthy, setDbHealthy] = useState(true);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -139,6 +140,15 @@ export default function Home() {
       {/* Top Bar */}
       <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-4 sm:px-6 py-3 border-b bg-surface-light dark:bg-surface-dark border-gray-200 dark:border-gray-800 flex-shrink-0 z-10">
         <div className="flex items-center gap-2 sm:gap-3">
+          {/* Mobile hamburger — opens the shared slide-in drawer (Sidebar.tsx).
+              Hidden on lg+ where the desktop rail renders instead. */}
+          <button
+            onClick={() => setMobileNavOpen(true)}
+            aria-label="Open Navigation"
+            className="lg:hidden p-3 rounded bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
           <span className="font-serif font-bold text-lg tracking-wide uppercase text-accent-light">
             AI Accountant
           </span>
@@ -224,6 +234,8 @@ export default function Home() {
           onOpenSettings={() => setSettingsOpen(true)}
           collapsed={sidebarCollapsed}
           onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+          mobileOpen={mobileNavOpen}
+          onMobileOpenChange={setMobileNavOpen}
         />
 
         {/* Center Panel (Main contents) */}
