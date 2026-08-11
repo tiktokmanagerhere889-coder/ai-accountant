@@ -107,6 +107,8 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
   const [riskBand, setRiskBand] = useState<string | null>(null);
   const [tbInBalance, setTbInBalance] = useState<boolean | null>(null);
   const [tbDifference, setTbDifference] = useState<number | null>(null);
+  const [tbDebits, setTbDebits] = useState<number | null>(null);
+  const [tbCredits, setTbCredits] = useState<number | null>(null);
   const [tbStatus, setTbStatus] = useState<"loading" | "ready" | "error">("loading");
   const [recentLedger, setRecentLedger] = useState<LedgerEntry[]>([]);
   const [ledgerStatus, setLedgerStatus] = useState<"loading" | "ready" | "error">("loading");
@@ -274,6 +276,8 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
           if (result && typeof result.in_balance !== "undefined") {
             setTbInBalance(Boolean(result.in_balance));
             setTbDifference(typeof result.difference !== "undefined" ? Number(result.difference) : null);
+            setTbDebits(typeof result.total_debits !== "undefined" ? Number(result.total_debits) : null);
+            setTbCredits(typeof result.total_credits !== "undefined" ? Number(result.total_credits) : null);
             setTbStatus("ready");
           } else {
             setTbStatus("error");
@@ -458,22 +462,44 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
             <span className="text-xs uppercase font-bold tracking-wider">Trial Balance</span>
             <Scale className="w-5 h-5 text-accent-light" />
           </div>
-          <div className="text-2xl font-semibold font-mono text-gray-900 dark:text-gray-100">
-            {tbStatus === "loading" ? (
-              <div className="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
-            ) : tbStatus === "error" || tbInBalance === null ? (
-              <span className="text-sm font-normal text-gray-500">Unavailable</span>
-            ) : tbInBalance ? (
-              <span className="text-success-light dark:text-success-dark">✅ IN BALANCE</span>
-            ) : (
-              <>
-                <span className="text-danger-light dark:text-danger-dark">⚠️ OUT OF BALANCE</span>
-                {tbDifference !== null && (
-                  <div className="text-xs font-normal text-gray-500 mt-1">PKR {tbDifference.toLocaleString("en-US")}</div>
-                )}
-              </>
-            )}
-          </div>
+          {tbStatus === "loading" ? (
+            <div className="grid grid-cols-2 gap-4 mt-2">
+              <div className="h-8 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+              <div className="h-8 w-24 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
+            </div>
+          ) : tbStatus === "error" || tbInBalance === null ? (
+            <span className="text-sm font-normal text-gray-500">Unavailable</span>
+          ) : (
+            <>
+              {/* Numbers-first: both totals prominent, side by side */}
+              <div className="grid grid-cols-2 gap-4 mt-2">
+                <div>
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-gray-500">Total Debits</div>
+                  <div className="text-xl font-semibold font-mono text-gray-900 dark:text-gray-100">
+                    PKR {tbDebits === null ? "—" : tbDebits.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-gray-500">Total Credits</div>
+                  <div className="text-xl font-semibold font-mono text-gray-900 dark:text-gray-100">
+                    PKR {tbCredits === null ? "—" : tbCredits.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  </div>
+                </div>
+              </div>
+              {/* Compact status pill (replaces the old full-width check text) */}
+              {tbInBalance ? (
+                <span className="inline-flex items-center gap-1.5 mt-3 self-start text-xs font-semibold px-2.5 py-1 rounded-full bg-success-light/10 dark:bg-success-dark/10 text-success-light dark:text-success-dark border border-success-light/20 dark:border-success-dark/20">
+                  <span className="w-1.5 h-1.5 rounded-full bg-current" />
+                  Balanced
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 mt-3 self-start text-xs font-semibold px-2.5 py-1 rounded-full bg-danger-light/10 dark:bg-danger-dark/10 text-danger-light dark:text-danger-dark border border-danger-light/20 dark:border-danger-dark/20">
+                  ⚠
+                  <span>Out of Balance by PKR {tbDifference === null ? "—" : tbDifference.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                </span>
+              )}
+            </>
+          )}
           <button onClick={() => onSelectAgent("year-end")}
             className="text-xs text-accent-light hover:underline font-semibold flex items-center gap-1 mt-2 self-start">
             Open trial balance <ArrowRight className="w-3 h-3" />
