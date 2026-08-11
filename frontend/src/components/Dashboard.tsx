@@ -457,7 +457,7 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
           </button>
         </div>
 
-        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between min-h-36">
+        <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6 flex flex-col justify-between min-h-36 md:col-span-2 xl:col-span-2">
           <div className="flex items-center justify-between text-gray-500">
             <span className="text-xs uppercase font-bold tracking-wider">Trial Balance</span>
             <Scale className="w-5 h-5 text-accent-light" />
@@ -472,16 +472,16 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
           ) : (
             <>
               {/* Numbers-first: both totals prominent, side by side */}
-              <div className="grid grid-cols-2 gap-4 mt-2">
-                <div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-2">
+                <div className="min-w-0">
                   <div className="text-[10px] uppercase font-bold tracking-wider text-gray-500">Total Debits</div>
-                  <div className="text-xl font-semibold font-mono text-gray-900 dark:text-gray-100">
+                  <div className="text-2xl font-semibold font-mono tabular-nums leading-tight truncate text-gray-900 dark:text-gray-100">
                     PKR {tbDebits === null ? "—" : tbDebits.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                   </div>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <div className="text-[10px] uppercase font-bold tracking-wider text-gray-500">Total Credits</div>
-                  <div className="text-xl font-semibold font-mono text-gray-900 dark:text-gray-100">
+                  <div className="text-2xl font-semibold font-mono tabular-nums leading-tight truncate text-gray-900 dark:text-gray-100">
                     PKR {tbCredits === null ? "—" : tbCredits.toLocaleString("en-US", { minimumFractionDigits: 2 })}
                   </div>
                 </div>
