@@ -252,6 +252,7 @@ export default function Home() {
           {currentView === "dashboard" && (
             <Dashboard
               onSelectAgent={setCurrentView}
+              onSelectView={setCurrentView}
               onOpenApprovals={() => setApprovalsOpen(true)}
               refreshTrigger={refreshTrigger}
             />

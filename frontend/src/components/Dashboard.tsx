@@ -23,6 +23,7 @@ import { useCountUp } from "@/components/useCountUp";
 
 interface DashboardProps {
   onSelectAgent: (id: string) => void;
+  onSelectView: (view: string) => void;
   onOpenApprovals: () => void;
   refreshTrigger: number;
 }
@@ -91,7 +92,7 @@ function ratioToIndex(value: number, benchmark: string): number {
   return Math.round(clamped * 100);
 }
 
-export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigger }: DashboardProps) {
+export default function Dashboard({ onSelectAgent, onSelectView, onOpenApprovals, refreshTrigger }: DashboardProps) {
   const [cashBalance, setCashBalance] = useState<string>("Calculating...");
   const [healthScore, setHealthScore] = useState<number | null>(null);
   const [auditStats, setAuditStats] = useState<{ total: number; resolved: number; open: number }>({
@@ -415,7 +416,7 @@ export default function Dashboard({ onSelectAgent, onOpenApprovals, refreshTrigg
               <span className="text-2xl font-bold">{animatedAudit ?? 0}</span>
             )} <span className="text-xs font-normal text-gray-500">Logged Actions</span>
           </div>
-          <button onClick={() => onSelectAgent("audit")}
+          <button onClick={() => onSelectView("audit-trail")}
             className="text-xs text-accent-light hover:underline font-semibold flex items-center gap-1 mt-2 self-start">
             Review audit trail <ArrowRight className="w-3 h-3" />
           </button>
