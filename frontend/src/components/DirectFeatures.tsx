@@ -250,7 +250,6 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
               </button>
             </div>
           </div>
-          </div>
 
           {/* Creation Form */}
           <div className="bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-6">
