@@ -13,6 +13,9 @@ from sqlalchemy.orm import Session
 
 from db.database import get_session
 
+# --- Audit logging ---
+from audit_helper import log_audit_action
+
 # --- Cash ---
 from tools.cash_tools import (
     check_cash_position,
@@ -466,6 +469,51 @@ def execute_tool(tool_name: str, params: dict) -> dict:
     db = get_session()
     try:
         result = fn(validated_input, db)
+
+        # --- AUDIT LOGGING HOOK ---
+        # Determine action description and table based on tool name
+        tool_audit_map = {
+            "check_cash_position": {"action": "CHECK_CASH_POSITION_EXECUTED", "table": "journal_entries", "record": "ALL"},
+            "generate_trial_balance": {"action": "GENERATE_TRIAL_BALANCE_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "as_of_date", "N/A")},
+            "post_accrual_entry": {"action": "POST_ACCRUAL_ENTRY_EXECUTED", "table": "journal_entries", "record": "N/A"},
+            "create_journal_entry": {"action": "CREATE_JOURNAL_ENTRY_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "entry_id", "N/A")},
+            "check_bank_transactions": {"action": "CHECK_BANK_TRANSACTIONS_EXECUTED", "table": "bank_transactions", "record": getattr(validated_input, "account_id", "N/A")},
+            "record_bank_transaction": {"action": "RECORD_BANK_TRANSACTION_EXECUTED", "table": "bank_transactions", "record": getattr(validated_input, "transaction_id", "N/A")},
+            "manage_petty_cash": {"action": "MANAGE_PETTY_CASH_EXECUTED", "table": "petty_cash_transactions", "record": getattr(validated_input, "fund_id", "N/A")},
+            "generate_profit_loss": {"action": "GENERATE_PROFIT_LOSS_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "fiscal_year", "N/A")},
+            "generate_balance_sheet": {"action": "GENERATE_BALANCE_SHEET_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "as_of_date", "N/A")},
+            "generate_cash_flow_statement": {"action": "GENERATE_CASH_FLOW_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "fiscal_year", "N/A")},
+            "transfer_retained_earnings": {"action": "TRANSFER_RETAINED_EARNINGS_EXECUTED", "table": "retained_earnings", "record": getattr(validated_input, "fiscal_year", "N/A")},
+            "close_fiscal_year": {"action": "CLOSE_FISCAL_YEAR_EXECUTED", "table": "fiscal_year_close", "record": getattr(validated_input, "fiscal_year", "N/A")},
+            "support_internal_audit": {"action": "INTERNAL_AUDIT_EXECUTED", "table": "flagged_entries", "record": getattr(validated_input, "fiscal_year", "N/A")},
+            "detect_anomaly_transactions": {"action": "DETECT_ANOMALY_TRANSACTIONS_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "from_date", "N/A")},
+            "get_compliance_deadlines": {"action": "GET_COMPLIANCE_DEADLINES_EXECUTED", "table": "compliance_deadlines", "record": "N/A"},
+            "assess_fbr_audit_risk": {"action": "ASSESS_FBR_AUDIT_RISK_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "fiscal_year", "N/A")},
+            "calculate_financial_ratios": {"action": "CALCULATE_FINANCIAL_RATIOS_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "fiscal_year", "N/A")},
+            "assess_financial_health": {"action": "ASSESS_FINANCIAL_HEALTH_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "fiscal_year", "N/A")},
+            "forecast_cash_flow": {"action": "FORECAST_CASH_FLOW_EXECUTED", "table": "cash_flow_projections", "record": getattr(validated_input, "as_of_date", "N/A")},
+        }
+
+        audit_info = tool_audit_map.get(tool_name)
+        if audit_info:
+            action = audit_info["action"]
+            table_name = audit_info["table"]
+            record_id = str(audit_info["record"])
+        else:
+            # Generic fallback for unmapped tools
+            action = f"{tool_name.upper()}_EXECUTED"
+            table_name = "generic"
+            record_id = "N/A"
+
+        # Fire and forget: log the audit event (sync, own DB session)
+        log_audit_action(
+            user_id="SYSTEM_USER",  # TODO: Replace with actual user ID extraction
+            action=action,
+            table_name=table_name,
+            record_id=record_id,
+            detail="Tool executed successfully"
+        )
+
         return _to_dict(result)
     finally:
         db.close()
