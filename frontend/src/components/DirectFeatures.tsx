@@ -63,34 +63,26 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
   const applyPreset = (preset: string) => {
     const today = new Date();
     const todayISO = today.toISOString().slice(0, 10);
-    let startISO = "";
+    let daysAgo = 0;
     switch (preset) {
       case "today":
-        startISO = todayISO;
+        daysAgo = 0;
         break;
       case "7d":
-        {
-          const d = new Date(today);
-          d.setDate(today.getDate() - 7);
-          startISO = d.toISOString().slice(0, 10);
-        }
+        daysAgo = 7;
         break;
       case "30d":
-        {
-          const d = new Date(today);
-          d.setDate(today.getDate() - 30);
-          startISO = d.toISOString().slice(0, 10);
-        }
+        daysAgo = 30;
         break;
       case "60d":
-        {
-          const d = new Date(today);
-          d.setDate(today.getDate() - 60);
-          startISO = d.toISOString().slice(0, 10);
-        }
+        daysAgo = 60;
         break;
+      default:
+        daysAgo = 0;
     }
-    setStartDate(startISO);
+    const start = new Date(today);
+    start.setDate(today.getDate() - daysAgo);
+    setStartDate(start.toISOString().slice(0, 10));
     setEndDate(todayISO);
   };
 
