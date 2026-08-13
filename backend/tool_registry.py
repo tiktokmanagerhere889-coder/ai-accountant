@@ -474,6 +474,18 @@ def execute_tool(tool_name: str, params: dict) -> dict:
         result_dict = _to_dict(result)
 
         # --- AUDIT LOGGING HOOK ---
+        # Read-only stat/report tools fired by the dashboard on every page load —
+        # logging these would inflate the audit count on each reload (see issue:
+        # dashboard fetchDashboardStats calls ~6 read-only tools per refresh).
+        READ_ONLY_DASHBOARD_TOOLS = frozenset({
+            "check_cash_position",
+            "generate_trial_balance",
+            "assess_financial_health",
+            "calculate_financial_ratios",
+            "generate_custom_report",
+            "assess_fbr_audit_risk",
+        })
+
         # Determine action description and table based on tool name
         tool_audit_map = {
             "check_cash_position": {"action": "CHECK_CASH_POSITION_EXECUTED", "table": "journal_entries", "record_key": "account_id"},
@@ -497,6 +509,11 @@ def execute_tool(tool_name: str, params: dict) -> dict:
             "assess_financial_health": {"action": "ASSESS_FINANCIAL_HEALTH_EXECUTED", "table": "journal_entries", "record_key": "fiscal_year"},
             "forecast_cash_flow": {"action": "FORECAST_CASH_FLOW_EXECUTED", "table": "cash_flow_projections", "record_key": "as_of_date"},
         }
+
+        # Skip audit logging for read-only dashboard stat tools to prevent
+        # count inflation on every page reload.
+        if tool_name in READ_ONLY_DASHBOARD_TOOLS:
+            return result_dict
 
         audit_info = tool_audit_map.get(tool_name)
         if audit_info:
