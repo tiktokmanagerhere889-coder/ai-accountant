@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from io import BytesIO
 from typing import Optional, Any
 from decimal import Decimal
@@ -201,7 +201,7 @@ def get_audit_trail(
     if end_date:
         try:
             ed = datetime.fromisoformat(end_date)
-            query = query.filter(AuditLog.timestamp <= ed)
+            query = query.filter(AuditLog.timestamp < ed + timedelta(days=1))
         except ValueError:
             pass
     total = query.order_by(AuditLog.timestamp.desc()).count()
@@ -234,7 +234,7 @@ def get_audit_trail_count(
     if end_date:
         try:
             ed = datetime.fromisoformat(end_date)
-            query = query.filter(AuditLog.timestamp <= ed)
+            query = query.filter(AuditLog.timestamp < ed + timedelta(days=1))
         except ValueError:
             pass
     return {"total": query.scalar() or 0}
