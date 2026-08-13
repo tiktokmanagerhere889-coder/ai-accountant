@@ -470,35 +470,39 @@ def execute_tool(tool_name: str, params: dict) -> dict:
     try:
         result = fn(validated_input, db)
 
+        # Convert result to dict for logging and return
+        result_dict = _to_dict(result)
+
         # --- AUDIT LOGGING HOOK ---
         # Determine action description and table based on tool name
         tool_audit_map = {
-            "check_cash_position": {"action": "CHECK_CASH_POSITION_EXECUTED", "table": "journal_entries", "record": "ALL"},
-            "generate_trial_balance": {"action": "GENERATE_TRIAL_BALANCE_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "as_of_date", "N/A")},
-            "post_accrual_entry": {"action": "POST_ACCRUAL_ENTRY_EXECUTED", "table": "journal_entries", "record": "N/A"},
-            "create_journal_entry": {"action": "CREATE_JOURNAL_ENTRY_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "entry_id", "N/A")},
-            "check_bank_transactions": {"action": "CHECK_BANK_TRANSACTIONS_EXECUTED", "table": "bank_transactions", "record": getattr(validated_input, "account_id", "N/A")},
-            "record_bank_transaction": {"action": "RECORD_BANK_TRANSACTION_EXECUTED", "table": "bank_transactions", "record": getattr(validated_input, "transaction_id", "N/A")},
-            "manage_petty_cash": {"action": "MANAGE_PETTY_CASH_EXECUTED", "table": "petty_cash_transactions", "record": getattr(validated_input, "fund_id", "N/A")},
-            "generate_profit_loss": {"action": "GENERATE_PROFIT_LOSS_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "fiscal_year", "N/A")},
-            "generate_balance_sheet": {"action": "GENERATE_BALANCE_SHEET_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "as_of_date", "N/A")},
-            "generate_cash_flow_statement": {"action": "GENERATE_CASH_FLOW_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "fiscal_year", "N/A")},
-            "transfer_retained_earnings": {"action": "TRANSFER_RETAINED_EARNINGS_EXECUTED", "table": "retained_earnings", "record": getattr(validated_input, "fiscal_year", "N/A")},
-            "close_fiscal_year": {"action": "CLOSE_FISCAL_YEAR_EXECUTED", "table": "fiscal_year_close", "record": getattr(validated_input, "fiscal_year", "N/A")},
-            "support_internal_audit": {"action": "INTERNAL_AUDIT_EXECUTED", "table": "flagged_entries", "record": getattr(validated_input, "fiscal_year", "N/A")},
-            "detect_anomaly_transactions": {"action": "DETECT_ANOMALY_TRANSACTIONS_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "from_date", "N/A")},
-            "get_compliance_deadlines": {"action": "GET_COMPLIANCE_DEADLINES_EXECUTED", "table": "compliance_deadlines", "record": "N/A"},
-            "assess_fbr_audit_risk": {"action": "ASSESS_FBR_AUDIT_RISK_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "fiscal_year", "N/A")},
-            "calculate_financial_ratios": {"action": "CALCULATE_FINANCIAL_RATIOS_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "fiscal_year", "N/A")},
-            "assess_financial_health": {"action": "ASSESS_FINANCIAL_HEALTH_EXECUTED", "table": "journal_entries", "record": getattr(validated_input, "fiscal_year", "N/A")},
-            "forecast_cash_flow": {"action": "FORECAST_CASH_FLOW_EXECUTED", "table": "cash_flow_projections", "record": getattr(validated_input, "as_of_date", "N/A")},
+            "check_cash_position": {"action": "CHECK_CASH_POSITION_EXECUTED", "table": "journal_entries", "record_key": "account_id"},
+            "generate_trial_balance": {"action": "GENERATE_TRIAL_BALANCE_EXECUTED", "table": "journal_entries", "record_key": "as_of_date"},
+            "post_accrual_entry": {"action": "POST_ACCRUAL_ENTRY_EXECUTED", "table": "journal_entries", "record_key": "entry_id"},
+            "create_journal_entry": {"action": "CREATE_JOURNAL_ENTRY_EXECUTED", "table": "journal_entries", "record_key": "entry_id"},
+            "record_transaction_nl": {"action": "RECORD_TRANSACTION_EXECUTED", "table": "journal_entries", "record_key": "entry_id"},
+            "check_bank_transactions": {"action": "CHECK_BANK_TRANSACTIONS_EXECUTED", "table": "bank_transactions", "record_key": "account_id"},
+            "record_bank_transaction": {"action": "RECORD_BANK_TRANSACTION_EXECUTED", "table": "bank_transactions", "record_key": "transaction_id"},
+            "manage_petty_cash": {"action": "MANAGE_PETTY_CASH_EXECUTED", "table": "petty_cash_transactions", "record_key": "fund_id"},
+            "generate_profit_loss": {"action": "GENERATE_PROFIT_LOSS_EXECUTED", "table": "journal_entries", "record_key": "fiscal_year"},
+            "generate_balance_sheet": {"action": "GENERATE_BALANCE_SHEET_EXECUTED", "table": "journal_entries", "record_key": "as_of_date"},
+            "generate_cash_flow_statement": {"action": "GENERATE_CASH_FLOW_EXECUTED", "table": "journal_entries", "record_key": "fiscal_year"},
+            "transfer_retained_earnings": {"action": "TRANSFER_RETAINED_EARNINGS_EXECUTED", "table": "retained_earnings", "record_key": "fiscal_year"},
+            "close_fiscal_year": {"action": "CLOSE_FISCAL_YEAR_EXECUTED", "table": "fiscal_year_close", "record_key": "fiscal_year"},
+            "support_internal_audit": {"action": "INTERNAL_AUDIT_EXECUTED", "table": "flagged_entries", "record_key": "fiscal_year"},
+            "detect_anomaly_transactions": {"action": "DETECT_ANOMALY_TRANSACTIONS_EXECUTED", "table": "journal_entries", "record_key": "from_date"},
+            "get_compliance_deadlines": {"action": "GET_COMPLIANCE_DEADLINES_EXECUTED", "table": "compliance_deadlines", "record_key": "status"},
+            "assess_fbr_audit_risk": {"action": "ASSESS_FBR_AUDIT_RISK_EXECUTED", "table": "journal_entries", "record_key": "fiscal_year"},
+            "calculate_financial_ratios": {"action": "CALCULATE_FINANCIAL_RATIOS_EXECUTED", "table": "journal_entries", "record_key": "fiscal_year"},
+            "assess_financial_health": {"action": "ASSESS_FINANCIAL_HEALTH_EXECUTED", "table": "journal_entries", "record_key": "fiscal_year"},
+            "forecast_cash_flow": {"action": "FORECAST_CASH_FLOW_EXECUTED", "table": "cash_flow_projections", "record_key": "as_of_date"},
         }
 
         audit_info = tool_audit_map.get(tool_name)
         if audit_info:
             action = audit_info["action"]
             table_name = audit_info["table"]
-            record_id = str(audit_info["record"])
+            record_id = str(result_dict.get(audit_info["record_key"], "N/A"))
         else:
             # Generic fallback for unmapped tools
             action = f"{tool_name.upper()}_EXECUTED"
@@ -514,7 +518,7 @@ def execute_tool(tool_name: str, params: dict) -> dict:
             detail="Tool executed successfully"
         )
 
-        return _to_dict(result)
+        return result_dict
     finally:
         db.close()
 
