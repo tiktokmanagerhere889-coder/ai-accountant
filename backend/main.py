@@ -174,33 +174,69 @@ def create_audit_trail(payload: AuditTrailCreate, db: Session = Depends(get_db))
     return log_entry
 
 
-@app.get("/audit-trail", response_model=list[AuditTrailResponse])
+class AuditTrailPage(BaseModel):
+    total: int
+    offset: int
+    limit: int
+    audits: list[AuditTrailResponse]
+
+@app.get("/audit-trail", response_model=AuditTrailPage)
 def get_audit_trail(
     user_id: Optional[str] = None,
-    limit: int = Query(default=50, le=100),
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    limit: int = Query(default=25, le=100),
     offset: int = 0,
     db: Session = Depends(get_db)
 ):
     query = db.query(AuditLog)
     if user_id:
         query = query.filter(AuditLog.user_id == user_id)
-    return query.order_by(AuditLog.timestamp.desc()).offset(offset).limit(limit).all()
+    if start_date:
+        try:
+            sd = datetime.fromisoformat(start_date)
+            query = query.filter(AuditLog.timestamp >= sd)
+        except ValueError:
+            pass
+    if end_date:
+        try:
+            ed = datetime.fromisoformat(end_date)
+            query = query.filter(AuditLog.timestamp <= ed)
+        except ValueError:
+            pass
+    total = query.order_by(AuditLog.timestamp.desc()).count()
+    rows = query.order_by(AuditLog.timestamp.desc()).offset(offset).limit(limit).all()
+    return AuditTrailPage(total=total, offset=offset, limit=limit, audits=[AuditTrailResponse.model_validate(r) for r in rows])
 
 
 @app.get("/audit-trail/count")
 def get_audit_trail_count(
     user_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
     db: Session = Depends(get_db)
 ):
     """Return the total audit-trail record count (uncapped).
 
-    The list endpoint caps at limit<=100, so a dashboard counting
-    logsRes.data.length would undercount once records exceed that. This
-    endpoint returns the true total so callers never under-report.
+    Accepts optional start_date / end_date (ISO date strings, YYYY-MM-DD)
+    to count records within a date range. This endpoint returns the true
+    total so callers never under-report — the list endpoint may be limited.
     """
     query = db.query(func.count(AuditLog.id))
     if user_id:
         query = query.filter(AuditLog.user_id == user_id)
+    if start_date:
+        try:
+            sd = datetime.fromisoformat(start_date)
+            query = query.filter(AuditLog.timestamp >= sd)
+        except ValueError:
+            pass
+    if end_date:
+        try:
+            ed = datetime.fromisoformat(end_date)
+            query = query.filter(AuditLog.timestamp <= ed)
+        except ValueError:
+            pass
     return {"total": query.scalar() or 0}
 
 

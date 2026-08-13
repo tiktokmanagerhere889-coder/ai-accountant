@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
-import { Plus, Loader2 } from "lucide-react";
+import { Plus, Loader2, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 
 export interface AuditRecord {
   audit_id: string;
@@ -42,6 +42,12 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
   const [auditTable, setAuditTable] = useState("");
   const [auditRecordId, setAuditRecordId] = useState("");
 
+  // Date filter state (audit trail view)
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalRecords, setTotalRecords] = useState(0);
+
   // Role Form state
   const [roleName, setRoleName] = useState("");
   const [rolePermissions, setRolePermissions] = useState("");
@@ -49,15 +55,59 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
   const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 
   useEffect(() => {
-    fetchData();
-  }, [view]);
+    setCurrentPage(1);
+    fetchData(1);
+  }, [view, startDate, endDate]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
 
-  const fetchData = async () => {
+  const applyPreset = (preset: string) => {
+    const today = new Date();
+    const todayISO = today.toISOString().slice(0, 10);
+    let startISO = "";
+    switch (preset) {
+      case "today":
+        startISO = todayISO;
+        break;
+      case "7d":
+        {
+          const d = new Date(today);
+          d.setDate(today.getDate() - 7);
+          startISO = d.toISOString().slice(0, 10);
+        }
+        break;
+      case "30d":
+        {
+          const d = new Date(today);
+          d.setDate(today.getDate() - 30);
+          startISO = d.toISOString().slice(0, 10);
+        }
+        break;
+      case "60d":
+        {
+          const d = new Date(today);
+          d.setDate(today.getDate() - 60);
+          startISO = d.toISOString().slice(0, 10);
+        }
+        break;
+    }
+    setStartDate(startISO);
+    setEndDate(todayISO);
+  };
+
+  const fetchData = async (page: number = currentPage) => {
     setLoading(true);
     try {
       if (view === "audit-trail") {
-        const res = await axios.get(`${apiBase}/audit-trail`, { timeout: 30000 });
-        setAudits(res.data);
+        const offset = (page - 1) * 25;
+        const params = new URLSearchParams();
+        if (startDate) params.set("start_date", startDate);
+        if (endDate) params.set("end_date", endDate);
+        params.set("limit", "25");
+        params.set("offset", String(offset));
+        const res = await axios.get(`${apiBase}/audit-trail?${params.toString()}`, { timeout: 30000 });
+        setAudits(res.data.audits || []);
+        setTotalRecords(res.data.total || 0);
+        setCurrentPage(page);
       } else if (view === "roles") {
         const res = await axios.get(`${apiBase}/roles`, { timeout: 30000 });
         setRoles(res.data);
@@ -132,6 +182,74 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
             <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
               Verbatim system modification entries & database audits log records.
             </p>
+          </div>
+
+          {/* Date Filter Toolbar */}
+          <div className="flex flex-col sm:flex-row sm:items-end gap-4 bg-surface-light dark:bg-surface-dark border border-gray-200 dark:border-gray-800 rounded p-4">
+            <div className="flex flex-wrap items-end gap-2">
+              <button
+                onClick={() => applyPreset("today")}
+                className="text-xs px-3 py-1.5 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+              >
+                Today
+              </button>
+              <button
+                onClick={() => applyPreset("7d")}
+                className="text-xs px-3 py-1.5 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+              >
+                Last 7 days
+              </button>
+              <button
+                onClick={() => applyPreset("30d")}
+                className="text-xs px-3 py-1.5 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+              >
+                Last 30 days
+              </button>
+              <button
+                onClick={() => applyPreset("60d")}
+                className="text-xs px-3 py-1.5 rounded border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300"
+              >
+                Last 60 days
+              </button>
+            </div>
+
+            <div className="flex items-end gap-2 flex-wrap flex-1 sm:flex-none">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                  Start Date
+                </label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="text-xs px-2.5 py-1.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent-light pr-7"
+                  />
+                  <Calendar className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wide mb-1">
+                  End Date
+                </label>
+                <div className="relative">
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="text-xs px-2.5 py-1.5 rounded bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent-light pr-7"
+                  />
+                  <Calendar className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 pointer-events-none" />
+                </div>
+              </div>
+              <button
+                onClick={() => { setStartDate(""); setEndDate(""); }}
+                className="text-xs px-3 py-1.5 rounded bg-accent-light hover:bg-accent-light/90 text-white font-medium"
+              >
+                Clear
+              </button>
+            </div>
+          </div>
           </div>
 
           {/* Creation Form */}
@@ -253,6 +371,32 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
                   ))}
                 </tbody>
               </table>
+              </div>
+
+              {/* Pagination Controls */}
+              <div className="bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between">
+                <span className="text-xs text-gray-500 dark:text-gray-400">
+                  {(currentPage - 1) * 25 + 1}-{Math.min(currentPage * 25, totalRecords)} of {totalRecords}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => fetchData(currentPage - 1)}
+                    disabled={currentPage <= 1 || loading}
+                    className="p-1 rounded text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-xs text-gray-500 dark:text-gray-400 px-1">
+                    Page {currentPage}
+                  </span>
+                  <button
+                    onClick={() => fetchData(currentPage + 1)}
+                    disabled={currentPage * 25 >= totalRecords || loading}
+                    className="p-1 rounded text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             )}
           </div>

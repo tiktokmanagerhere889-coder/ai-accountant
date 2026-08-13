@@ -223,10 +223,18 @@ export default function Dashboard({ onSelectAgent, onSelectView, onOpenApprovals
         }
       })(),
 
-      // 6. Audit count
+      // 6. Audit count — last 7 days
       (async () => {
         try {
-          const logsRes = await axios.get(`${apiBase}/audit-trail/count`, { timeout: 30000 });
+          const today = new Date();
+          const sevenDaysAgo = new Date(today);
+          sevenDaysAgo.setDate(today.getDate() - 7);
+          const startISO = sevenDaysAgo.toISOString().slice(0, 10);
+          const endISO = today.toISOString().slice(0, 10);
+          const logsRes = await axios.get(
+            `${apiBase}/audit-trail/count?start_date=${startISO}&end_date=${endISO}`,
+            { timeout: 30000 }
+          );
           const total = logsRes.data?.total ?? 0;
           setAuditStats({ total, resolved: 0, open: 0 });
           setAuditStatus("ready");
@@ -414,7 +422,7 @@ export default function Dashboard({ onSelectAgent, onSelectView, onOpenApprovals
               <div className="h-8 w-16 bg-gray-200 dark:bg-gray-700 rounded animate-pulse" />
             ) : (
               <span className="text-2xl font-bold">{animatedAudit ?? 0}</span>
-            )} <span className="text-xs font-normal text-gray-500">Logged Actions</span>
+            )} <span className="text-xs font-normal text-gray-500">Logged Actions (last 7 days)</span>
           </div>
           <button onClick={() => onSelectView("audit-trail")}
             className="text-xs text-accent-light hover:underline font-semibold flex items-center gap-1 mt-2 self-start">
