@@ -319,7 +319,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
                 Log Database records
               </span>
               <button
-                onClick={fetchData}
+                onClick={() => fetchData(currentPage)}
                 className="text-xs text-accent-light hover:underline font-medium px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 Refresh
@@ -362,7 +362,6 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
                   ))}
                 </tbody>
               </table>
-              </div>
 
               {/* Pagination Controls */}
               <div className="bg-gray-50 dark:bg-gray-900 border-t border-gray-200 dark:border-gray-800 px-4 py-3 flex items-center justify-between">
@@ -388,6 +387,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
                     <ChevronRight className="w-4 h-4" />
                   </button>
                 </div>
+              </div>
               </div>
             )}
           </div>
@@ -453,7 +453,7 @@ export default function DirectFeatures({ view }: { view: "audit-trail" | "roles"
                 Registered System Roles
               </span>
               <button
-                onClick={fetchData}
+                onClick={() => fetchData(currentPage)}
                 className="text-xs text-accent-light hover:underline font-medium px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 Refresh
