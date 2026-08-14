@@ -17,6 +17,8 @@ from db.models import (
 from tools.account_utils import (
     get_cash_prefixes, get_revenue_prefixes, get_expense_prefixes,
     revenue_filter_clause, expense_filter_clause,
+    chart_account_type, build_chart_type_map,
+    _DEBIT_NORMAL_TYPES, _CREDIT_NORMAL_TYPES, _CATEGORY_TYPES,
 )
 from tools.schemas import (
     GenerateTrialBalanceInput, GenerateTrialBalanceOutput, TrialBalanceAccount,
@@ -257,104 +259,79 @@ def generate_balance_sheet(
 ) -> GenerateBalanceSheetOutput:
     """Generate balance sheet as of a given date.
 
-    Assets = accounts with prefix '1'.
-    Liabilities = accounts with prefix '2' (credit balances).
-    Equity = accounts with prefix '3' (credit balances) + net income.
-    Verify: Assets = Liabilities + Equity.
+    Every account is classified by its authoritative `account_type` from the
+    user's chart (via chart_account_type), NOT by numeric prefix + sign
+    heuristics. Net balance per account is computed on the account type's
+    normal side:
+      asset/expense          (debit-normal):  debits - credits
+      liability/equity/revenue (credit-normal): credits - debits
+    Debit-balance equity (e.g. Opening Balance Equity) is therefore captured
+    as a true negative-equity line instead of being silently dropped, and the
+    identity Assets = Liabilities + Equity (with net income folded into
+    equity) holds from the raw ledger, not by coincidence.
     """
     entries = db.query(JournalEntry).filter(
         JournalEntry.posted_date <= input.as_of_date,
         JournalEntry.status == "posted",
     ).all()
 
-    # Net balance per account (debits - credits)
-    balances: dict[str, Decimal] = {}
-    account_names: dict[str, str] = {}
+    # Resolve account types from one chart snapshot (avoids N+1 DB round-trips).
+    chart_map = build_chart_type_map(db)
+
+    # Raw debit/credit totals per chart-resolved account_type.
+    debit_totals: dict[str, Decimal] = {t: Decimal("0") for t in _CATEGORY_TYPES}
+    credit_totals: dict[str, Decimal] = {t: Decimal("0") for t in _CATEGORY_TYPES}
+    # Per-account raw totals, keyed by full account string, for the statement lines.
+    acct_debit: dict[str, Decimal] = {}
+    acct_credit: dict[str, Decimal] = {}
 
     for entry in entries:
-        d_code, d_name = _split_account(entry.debit_account)
-        balances[d_code] = balances.get(d_code, Decimal("0")) + entry.debit_amount
-        account_names[d_code] = d_name
+        dt = chart_account_type(db, entry.debit_account, chart_map)
+        if dt in debit_totals:
+            debit_totals[dt] += entry.debit_amount
+            acct_debit[entry.debit_account] = acct_debit.get(entry.debit_account, Decimal("0")) + entry.debit_amount
+        ct = chart_account_type(db, entry.credit_account, chart_map)
+        if ct in credit_totals:
+            credit_totals[ct] += entry.credit_amount
+            acct_credit[entry.credit_account] = acct_credit.get(entry.credit_account, Decimal("0")) + entry.credit_amount
 
-        c_code, c_name = _split_account(entry.credit_account)
-        balances[c_code] = balances.get(c_code, Decimal("0")) - entry.credit_amount
-        account_names[c_code] = c_name
+    def normal_net(category: str, debits: Decimal, credits: Decimal) -> Decimal:
+        return (debits - credits) if category in _DEBIT_NORMAL_TYPES else (credits - debits)
 
-    # Compute net income from revenue/expense accounts in the period
-    total_revenue = Decimal("0")
-    total_expenses = Decimal("0")
-    for code, net_bal in balances.items():
-        if _is_revenue_account(code, db):
-            # Revenue: credit balance shows as negative net
-            total_revenue += abs(net_bal) if net_bal < Decimal("0") else net_bal
-        elif _is_expense_account(code, db):
-            # Expense: debit balance shows as positive net
-            total_expenses += net_bal if net_bal > Decimal("0") else abs(net_bal)
-
+    total_assets = normal_net("asset", debit_totals["asset"], credit_totals["asset"])
+    total_liabilities = normal_net("liability", debit_totals["liability"], credit_totals["liability"])
+    total_equity_raw = normal_net("equity", debit_totals["equity"], credit_totals["equity"])
+    total_revenue = normal_net("revenue", debit_totals["revenue"], credit_totals["revenue"])
+    total_expenses = normal_net("expense", debit_totals["expense"], credit_totals["expense"])
     net_income = total_revenue - total_expenses
+    total_equity = total_equity_raw + net_income
 
-    # Look up retained earnings from DB as supplement
-    try:
-        re_row = db.query(RetainedEarnings).filter(
-            RetainedEarnings.fiscal_year == input.as_of_date.year
-        ).first()
-        db_re_balance = re_row.ending_balance if re_row else Decimal("0")
-    except Exception:
-        db_re_balance = Decimal("0")
+    def lines_for(category: str) -> list[BalanceSheetItem]:
+        items: list[BalanceSheetItem] = []
+        for account in sorted(set(acct_debit) | set(acct_credit)):
+            if chart_account_type(db, account, chart_map) != category:
+                continue
+            net = normal_net(category, acct_debit.get(account, Decimal("0")), acct_credit.get(account, Decimal("0")))
+            if net == Decimal("0"):
+                continue
+            items.append(BalanceSheetItem(account=account, amount=net))
+        items.sort(key=lambda x: x.amount, reverse=True)
+        return items
 
-    assets_list: list[BalanceSheetItem] = []
-    liabilities_list: list[BalanceSheetItem] = []
-    equity_list: list[BalanceSheetItem] = []
+    assets_list = lines_for("asset")
+    liabilities_list = lines_for("liability")
 
-    total_assets = Decimal("0")
-    total_liabilities = Decimal("0")
-    total_equity = Decimal("0")
-
-    for code in sorted(balances.keys()):
-        net_balance = balances[code]
-        name = account_names.get(code, code)
-        prefix = code[0]
-
-        if prefix == "1":
-            # Asset: positive net = debit balance (normal), negative = overdraft (liability)
-            amt = abs(net_balance)
-            if amt > Decimal("0"):
-                if net_balance >= Decimal("0"):
-                    assets_list.append(BalanceSheetItem(account=f"{code}-{name}", amount=amt))
-                    total_assets += amt
-                else:
-                    # Negative asset balance = overdraft, classify as liability
-                    liabilities_list.append(BalanceSheetItem(account=f"{code}-{name} (Overdraft)", amount=amt))
-                    total_liabilities += amt
-        elif prefix == "2":
-            # Liability: credit balance shows as negative net
-            if net_balance < Decimal("0"):
-                liab_amount = abs(net_balance)
-                liabilities_list.append(BalanceSheetItem(account=f"{code}-{name}", amount=liab_amount))
-                total_liabilities += liab_amount
-        elif prefix == "3":
-            # Equity: credit balance shows as negative net
-            if net_balance < Decimal("0"):
-                eq_amount = abs(net_balance)
-                equity_list.append(BalanceSheetItem(account=f"{code}-{name}", amount=eq_amount))
-                total_equity += eq_amount
-
-    # Add net income as retained earnings component in equity
-    if net_income > Decimal("0"):
-        # Use stored RE if available, otherwise computed net income
-        re_amount = db_re_balance if db_re_balance > Decimal("0") else net_income
-        if re_amount > Decimal("0"):
-            equity_list.append(BalanceSheetItem(account="Retained Earnings (Current Year)", amount=re_amount))
-            total_equity += re_amount
-    elif net_income < Decimal("0"):
-        # Net loss reduces equity
-        equity_list.append(BalanceSheetItem(account="Net Loss (Current Year)", amount=abs(net_income)))
-        total_equity -= abs(net_income)
-
-    # Sort by amount descending
-    assets_list.sort(key=lambda x: x.amount, reverse=True)
-    liabilities_list.sort(key=lambda x: x.amount, reverse=True)
+    # Equity = raw equity accounts (normal side) + net income (as retained earnings).
+    equity_list = lines_for("equity")
+    if net_income != Decimal("0"):
+        equity_list.append(BalanceSheetItem(
+            account="Retained Earnings (Current Year)" if net_income > Decimal("0") else "Net Loss (Current Year)",
+            amount=net_income,
+        ))
     equity_list.sort(key=lambda x: x.amount, reverse=True)
+
+    # Round for display while keeping the exact identity check on raw values.
+    round2 = lambda d: d.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP) if d is not None else Decimal("0")
 
     balanced = total_assets == (total_liabilities + total_equity)
     diff = total_assets - (total_liabilities + total_equity)
@@ -364,11 +341,11 @@ def generate_balance_sheet(
         assets=assets_list,
         liabilities=liabilities_list,
         equity=equity_list,
-        total_assets=total_assets,
-        total_liabilities=total_liabilities,
-        total_equity=total_equity,
+        total_assets=round2(total_assets),
+        total_liabilities=round2(total_liabilities),
+        total_equity=round2(total_equity),
         balanced=balanced,
-        difference=diff,
+        difference=round2(diff),
     )
 
 

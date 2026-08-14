@@ -10,12 +10,20 @@ the chart. The name fallback deliberately excludes ambiguous substrings
 """
 from __future__ import annotations
 
+from datetime import date
+from decimal import Decimal
 from typing import Optional
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
-from db.models import ChartOfAccount
+from db.models import ChartOfAccount, JournalEntry
+
+# Normal balance side per account_type (per standard double-entry bookkeeping).
+# Asset/Expense increase on the debit side; Liability/Equity/Revenue on the credit.
+_DEBIT_NORMAL_TYPES = {"asset", "expense"}
+_CREDIT_NORMAL_TYPES = {"liability", "equity", "revenue"}
+_CATEGORY_TYPES = ("asset", "liability", "equity", "revenue", "expense")
 
 
 def _accounts_with_types(db: Session, account_types: list[str], name_keywords: list[str] | None = None) -> list[str]:
@@ -171,3 +179,155 @@ def is_payable_account(account_code: str) -> bool:
     """Name-based check for payable accounts (used as a safety net)."""
     name = account_code.lower()
     return any(k in name for k in ("payable", "creditor"))
+
+
+# ---------------------------------------------------------------------------
+# Account-type resolution + normal-balance aggregation (single source of truth)
+# ---------------------------------------------------------------------------
+
+# Standard accounting-numbering default for accounts not yet in the chart.
+_STANDARD_TYPE_BY_DIGIT = {
+    "1": "asset", "2": "liability", "3": "equity",
+    "4": "revenue", "5": "expense", "6": "expense",
+    "7": "expense", "8": "expense",
+}
+
+
+def build_chart_type_map(db: Session) -> dict[str, str]:
+    """Snapshot account_code -> account_type (lowercased) in one query.
+
+    Call once per aggregation and pass the dict to chart_account_type to avoid
+    N+1 lookups against a remote DB (the Neon pooler costs ~1s per query).
+    """
+    return {
+        r[0]: (r[1] or "").lower()
+        for r in db.query(ChartOfAccount.account_code, ChartOfAccount.account_type).all()
+    }
+
+
+def chart_account_type(db: Session, account_value: str | None, chart_map: dict[str, str] | None = None) -> str | None:
+    """Resolve the account_type of a full account string (e.g. "1000-Cash").
+
+    Uses the authoritative `account_type` column from `chart_of_accounts`.
+    Resolution order:
+      1. Exact `account_code` match (e.g. "2000-Payables").
+      2. Leading numeric code prefix match (e.g. "2000-Accrued Liabilities"
+         -> chart account "2000-Payables").
+      3. Leading-digit fallback for accounts sharing the parent's first digit
+         (e.g. a dynamically created "6000-Laptop" resolves to the "6xxx"
+         expense parent).
+      4. Last-resort standard numbering default (1=asset, 2=liability, 3=equity,
+         4=revenue, 5/6/7/8=expense) so every ledger account resolves and
+         balance-sheet identities hold even before an account is registered.
+    Returns a lowercase account_type ("asset"/"liability"/"equity"/"revenue"/
+    "expense") or None if unresolvable. This is the authoritative classification
+    for balance computations — no numeric-prefix guessing.
+    """
+    if not account_value:
+        return None
+    value = str(account_value).strip()
+    if not value:
+        return None
+
+    if chart_map is None:
+        chart_map = build_chart_type_map(db)
+
+    # 1. Exact account_code match
+    if value in chart_map:
+        return chart_map[value]
+
+    code = value.split("-")[0].strip()
+    if not code:
+        return None
+
+    # 2. Numeric code prefix match
+    if code.isdigit():
+        for chart_code, atype in chart_map.items():
+            if chart_code.startswith(code):
+                return atype
+        # 3. Leading-digit fallback
+        for chart_code, atype in chart_map.items():
+            if chart_code.startswith(code[0]):
+                return atype
+        # 4. Standard numbering default
+        return _STANDARD_TYPE_BY_DIGIT.get(code[0])
+
+    return None
+
+
+def category_net_balances(
+    db: Session,
+    from_date: date | None = None,
+    to_date: date | None = None,
+) -> dict[str, Decimal]:
+    """Net normal-side balances per account_type, aggregated from posted journal entries.
+
+    Every journal entry debits one account and credits another. We accumulate
+    raw debit and credit totals per chart-resolved account_type, then convert
+    each category to its normal balance:
+      asset/expense         (debit-normal):  debit - credit
+      liability/equity/revenue (credit-normal): credit - debit
+    A positive result always means a normal (healthy) balance for that category.
+
+    Returns {"asset", "liability", "equity", "revenue", "expense"} -> Decimal.
+    """
+    query = db.query(JournalEntry).filter(JournalEntry.status == "posted")
+    if from_date:
+        query = query.filter(JournalEntry.posted_date >= from_date)
+    if to_date:
+        query = query.filter(JournalEntry.posted_date <= to_date)
+
+    chart_map = build_chart_type_map(db)
+    debit_totals = {t: Decimal("0") for t in _CATEGORY_TYPES}
+    credit_totals = {t: Decimal("0") for t in _CATEGORY_TYPES}
+
+    for entry in query.all():
+        dt = chart_account_type(db, entry.debit_account, chart_map)
+        ct = chart_account_type(db, entry.credit_account, chart_map)
+        if dt in debit_totals:
+            debit_totals[dt] += entry.debit_amount
+        if ct in credit_totals:
+            credit_totals[ct] += entry.credit_amount
+
+    result: dict[str, Decimal] = {}
+    for t in _CATEGORY_TYPES:
+        if t in _DEBIT_NORMAL_TYPES:
+            result[t] = debit_totals[t] - credit_totals[t]
+        else:
+            result[t] = credit_totals[t] - debit_totals[t]
+    return result
+
+
+def cogs_net_balance(
+    db: Session,
+    from_date: date | None = None,
+    to_date: date | None = None,
+) -> Decimal:
+    """Net normal (debit) balance of cost-of-sales expense accounts.
+
+    COGS accounts are chart-resolved expense accounts whose numeric code starts
+    with "5" or whose name contains cost-of-sale markers ("cost of sale",
+    "cost of goods", "cogs", "purchase"). This preserves the legacy prefix-5
+    convention while staying on the correct (debit-normal) side of the ledger.
+    """
+    query = db.query(JournalEntry).filter(JournalEntry.status == "posted")
+    if from_date:
+        query = query.filter(JournalEntry.posted_date >= from_date)
+    if to_date:
+        query = query.filter(JournalEntry.posted_date <= to_date)
+
+    chart_map = build_chart_type_map(db)
+    total = Decimal("0")
+    for entry in query.all():
+        if chart_account_type(db, entry.debit_account, chart_map) == "expense" and _is_cogs_account(entry.debit_account):
+            total += entry.debit_amount
+        if chart_account_type(db, entry.credit_account, chart_map) == "expense" and _is_cogs_account(entry.credit_account):
+            total -= entry.credit_amount
+    return total
+
+
+def _is_cogs_account(account: str | None) -> bool:
+    """Name/prefix check for cost-of-sales accounts (see cogs_net_balance)."""
+    a = (account or "").lower()
+    code = a.split("-")[0].strip()
+    return code.startswith("5") or any(k in a for k in ("cost of sale", "cost of goods", "cogs", "purchase"))

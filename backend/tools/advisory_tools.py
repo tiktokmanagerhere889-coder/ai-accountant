@@ -8,11 +8,14 @@ from datetime import date
 from decimal import Decimal, ROUND_HALF_UP
 import uuid
 
-from sqlalchemy import func, extract, or_
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from db.models import JournalEntry, Budget, RetainedEarnings
-from tools.account_utils import get_expense_prefixes, get_revenue_prefixes, expense_filter_clause
+from tools.account_utils import (
+    get_expense_prefixes, get_revenue_prefixes, expense_filter_clause,
+    category_net_balances, cogs_net_balance,
+)
 from tools.schemas import (
     CategorySpend, MonthlySpend,
     AnalyzeSpendingPatternsInput, AnalyzeSpendingPatternsOutput,
@@ -56,32 +59,6 @@ def _aggregate_expenses(db: Session, from_date: date, to_date: date, account_pre
         # Safety net: name-based expense match when chart not populated
         query = query.filter(expense_filter_clause(JournalEntry.debit_account, db))
     return query.all()
-
-
-def _sum_by_prefix(db: Session, prefix: str, from_date: date | None = None, to_date: date | None = None) -> Decimal:
-    """Sum debit amounts for accounts starting with a prefix."""
-    query = db.query(func.sum(JournalEntry.debit_amount)).filter(
-        JournalEntry.debit_account.startswith(prefix),
-        JournalEntry.status == "posted",
-    )
-    if from_date:
-        query = query.filter(JournalEntry.posted_date >= from_date)
-    if to_date:
-        query = query.filter(JournalEntry.posted_date <= to_date)
-    return _round(Decimal(str(query.scalar() or "0")))
-
-
-def _sum_credit_by_prefix(db: Session, prefix: str, from_date: date | None = None, to_date: date | None = None) -> Decimal:
-    """Sum credit amounts for accounts starting with a prefix."""
-    query = db.query(func.sum(JournalEntry.credit_amount)).filter(
-        JournalEntry.credit_account.startswith(prefix),
-        JournalEntry.status == "posted",
-    )
-    if from_date:
-        query = query.filter(JournalEntry.posted_date >= from_date)
-    if to_date:
-        query = query.filter(JournalEntry.posted_date <= to_date)
-    return _round(Decimal(str(query.scalar() or "0")))
 
 
 # ---------------------------------------------------------------------------
@@ -201,13 +178,17 @@ def calculate_financial_ratios(inp: CalculateFinancialRatiosInput, db: Session) 
     ratios: list[RatioResult] = []
     requested = set(inp.ratio_types) if inp.ratio_types else {"liquidity", "profitability", "leverage", "efficiency"}
 
-    # Aggregate account balances
-    total_assets = _sum_by_prefix(db, "1", from_date, to_date)
-    total_liabilities = _sum_by_prefix(db, "2", from_date, to_date)
-    total_equity = _sum_by_prefix(db, "3", from_date, to_date)
-    total_revenue = _sum_credit_by_prefix(db, "4", from_date, to_date)
-    total_cogs = _sum_by_prefix(db, "5", from_date, to_date)
-    total_expenses = _sum_by_prefix(db, "5", from_date, to_date) + _sum_by_prefix(db, "6", from_date, to_date) + _sum_by_prefix(db, "8", from_date, to_date)
+    # Aggregate account balances from the chart's account_type, on each
+    # category's normal-balance side (asset/expense = debit, liability/equity/
+    # revenue = credit). Previously these were summed on the WRONG side for
+    # liabilities/equity (only debit amounts), producing invalid ratios.
+    bal = category_net_balances(db, from_date, to_date)
+    total_assets = bal["asset"]
+    total_liabilities = bal["liability"]
+    total_equity = bal["equity"]
+    total_revenue = bal["revenue"]
+    total_cogs = cogs_net_balance(db, from_date, to_date)
+    total_expenses = bal["expense"]
 
     net_income = total_revenue - total_expenses
 
@@ -328,15 +309,17 @@ def assess_financial_health(inp: AssessFinancialHealthInput, db: Session) -> Ass
         from_date = date(inp.fiscal_year, 1, 1)
         to_date = date(inp.fiscal_year, 12, 31)
 
-    # Compute core figures
-    total_assets = _sum_by_prefix(db, "1", from_date, to_date)
-    total_liabilities = _sum_by_prefix(db, "2", from_date, to_date)
-    total_equity = _sum_by_prefix(db, "3", from_date, to_date)
-    total_revenue = _sum_credit_by_prefix(db, "4", from_date, to_date)
-    total_expenses = (_sum_by_prefix(db, "5", from_date, to_date) +
-                       _sum_by_prefix(db, "6", from_date, to_date) +
-                       _sum_by_prefix(db, "8", from_date, to_date))
-    total_cogs = _sum_by_prefix(db, "5", from_date, to_date)
+    # Compute core figures from the chart's account_type, on each category's
+    # normal-balance side (asset/expense = debit, liability/equity/revenue =
+    # credit). Previously liabilities/equity were summed on the wrong (debit)
+    # side, so the balance-sheet figures and every dependent ratio were wrong.
+    bal = category_net_balances(db, from_date, to_date)
+    total_assets = bal["asset"]
+    total_liabilities = bal["liability"]
+    total_equity = bal["equity"]
+    total_revenue = bal["revenue"]
+    total_expenses = bal["expense"]
+    total_cogs = cogs_net_balance(db, from_date, to_date)
     net_income = total_revenue - total_expenses
 
     if total_revenue == 0 and total_assets == 0:
@@ -602,14 +585,13 @@ def generate_custom_report(inp: GenerateCustomReportInput, db: Session) -> Gener
 
     sections: list[ReportSection] = []
 
-    total_revenue = _sum_credit_by_prefix(db, "4", from_date, to_date)
-    total_expenses = (_sum_by_prefix(db, "5", from_date, to_date) +
-                       _sum_by_prefix(db, "6", from_date, to_date) +
-                       _sum_by_prefix(db, "8", from_date, to_date))
+    bal = category_net_balances(db, from_date, to_date)
+    total_revenue = bal["revenue"]
+    total_expenses = bal["expense"]
     net = total_revenue - total_expenses
-    total_assets = _sum_by_prefix(db, "1", from_date, to_date)
-    total_liabilities = _sum_by_prefix(db, "2", from_date, to_date)
-    total_equity = _sum_by_prefix(db, "3", from_date, to_date)
+    total_assets = bal["asset"]
+    total_liabilities = bal["liability"]
+    total_equity = bal["equity"]
 
     if inp.report_type == "summary":
         sections.append(ReportSection(
@@ -653,10 +635,9 @@ def generate_custom_report(inp: GenerateCustomReportInput, db: Session) -> Gener
                 comp_to_first = date(inp.fiscal_year, 12, 31)
             else:
                 comp_to_first = date(inp.fiscal_year, inp.period_from + 1, 1) - __import__("datetime").timedelta(days=1)
-            rev_a = _sum_credit_by_prefix(db, "4", comp_from, comp_to_first)
-            exp_a = (_sum_by_prefix(db, "5", comp_from, comp_to_first) +
-                      _sum_by_prefix(db, "6", comp_from, comp_to_first) +
-                      _sum_by_prefix(db, "8", comp_from, comp_to_first))
+            bal_a = category_net_balances(db, comp_from, comp_to_first)
+            rev_a = bal_a["revenue"]
+            exp_a = bal_a["expense"]
             rev_b = total_revenue
             exp_b = total_expenses
 
@@ -677,10 +658,9 @@ def generate_custom_report(inp: GenerateCustomReportInput, db: Session) -> Gener
         for m in range(period_from, period_to + 1):
             mf = date(inp.fiscal_year, m, 1)
             mt = date(inp.fiscal_year, m + 1, 1) - __import__("datetime").timedelta(days=1) if m < 12 else date(inp.fiscal_year, 12, 31)
-            m_rev = _sum_credit_by_prefix(db, "4", mf, mt)
-            m_exp = (_sum_by_prefix(db, "5", mf, mt) +
-                      _sum_by_prefix(db, "6", mf, mt) +
-                      _sum_by_prefix(db, "8", mf, mt))
+            bal_m = category_net_balances(db, mf, mt)
+            m_rev = bal_m["revenue"]
+            m_exp = bal_m["expense"]
             months_data.append({"month": f"{inp.fiscal_year}-{m:02d}", "revenue": str(m_rev), "expenses": str(m_exp)})
 
         sections.append(ReportSection(
