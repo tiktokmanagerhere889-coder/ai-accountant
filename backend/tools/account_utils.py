@@ -25,6 +25,16 @@ _DEBIT_NORMAL_TYPES = {"asset", "expense"}
 _CREDIT_NORMAL_TYPES = {"liability", "equity", "revenue"}
 _CATEGORY_TYPES = ("asset", "liability", "equity", "revenue", "expense")
 
+# Standard accounting-numbering leading digits per account_type (used as the
+# fallback when the chart is not yet populated - mirrors _STANDARD_TYPE_BY_DIGIT).
+_STANDARD_DIGITS_BY_TYPE = {
+    "asset": {"1"},
+    "liability": {"2"},
+    "equity": {"3"},
+    "revenue": {"4"},
+    "expense": {"5", "6", "7", "8"},
+}
+
 
 def _accounts_with_types(db: Session, account_types: list[str], name_keywords: list[str] | None = None) -> list[str]:
     """Return account_code strings in the chart matching account_type (+ optional name)."""
@@ -36,7 +46,7 @@ def _accounts_with_types(db: Session, account_types: list[str], name_keywords: l
     return [r[0] for r in query.all()]
 
 
-def _classify_filter_clause(account_column, db: Session, account_types: list[str], name_keywords: list[str], chart_name_keywords: list[str] | None = None):
+def _classify_filter_clause(account_column, db: Session, account_types: list[str], name_keywords: list[str], chart_name_keywords: list[str] | None = None, standard_digit_fallback: bool = False):
     """Build a filter clause: exact chart-account match OR prefix match OR name match.
 
     Resolution order:
@@ -49,7 +59,14 @@ def _classify_filter_clause(account_column, db: Session, account_types: list[str
          correct even when an account isn't registered in the chart yet.
          Name-narrowed filters (cash/bank, receivable/debtor) intentionally
          skip this to avoid over-matching e.g. AR under cash.
-      3. Conservative name fallback (kept narrow - "sales" is not used because
+      3. Standard-numbering digit fallback (only when standard_digit_fallback is
+         set - i.e. whole-category filters like revenue/expense). When the chart
+         has no codes of this type yet, fall back to the standard accounting
+         digits (4 = revenue, 5/6/7/8 = expense) so dynamically-created sub-
+         accounts still classify. Mirrors chart_account_type's last-resort
+         default. Subtype filters (cash/salary/AR/AP) keep this off - AP must
+         not swallow every 2xxx liability.
+      4. Conservative name fallback (kept narrow - "sales" is not used because
          "Cost of Sales" is an expense).
     """
     clauses = []
@@ -65,6 +82,19 @@ def _classify_filter_clause(account_column, db: Session, account_types: list[str
                 clauses.append(or_(*[
                     func.substr(account_column, 1, 1) == d for d in sorted(leading_digits)
                 ]))
+    elif standard_digit_fallback:
+        # Chart not populated (or no codes of this type yet): fall back to the
+        # standard accounting-numbering leading digits for this account_type
+        # (e.g. 5/6/7/8 = expense, 4 = revenue) so dynamically-created sub-
+        # accounts still classify. Mirrors chart_account_type's last-resort
+        # default.
+        standard_digits = sorted(
+            d for t in account_types for d in _STANDARD_DIGITS_BY_TYPE.get(t, set())
+        )
+        if standard_digits:
+            clauses.append(or_(*[
+                func.substr(account_column, 1, 1) == d for d in standard_digits
+            ]))
 
     # Conservative name fallback (accounts not yet in the chart)
     for kw in name_keywords:
@@ -78,12 +108,14 @@ def revenue_filter_clause(account_column, db: Session, prefixes: Optional[list[s
 
     "sales" alone is intentionally NOT a keyword - "Cost of Sales" is an expense
     account and would be misclassified. Only "revenue" / "income" are used as
-    name fallbacks.
+    name fallbacks. When the chart has no revenue codes yet, falls back to the
+    standard digit 4 (mirrors chart_account_type).
     """
     return _classify_filter_clause(
         account_column, db,
         account_types=["revenue"],
         name_keywords=["revenue", "income"],
+        standard_digit_fallback=True,
     )
 
 
@@ -91,12 +123,15 @@ def expense_filter_clause(account_column, db: Session, prefixes: Optional[list[s
     """Match expense accounts: chart account_type='expense', or name fallback.
 
     Includes "cost of sales" / "cost of goods" so those are classed as expenses,
-    never revenue.
+    never revenue. When the chart has no expense codes yet, falls back to the
+    standard digits 5/6/7/8 (mirrors chart_account_type) so dynamically-created
+    sub-accounts like "8000-Bank Charges" still classify.
     """
     return _classify_filter_clause(
         account_column, db,
         account_types=["expense"],
         name_keywords=["expense", "cost of sales", "cost of goods", "cogs"],
+        standard_digit_fallback=True,
     )
 
 

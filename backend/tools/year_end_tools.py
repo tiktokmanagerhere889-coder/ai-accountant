@@ -70,11 +70,21 @@ def _is_revenue_account(account: str, db: Session) -> bool:
     prefixes = get_revenue_prefixes(db)
     if prefixes:
         return any(code.startswith(p) for p in prefixes)
-    return False
+    # Standard numbering: leading digit 4 = revenue (mirrors chart_account_type).
+    return code[:1].isdigit() and code[0] == "4"
 
 
 def _is_expense_account(account: str, db: Session) -> bool:
-    """Check if an account is an expense account - resolved from the user's chart."""
+    """Check if an account is an expense account - resolved from the user's chart.
+
+    Resolution order (mirrors chart_account_type):
+      1. Name contains an expense keyword ("expense", "cost of goods", "cogs").
+      2. Numeric prefix matches a chart expense account (e.g. "6300" when the
+         chart has "6300-Office Supplies" as expense).
+      3. Standard numbering: leading digit 5/6/7/8 = expense. This is what keeps
+         dynamically-created sub-accounts (e.g. "8000-Bank Charges", "6300-Office
+         Supplies" before they are registered in the chart) classified correctly.
+    """
     name = account.lower()
     if any(k in name for k in ("expense", "cost of goods", "cogs")):
         return True
@@ -82,7 +92,7 @@ def _is_expense_account(account: str, db: Session) -> bool:
     prefixes = get_expense_prefixes(db)
     if prefixes:
         return any(code.startswith(p) for p in prefixes)
-    return False
+    return code[:1].isdigit() and code[0] in ("5", "6", "7", "8")
 
 
 def _chart_type_for(db: Session, account_code: str) -> str | None:
